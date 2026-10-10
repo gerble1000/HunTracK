@@ -1,4 +1,4 @@
-name: Build & Package Apple iOS App (HunTracK)
+name: Build, Sign & Deploy Apple iOS App (HunTracK)
 
 on:
   push:
@@ -6,39 +6,46 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
-    name: Build iOS Archive & IPA
+  build-and-deploy:
+    name: Build & Deploy to TestFlight
     runs-on: macos-14
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build iOS Archive (Simulator / Device Ready)
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: Setup App Store Connect Private Key
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}.p8
+
+      - name: Build iOS App Archive
         working-directory: ios/HunTracK
         run: |
-          xcodebuild clean build \
+          xcodebuild clean archive \
             -project HunTracK.xcodeproj \
             -scheme HunTracK \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
+            -archivePath build/HunTracK.xcarchive \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Package Unsigned Payload Artifact
+      - name: Package Payload IPA Artifact
         working-directory: ios/HunTracK
         run: |
           mkdir -p build/Payload
-          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "HunTracK.app" | head -n 1)
+          APP_PATH=$(find build/HunTracK.xcarchive -name "HunTracK.app" | head -n 1)
           if [ -d "$APP_PATH" ]; then
             cp -R "$APP_PATH" build/Payload/
             cd build
-            zip -r HunTracK-unsigned.ipa Payload
-          else
-            echo "Skipping zip: standalone build verification succeeded."
+            zip -r HunTracK-Release.ipa Payload
           fi
 
-      - name: Upload IPA Build Artifact
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
