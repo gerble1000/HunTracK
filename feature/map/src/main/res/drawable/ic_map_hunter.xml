@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="112dp"
+    android:viewportWidth="96"
+    android:viewportHeight="112">
+    <!-- Shadow disc -->
+    <path
+        android:pathData="M48,88a18,8 0 1,1 0,0.1z"
+        android:fillColor="#0B1A12"
+        android:fillAlpha="0.35" />
+    <!-- Boots -->
+    <path
+        android:pathData="M34,96 L40,78 L44,78 L42,96 Z"
+        android:fillColor="#1A1208" />
+    <path
+        android:pathData="M62,96 L56,78 L52,78 L54,96 Z"
+        android:fillColor="#1A1208" />
+    <!-- Legs -->
+    <path
+        android:pathData="M40,78 L44,54 L52,54 L56,78 L52,78 L48,60 L44,78 Z"
+        android:fillColor="#C4A574" />
+    <!-- Torso / jacket -->
+    <path
+        android:pathData="M34,54 L38,28 L58,28 L62,54 L54,58 L42,58 Z"
+        android:fillColor="#5B7A4A" />
+    <!-- Arms -->
+    <path
+        android:pathData="M38,32 L24,48 L28,52 L42,38 Z"
+        android:fillColor="#5B7A4A" />
+    <path
+        android:pathData="M58,32 L72,48 L68,52 L54,38 Z"
+        android:fillColor="#5B7A4A" />
+    <!-- Head -->
+    <path
+        android:pathData="M48,8a12,12 0 1,1 0,24a12,12 0 1,1 0,-24z"
+        android:fillColor="#E0C48A" />
+    <!-- Cap brim -->
+    <path
+        android:pathData="M34,18 L62,18 L60,14 L36,14 Z"
+        android:fillColor="#2A1A0C" />
+    <!-- Cap -->
+    <path
+        android:pathData="M36,14 C36,6 60,6 60,14 L36,14 Z"
+        android:fillColor="#3E5A32" />
+</vector>

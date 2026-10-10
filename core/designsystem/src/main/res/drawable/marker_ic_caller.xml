@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Halo -->
+    <path
+        android:pathData="M48,10a34,34 0 1,1 0,68a34,34 0 1,1 0,-68z"
+        android:fillColor="#1A1208"
+        android:fillAlpha="0.55" />
+    <!-- Bronze disc -->
+    <path
+        android:pathData="M48,14a30,30 0 1,1 0,60a30,30 0 1,1 0,-60z"
+        android:fillColor="#E2B05C" />
+    <!-- Speaker body + cone -->
+    <path
+        android:fillColor="#2A2A2A"
+        android:pathData="M30,38 L30,58 L40,58 L52,68 L52,28 L40,38 Z" />
+    <!-- Sound arcs -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2A2A2A"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M58,40 C62,44 62,52 58,56" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2A2A2A"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M64,34 C72,42 72,54 64,62" />
+</vector>

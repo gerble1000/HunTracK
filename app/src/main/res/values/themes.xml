@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.HunTracK" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#FF121416</item>
+        <item name="android:windowBackground">#FF0B1A12</item>
+    </style>
+</resources>

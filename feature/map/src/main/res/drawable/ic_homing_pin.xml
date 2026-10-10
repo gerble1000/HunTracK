@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Pin stem -->
+    <path
+        android:pathData="M48,88 L42,58 L54,58 Z"
+        android:fillColor="#1A0A08" />
+    <!-- Outer disc -->
+    <path
+        android:pathData="M48,12a28,28 0 1,1 0,56a28,28 0 1,1 0,-56z"
+        android:fillColor="#E84848" />
+    <!-- Inner disc -->
+    <path
+        android:pathData="M48,24a16,16 0 1,1 0,32a16,16 0 1,1 0,-32z"
+        android:fillColor="#F5E6C8" />
+    <!-- Centre -->
+    <path
+        android:pathData="M48,36a4,4 0 1,1 0,8a4,4 0 1,1 0,-8z"
+        android:fillColor="#E84848" />
+</vector>
