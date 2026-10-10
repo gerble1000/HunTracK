@@ -53,30 +53,12 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath build/HunTracK.xcarchive \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution"
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER=""
 
       - name: Export and Package Signed IPA
         working-directory: ios/HunTracK
         run: |
-          cat << 'EOF' > ExportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>app-store</string>
-              <key>destination</key>
-              <string>upload</string>
-              <key>signingStyle</key>
-              <string>automatic</string>
-              <key>stripSwiftSymbols</key>
-              <true/>
-              <key>uploadSymbols</key>
-              <true/>
-          </dict>
-          </plist>
-          EOF
-
           mkdir -p build/Payload
           APP_PATH=$(find build/HunTracK.xcarchive -name "HunTracK.app" | head -n 1)
           if [ -d "$APP_PATH" ]; then
@@ -104,5 +86,5 @@ jobs:
               -t ios \
               --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}" \
               --apiIssuer "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}" \
-              --show-progress || echo "xcrun altool completed or verified"
+              --show-progress || echo "App upload step logged."
           fi
