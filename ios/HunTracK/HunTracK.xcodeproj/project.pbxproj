@@ -42,9 +42,9 @@
 		010000012D00000100000001 /* HunTracK.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HunTracK.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000012D00000100000001 /* HunTracKApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HunTracKApp.swift; sourceTree = "<group>"; };
 		B10000022D00000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		B10000032D00000100000001 /* sfx_bird_chirp.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = sfx_bird_chirp.mp3; sourceTree = "<group>"; };
-		B10000042D00000100000001 /* sfx_bird_trill.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = sfx_bird_trill.mp3; sourceTree = "<group>"; };
-		B10000052D00000100000001 /* sfx_stag_roar.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = sfx_stag_roar.mp3; sourceTree = "<group>"; };
+		B10000032D00000100000001 /* sfx_bird_chirp.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = Audio/sfx_bird_chirp.mp3; sourceTree = "<group>"; };
+		B10000042D00000100000001 /* sfx_bird_trill.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = Audio/sfx_bird_trill.mp3; sourceTree = "<group>"; };
+		B10000052D00000100000001 /* sfx_stag_roar.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = Audio/sfx_stag_roar.mp3; sourceTree = "<group>"; };
 		B10000062D00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000072D00000100000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Audio/SoundManager.swift; sourceTree = "<group>"; };
 		B10000082D00000100000001 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/DatabaseService.swift; sourceTree = "<group>"; };
