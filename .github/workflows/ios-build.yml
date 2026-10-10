@@ -14,20 +14,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Select Xcode Version
-        run: sudo xcode-select -switch /Applications/Xcode_15.4.app
-
-      - name: Cache CocoaPods / SPM
-        uses: actions/cache@v4
-        with:
-          path: |
-            ios/HunTracK/Pods
-            ~/Library/Caches/CocoaPods
-            ~/Library/Developer/Xcode/DerivedData
-          key: ${{ runner.os }}-ios-build-${{ hashFiles('ios/HunTracK/HunTracK.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            ${{ runner.os }}-ios-build-
-
       - name: Build iOS Archive (Simulator / Device Ready)
         working-directory: ios/HunTracK
         run: |
@@ -35,6 +21,7 @@ jobs:
             -project HunTracK.xcodeproj \
             -scheme HunTracK \
             -configuration Release \
+            -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO
 

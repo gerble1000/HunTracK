@@ -12,6 +12,30 @@
 		A10000032D00000100000001 /* sfx_bird_chirp.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = B10000032D00000100000001 /* sfx_bird_chirp.mp3 */; };
 		A10000042D00000100000001 /* sfx_bird_trill.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = B10000042D00000100000001 /* sfx_bird_trill.mp3 */; };
 		A10000052D00000100000001 /* sfx_stag_roar.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = B10000052D00000100000001 /* sfx_stag_roar.mp3 */; };
+		A10000062D00000100000001 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000072D00000100000001 /* SoundManager.swift */; };
+		A10000072D00000100000001 /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000082D00000100000001 /* DatabaseService.swift */; };
+		A10000082D00000100000001 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000092D00000100000001 /* WeatherService.swift */; };
+		A10000092D00000100000001 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000102D00000100000001 /* Components.swift */; };
+		A10000102D00000100000001 /* HuntColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000112D00000100000001 /* HuntColors.swift */; };
+		A10000112D00000100000001 /* CompassManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000122D00000100000001 /* CompassManager.swift */; };
+		A10000122D00000100000001 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000132D00000100000001 /* LocationManager.swift */; };
+		A10000132D00000100000001 /* AstronomyCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000142D00000100000001 /* AstronomyCalculator.swift */; };
+		A10000142D00000100000001 /* UkFieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000152D00000100000001 /* UkFieldCatalog.swift */; };
+		A10000152D00000100000001 /* OsGridRef.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000162D00000100000001 /* OsGridRef.swift */; };
+		A10000162D00000100000001 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000172D00000100000001 /* Models.swift */; };
+		A10000172D00000100000001 /* ActivityRatings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000182D00000100000001 /* ActivityRatings.swift */; };
+		A10000182D00000100000001 /* ScentPlumeGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000192D00000100000001 /* ScentPlumeGeometry.swift */; };
+		A10000192D00000100000001 /* CallsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000202D00000100000001 /* CallsScreen.swift */; };
+		A10000202D00000100000001 /* CompassScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000212D00000100000001 /* CompassScreen.swift */; };
+		A10000212D00000100000001 /* EmergencyScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000222D00000100000001 /* EmergencyScreen.swift */; };
+		A10000222D00000100000001 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000232D00000100000001 /* HomeScreen.swift */; };
+		A10000232D00000100000001 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000242D00000100000001 /* MapScreen.swift */; };
+		A10000242D00000100000001 /* MoreScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000252D00000100000001 /* MoreScreen.swift */; };
+		A10000252D00000100000001 /* PermissionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000262D00000100000001 /* PermissionsScreen.swift */; };
+		A10000262D00000100000001 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000272D00000100000001 /* SettingsScreen.swift */; };
+		A10000272D00000100000001 /* SpeciesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000282D00000100000001 /* SpeciesScreen.swift */; };
+		A10000282D00000100000001 /* WeatherScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000292D00000100000001 /* WeatherScreen.swift */; };
+		A10000292D00000100000001 /* WindScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000302D00000100000001 /* WindScreen.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +46,30 @@
 		B10000042D00000100000001 /* sfx_bird_trill.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = sfx_bird_trill.mp3; sourceTree = "<group>"; };
 		B10000052D00000100000001 /* sfx_stag_roar.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = sfx_stag_roar.mp3; sourceTree = "<group>"; };
 		B10000062D00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000072D00000100000001 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Audio/SoundManager.swift; sourceTree = "<group>"; };
+		B10000082D00000100000001 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/DatabaseService.swift; sourceTree = "<group>"; };
+		B10000092D00000100000001 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/WeatherService.swift; sourceTree = "<group>"; };
+		B10000102D00000100000001 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/DesignSystem/Components.swift; sourceTree = "<group>"; };
+		B10000112D00000100000001 /* HuntColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/DesignSystem/HuntColors.swift; sourceTree = "<group>"; };
+		B10000122D00000100000001 /* CompassManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Location/CompassManager.swift; sourceTree = "<group>"; };
+		B10000132D00000100000001 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Location/LocationManager.swift; sourceTree = "<group>"; };
+		B10000142D00000100000001 /* AstronomyCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Astronomy/AstronomyCalculator.swift; sourceTree = "<group>"; };
+		B10000152D00000100000001 /* UkFieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Catalog/UkFieldCatalog.swift; sourceTree = "<group>"; };
+		B10000162D00000100000001 /* OsGridRef.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Geo/OsGridRef.swift; sourceTree = "<group>"; };
+		B10000172D00000100000001 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Model/Models.swift; sourceTree = "<group>"; };
+		B10000182D00000100000001 /* ActivityRatings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Rating/ActivityRatings.swift; sourceTree = "<group>"; };
+		B10000192D00000100000001 /* ScentPlumeGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Scent/ScentPlumeGeometry.swift; sourceTree = "<group>"; };
+		B10000202D00000100000001 /* CallsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calls/CallsScreen.swift; sourceTree = "<group>"; };
+		B10000212D00000100000001 /* CompassScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Compass/CompassScreen.swift; sourceTree = "<group>"; };
+		B10000222D00000100000001 /* EmergencyScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Emergency/EmergencyScreen.swift; sourceTree = "<group>"; };
+		B10000232D00000100000001 /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Home/HomeScreen.swift; sourceTree = "<group>"; };
+		B10000242D00000100000001 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Map/MapScreen.swift; sourceTree = "<group>"; };
+		B10000252D00000100000001 /* MoreScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/More/MoreScreen.swift; sourceTree = "<group>"; };
+		B10000262D00000100000001 /* PermissionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Permissions/PermissionsScreen.swift; sourceTree = "<group>"; };
+		B10000272D00000100000001 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/SettingsScreen.swift; sourceTree = "<group>"; };
+		B10000282D00000100000001 /* SpeciesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Species/SpeciesScreen.swift; sourceTree = "<group>"; };
+		B10000292D00000100000001 /* WeatherScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Weather/WeatherScreen.swift; sourceTree = "<group>"; };
+		B10000302D00000100000001 /* WindScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Wind/WindScreen.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +104,30 @@
 			children = (
 				B10000012D00000100000001 /* HunTracKApp.swift */,
 				B10000062D00000100000001 /* Info.plist */,
+				B10000072D00000100000001 /* SoundManager.swift */,
+				B10000082D00000100000001 /* DatabaseService.swift */,
+				B10000092D00000100000001 /* WeatherService.swift */,
+				B10000102D00000100000001 /* Components.swift */,
+				B10000112D00000100000001 /* HuntColors.swift */,
+				B10000122D00000100000001 /* CompassManager.swift */,
+				B10000132D00000100000001 /* LocationManager.swift */,
+				B10000142D00000100000001 /* AstronomyCalculator.swift */,
+				B10000152D00000100000001 /* UkFieldCatalog.swift */,
+				B10000162D00000100000001 /* OsGridRef.swift */,
+				B10000172D00000100000001 /* Models.swift */,
+				B10000182D00000100000001 /* ActivityRatings.swift */,
+				B10000192D00000100000001 /* ScentPlumeGeometry.swift */,
+				B10000202D00000100000001 /* CallsScreen.swift */,
+				B10000212D00000100000001 /* CompassScreen.swift */,
+				B10000222D00000100000001 /* EmergencyScreen.swift */,
+				B10000232D00000100000001 /* HomeScreen.swift */,
+				B10000242D00000100000001 /* MapScreen.swift */,
+				B10000252D00000100000001 /* MoreScreen.swift */,
+				B10000262D00000100000001 /* PermissionsScreen.swift */,
+				B10000272D00000100000001 /* SettingsScreen.swift */,
+				B10000282D00000100000001 /* SpeciesScreen.swift */,
+				B10000292D00000100000001 /* WeatherScreen.swift */,
+				B10000302D00000100000001 /* WindScreen.swift */,
 				D10000032D00000100000001 /* Resources */,
 			);
 			path = HunTracK;
@@ -145,6 +217,30 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000012D00000100000001 /* HunTracKApp.swift in Sources */,
+				A10000062D00000100000001 /* SoundManager.swift in Sources */,
+				A10000072D00000100000001 /* DatabaseService.swift in Sources */,
+				A10000082D00000100000001 /* WeatherService.swift in Sources */,
+				A10000092D00000100000001 /* Components.swift in Sources */,
+				A10000102D00000100000001 /* HuntColors.swift in Sources */,
+				A10000112D00000100000001 /* CompassManager.swift in Sources */,
+				A10000122D00000100000001 /* LocationManager.swift in Sources */,
+				A10000132D00000100000001 /* AstronomyCalculator.swift in Sources */,
+				A10000142D00000100000001 /* UkFieldCatalog.swift in Sources */,
+				A10000152D00000100000001 /* OsGridRef.swift in Sources */,
+				A10000162D00000100000001 /* Models.swift in Sources */,
+				A10000172D00000100000001 /* ActivityRatings.swift in Sources */,
+				A10000182D00000100000001 /* ScentPlumeGeometry.swift in Sources */,
+				A10000192D00000100000001 /* CallsScreen.swift in Sources */,
+				A10000202D00000100000001 /* CompassScreen.swift in Sources */,
+				A10000212D00000100000001 /* EmergencyScreen.swift in Sources */,
+				A10000222D00000100000001 /* HomeScreen.swift in Sources */,
+				A10000232D00000100000001 /* MapScreen.swift in Sources */,
+				A10000242D00000100000001 /* MoreScreen.swift in Sources */,
+				A10000252D00000100000001 /* PermissionsScreen.swift in Sources */,
+				A10000262D00000100000001 /* SettingsScreen.swift in Sources */,
+				A10000272D00000100000001 /* SpeciesScreen.swift in Sources */,
+				A10000282D00000100000001 /* WeatherScreen.swift in Sources */,
+				A10000292D00000100000001 /* WindScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,6 +275,8 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = HunTracK/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -218,6 +316,8 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				INFOPLIST_FILE = HunTracK/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
