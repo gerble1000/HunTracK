@@ -23,14 +23,21 @@ jobs:
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
           PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          CERTIFICATE_RAW=$RUNNER_TEMP/raw_cert.p12
+          CERTIFICATE_LEGACY=$RUNNER_TEMP/legacy_cert.p12
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(uuidgen)
 
-          # Decode certificate and provisioning profile from secrets
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          # Decode certificate and provisioning profile from secrets (macOS base64 -D)
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_RAW
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 -D > $PP_PATH
+
+          # Re-export PKCS#12 using legacy 3DES/SHA1 encryption compatible with macOS Security framework
+          openssl pkcs12 -in $CERTIFICATE_RAW -passin pass:"$P12_PASSWORD" \
+            -export -out $CERTIFICATE_LEGACY -passout pass:"$P12_PASSWORD" \
+            -legacy -nomaciter -descert \
+            -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
 
           # Create and configure temporary keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
@@ -38,18 +45,18 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # Import certificate to temporary keychain
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $CERTIFICATE_LEGACY -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychains -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | tr -d '"')
 
-          # Install provisioning profile to standard Xcode location
+          # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/42a832cd-962d-42bd-9c42-b4763768ee43.mobileprovision
 
       - name: Setup App Store Connect API Key
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}.p8
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 -D > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}.p8
 
       - name: Build and Archive iOS App
         working-directory: ios/HunTracK
@@ -65,7 +72,7 @@ jobs:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=3BWVS7PL6M \
             PROVISIONING_PROFILE=42a832cd-962d-42bd-9c42-b4763768ee43 \
-            PROVISIONING_PROFILE_SPECIFIER=""
+            PROVISIONING_PROFILE_SPECIFIER="HunTracK AppStore Distribution"
 
       - name: Export Signed IPA for App Store
         working-directory: ios/HunTracK
