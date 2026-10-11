@@ -24,6 +24,7 @@ jobs:
           PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
           CERTIFICATE_RAW=$RUNNER_TEMP/raw_cert.p12
+          CERTIFICATE_PEM=$RUNNER_TEMP/cert_and_key.pem
           CERTIFICATE_LEGACY=$RUNNER_TEMP/legacy_cert.p12
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -40,10 +41,10 @@ jobs:
           echo "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_RAW
           echo "$PROVISIONING_PROFILE_BASE64" | base64 -D > $PP_PATH
 
-          # Re-export PKCS#12 using legacy 3DES/SHA1 encryption compatible with macOS Security framework
-          "$OPENSSL_BIN" pkcs12 -in $CERTIFICATE_RAW -passin pass:"$P12_PASSWORD" \
-            -legacy -export -out $CERTIFICATE_LEGACY -passout pass:"$P12_PASSWORD" \
-            -nomaciter -descert \
+          # Convert to PEM and re-export PKCS#12 with legacy 3DES/SHA1 cipher parameters
+          "$OPENSSL_BIN" pkcs12 -in $CERTIFICATE_RAW -passin pass:"$P12_PASSWORD" -nodes -out $CERTIFICATE_PEM
+          "$OPENSSL_BIN" pkcs12 -export -in $CERTIFICATE_PEM -out $CERTIFICATE_LEGACY -passout pass:"$P12_PASSWORD" \
+            -legacy -nomaciter -descert \
             -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
 
           # Create and configure temporary keychain
