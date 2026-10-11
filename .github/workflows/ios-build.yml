@@ -29,14 +29,21 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(uuidgen)
 
+          # Locate Homebrew OpenSSL 3 on macOS ARM64 runner
+          OPENSSL_BIN="/opt/homebrew/opt/openssl@3/bin/openssl"
+          if [ ! -x "$OPENSSL_BIN" ]; then
+            OPENSSL_BIN=$(which openssl)
+          fi
+          echo "Using OpenSSL from: $OPENSSL_BIN ($($OPENSSL_BIN version))"
+
           # Decode certificate and provisioning profile from secrets (macOS base64 -D)
           echo "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_RAW
           echo "$PROVISIONING_PROFILE_BASE64" | base64 -D > $PP_PATH
 
           # Re-export PKCS#12 using legacy 3DES/SHA1 encryption compatible with macOS Security framework
-          openssl pkcs12 -in $CERTIFICATE_RAW -passin pass:"$P12_PASSWORD" \
-            -export -out $CERTIFICATE_LEGACY -passout pass:"$P12_PASSWORD" \
-            -legacy -nomaciter -descert \
+          "$OPENSSL_BIN" pkcs12 -in $CERTIFICATE_RAW -passin pass:"$P12_PASSWORD" \
+            -legacy -export -out $CERTIFICATE_LEGACY -passout pass:"$P12_PASSWORD" \
+            -nomaciter -descert \
             -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
 
           # Create and configure temporary keychain
