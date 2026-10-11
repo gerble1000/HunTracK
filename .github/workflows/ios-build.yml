@@ -8,14 +8,21 @@ on:
 jobs:
   build-sign-deploy:
     name: Build, Sign & Upload to TestFlight
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Select Xcode Version
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+        run: |
+          # Discover latest available Xcode 26.x or Xcode 16.x
+          XCODE_APP=$(ls -d /Applications/Xcode_26*.app /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selected Xcode: $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          fi
+          xcodebuild -version
 
       - name: Install Apple Distribution Certificate and Provisioning Profile
         env:
