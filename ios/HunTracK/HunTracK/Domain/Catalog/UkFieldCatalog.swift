@@ -821,7 +821,10 @@ public enum UkFieldCatalog {
             category: "Deer",
             description: "Real male roe deer growl recording",
             packId: "uk_deer_pack",
-            remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/c/c8/Male_roe_deer_growl.ogg",
+            // Wikimedia auto-generated MP3 transcode of the same recording.
+            // iOS AVFoundation cannot decode Ogg Vorbis, so the original
+            // .ogg URL is unusable on device even though it serves fine.
+            remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c8/Male_roe_deer_growl.ogg/Male_roe_deer_growl.ogg.mp3",
             isBuiltIn: true,
             filePath: nil,
             credit: "Wikimedia Commons \u{00B7} Male roe deer growl"
@@ -833,7 +836,8 @@ public enum UkFieldCatalog {
             category: "Fox",
             description: "Real red fox vocalisation",
             packId: "uk_fox_pack",
-            remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/7/79/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg",
+            // MP3 transcode of the same recording — see roe_growl note above.
+            remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/transcoded/7/79/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg.mp3",
             isBuiltIn: true,
             filePath: nil,
             credit: "Wikimedia Commons / BL \u{00B7} Red Fox"
