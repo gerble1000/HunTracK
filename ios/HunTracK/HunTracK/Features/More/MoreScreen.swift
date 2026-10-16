@@ -13,13 +13,13 @@ public struct MoreScreen: View {
                         Text("More")
                             .font(.system(size: 32, weight: .bold))
                             .foregroundColor(theme.palette.cream)
-                        Text("Field tools & settings")
+                        Text("Tap any row to open")
                             .font(.system(size: 14))
                             .foregroundColor(theme.palette.mist)
                     }
                     .padding(.top, 8)
                     
-                    SectionLabel("Navigation & Field Sense")
+                    SectionLabel("Navigation")
                     NavigationLink(destination: CompassScreen()) {
                         MoreRow(title: "Compass", subtitle: "Magnetic, true & GPS heading", icon: "safari")
                     }
@@ -27,25 +27,36 @@ public struct MoreScreen: View {
                         MoreRow(title: "Wind & Scent", subtitle: "Downwind scent plume planning", icon: "wind")
                     }
                     
-                    SectionLabel("Field Knowledge")
+                    SectionLabel("Field knowledge")
                     NavigationLink(destination: SpeciesScreen()) {
-                        MoreRow(title: "Species Catalog", subtitle: "UK quarry ID & legal seasons", icon: "leaf")
+                        MoreRow(title: "Species", subtitle: "UK quarry ID & legal seasons", icon: "leaf")
                     }
                     NavigationLink(destination: CallsScreen()) {
-                        MoreRow(title: "Animal Calls", subtitle: "Synthetic calls & audio journal", icon: "speaker.wave.3")
+                        MoreRow(title: "Calls", subtitle: "Library, recorder & journal", icon: "speaker.wave.3")
                     }
                     
-                    SectionLabel("Safety & Permissions")
+                    SectionLabel("Planning")
+                    NavigationLink(destination: CalendarScreen()) {
+                        MoreRow(title: "Calendar", subtitle: "Day, month & year field diary", icon: "calendar")
+                    }
+                    NavigationLink(destination: CullScreen()) {
+                        MoreRow(title: "Cull log", subtitle: "Bag table, OS Grid & CSV export", icon: "list.bullet.rectangle")
+                    }
+                    
+                    SectionLabel("Safety & access")
                     NavigationLink(destination: PermissionsScreen()) {
-                        MoreRow(title: "Permissions Wallet", subtitle: "Shooting permissions & boundaries", icon: "doc.text")
+                        MoreRow(title: "Permissions", subtitle: "Wallet & boundary areas", icon: "doc.text")
                     }
                     NavigationLink(destination: EmergencyScreen()) {
-                        MoreRow(title: "Emergency Profile", subtitle: "Public medical ICE profile with lock", icon: "cross.case")
+                        MoreRow(title: "Emergency", subtitle: "Public medical profile", icon: "cross.case")
                     }
                     
                     SectionLabel("App")
                     NavigationLink(destination: SettingsScreen()) {
-                        MoreRow(title: "Settings", subtitle: "Theme, units, sounds & GPS", icon: "gearshape")
+                        MoreRow(title: "Settings", subtitle: "Units, theme, sound, maps", icon: "gearshape")
+                    }
+                    NavigationLink(destination: AboutScreen()) {
+                        MoreRow(title: "About", subtitle: "App story, developer & helping hand", icon: "info.circle")
                     }
                 }
                 .padding(16)

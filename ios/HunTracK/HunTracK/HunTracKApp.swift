@@ -22,45 +22,58 @@ struct HunTracKApp: App {
 struct ContentView: View {
     @ObservedObject private var theme = ThemeManager.shared
     @State private var selectedTab: Int = 0
+    @State private var showQuickAdd: Bool = false
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationView {
-                HomeScreen()
-                    .navigationBarHidden(true)
+        ZStack(alignment: .bottomTrailing) {
+            TabView(selection: $selectedTab) {
+                HuntTabShell(onTitleTap: goHome) {
+                    HomeScreen()
+                }
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+                .tag(0)
+                
+                HuntTabShell(onTitleTap: goHome) {
+                    MapScreen()
+                }
+                .tabItem {
+                    Label("Map", systemImage: "map.fill")
+                }
+                .tag(1)
+                
+                HuntTabShell(onTitleTap: goHome) {
+                    WeatherScreen()
+                }
+                .tabItem {
+                    Label("Weather", systemImage: "cloud.sun.fill")
+                }
+                .tag(2)
+                
+                HuntTabShell(onTitleTap: goHome) {
+                    MoreScreen()
+                }
+                .tabItem {
+                    Label("More", systemImage: "ellipsis.circle.fill")
+                }
+                .tag(3)
             }
-            .tabItem {
-                Label("Home", systemImage: "house.fill")
-            }
-            .tag(0)
+            .accentColor(theme.palette.bronze)
             
-            NavigationView {
-                MapScreen()
-                    .navigationBarHidden(true)
+            // Android shows this on every bottom tab plus the Map route.
+            HuntMarkLocationButton {
+                showQuickAdd = true
             }
-            .tabItem {
-                Label("Map", systemImage: "map.fill")
-            }
-            .tag(1)
-            
-            NavigationView {
-                WeatherScreen()
-                    .navigationBarHidden(true)
-            }
-            .tabItem {
-                Label("Weather", systemImage: "cloud.sun.fill")
-            }
-            .tag(2)
-            
-            NavigationView {
-                MoreScreen()
-                    .navigationBarHidden(true)
-            }
-            .tabItem {
-                Label("More", systemImage: "ellipsis.circle.fill")
-            }
-            .tag(3)
+            .padding(.trailing, 24)
+            .padding(.bottom, 96)
         }
-        .accentColor(theme.palette.bronze)
+        .sheet(isPresented: $showQuickAdd) {
+            HuntQuickAddMarkerSheet(isPresented: $showQuickAdd)
+        }
+    }
+    
+    private func goHome() {
+        selectedTab = 0
     }
 }

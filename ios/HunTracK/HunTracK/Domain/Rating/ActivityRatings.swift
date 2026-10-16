@@ -1,5 +1,66 @@
 import Foundation
 
+public struct HourlyForecast: Identifiable, Codable, Equatable {
+    public var id: Int64 { epochMs }
+    public let epochMs: Int64
+    public let temperatureC: Double
+    public let windSpeedKmh: Double
+    public let windDirectionDeg: Double
+    public let rainProbabilityPercent: Int
+    public let weatherCode: Int
+    
+    public init(
+        epochMs: Int64,
+        temperatureC: Double,
+        windSpeedKmh: Double,
+        windDirectionDeg: Double,
+        rainProbabilityPercent: Int,
+        weatherCode: Int
+    ) {
+        self.epochMs = epochMs
+        self.temperatureC = temperatureC
+        self.windSpeedKmh = windSpeedKmh
+        self.windDirectionDeg = windDirectionDeg
+        self.rainProbabilityPercent = rainProbabilityPercent
+        self.weatherCode = weatherCode
+    }
+}
+
+public struct DailyForecast: Identifiable, Codable, Equatable {
+    public var id: Int64 { epochMs }
+    public let epochMs: Int64
+    public let tempMinC: Double
+    public let tempMaxC: Double
+    public let rainProbabilityPercent: Int
+    public let weatherCode: Int
+    public let windSpeedMaxKmh: Double
+    public let frostRisk: Bool
+    public let fogRisk: Bool
+    public let stormRisk: Bool
+    
+    public init(
+        epochMs: Int64,
+        tempMinC: Double,
+        tempMaxC: Double,
+        rainProbabilityPercent: Int,
+        weatherCode: Int,
+        windSpeedMaxKmh: Double,
+        frostRisk: Bool,
+        fogRisk: Bool,
+        stormRisk: Bool
+    ) {
+        self.epochMs = epochMs
+        self.tempMinC = tempMinC
+        self.tempMaxC = tempMaxC
+        self.rainProbabilityPercent = rainProbabilityPercent
+        self.weatherCode = weatherCode
+        self.windSpeedMaxKmh = windSpeedMaxKmh
+        self.frostRisk = frostRisk
+        self.fogRisk = fogRisk
+        self.stormRisk = stormRisk
+    }
+}
+
 public struct WeatherSnapshot: Codable, Equatable {
     public let latitude: Double
     public let longitude: Double
@@ -15,6 +76,44 @@ public struct WeatherSnapshot: Codable, Equatable {
     public let visibilityKm: Double?
     public let weatherCode: Int
     public let cloudCoverPercent: Int?
+    public var hourly: [HourlyForecast] = []
+    public var daily: [DailyForecast] = []
+
+    public init(
+        latitude: Double,
+        longitude: Double,
+        fetchedAtEpochMs: Int64,
+        temperatureC: Double,
+        feelsLikeC: Double,
+        humidityPercent: Int,
+        pressureHpa: Double,
+        windSpeedKmh: Double,
+        windDirectionDeg: Double,
+        windGustKmh: Double?,
+        rainProbabilityPercent: Int?,
+        visibilityKm: Double?,
+        weatherCode: Int,
+        cloudCoverPercent: Int?,
+        hourly: [HourlyForecast] = [],
+        daily: [DailyForecast] = []
+    ) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.fetchedAtEpochMs = fetchedAtEpochMs
+        self.temperatureC = temperatureC
+        self.feelsLikeC = feelsLikeC
+        self.humidityPercent = humidityPercent
+        self.pressureHpa = pressureHpa
+        self.windSpeedKmh = windSpeedKmh
+        self.windDirectionDeg = windDirectionDeg
+        self.windGustKmh = windGustKmh
+        self.rainProbabilityPercent = rainProbabilityPercent
+        self.visibilityKm = visibilityKm
+        self.weatherCode = weatherCode
+        self.cloudCoverPercent = cloudCoverPercent
+        self.hourly = hourly
+        self.daily = daily
+    }
 }
 
 public enum HuntingConditionsRating {

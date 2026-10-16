@@ -36,6 +36,11 @@
 		A10000272D00000100000001 /* SpeciesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000282D00000100000001 /* SpeciesScreen.swift */; };
 		A10000282D00000100000001 /* WeatherScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000292D00000100000001 /* WeatherScreen.swift */; };
 		A10000292D00000100000001 /* WindScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000302D00000100000001 /* WindScreen.swift */; };
+		A20000012D00000100000001 /* AppChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000012D00000100000001 /* AppChrome.swift */; };
+		A20000022D00000100000001 /* AboutScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000022D00000100000001 /* AboutScreen.swift */; };
+		A20000032D00000100000001 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000032D00000100000001 /* CalendarScreen.swift */; };
+		A20000042D00000100000001 /* CullScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000042D00000100000001 /* CullScreen.swift */; };
+		A20000052D00000100000001 /* TidesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000052D00000100000001 /* TidesScreen.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -70,6 +75,11 @@
 		B10000282D00000100000001 /* SpeciesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Species/SpeciesScreen.swift; sourceTree = "<group>"; };
 		B10000292D00000100000001 /* WeatherScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Weather/WeatherScreen.swift; sourceTree = "<group>"; };
 		B10000302D00000100000001 /* WindScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Wind/WindScreen.swift; sourceTree = "<group>"; };
+		B20000012D00000100000001 /* AppChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/DesignSystem/AppChrome.swift; sourceTree = "<group>"; };
+		B20000022D00000100000001 /* AboutScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/About/AboutScreen.swift; sourceTree = "<group>"; };
+		B20000032D00000100000001 /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calendar/CalendarScreen.swift; sourceTree = "<group>"; };
+		B20000042D00000100000001 /* CullScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Culls/CullScreen.swift; sourceTree = "<group>"; };
+		B20000052D00000100000001 /* TidesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Tides/TidesScreen.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +138,11 @@
 				B10000282D00000100000001 /* SpeciesScreen.swift */,
 				B10000292D00000100000001 /* WeatherScreen.swift */,
 				B10000302D00000100000001 /* WindScreen.swift */,
+				B20000012D00000100000001 /* AppChrome.swift */,
+				B20000022D00000100000001 /* AboutScreen.swift */,
+				B20000032D00000100000001 /* CalendarScreen.swift */,
+				B20000042D00000100000001 /* CullScreen.swift */,
+				B20000052D00000100000001 /* TidesScreen.swift */,
 				D10000032D00000100000001 /* Resources */,
 			);
 			path = HunTracK;
@@ -241,6 +256,11 @@
 				A10000272D00000100000001 /* SpeciesScreen.swift in Sources */,
 				A10000282D00000100000001 /* WeatherScreen.swift in Sources */,
 				A10000292D00000100000001 /* WindScreen.swift in Sources */,
+				A20000012D00000100000001 /* AppChrome.swift in Sources */,
+				A20000022D00000100000001 /* AboutScreen.swift in Sources */,
+				A20000032D00000100000001 /* CalendarScreen.swift in Sources */,
+				A20000042D00000100000001 /* CullScreen.swift in Sources */,
+				A20000052D00000100000001 /* TidesScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,7 +278,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -307,7 +327,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
