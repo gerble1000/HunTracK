@@ -114,8 +114,10 @@ private enum FieldCalendarDates {
     /// Days in the month that carry a saved entry.
     static func entryCount(year: Int, month: Int, entries: [CalendarDayEntry]) -> Int {
         entries.filter { entry in
-            let date = date(fromDayStart: entry.dayStartEpochMs)
-            return year(date) == year && month(date) == month && entry.hasContent
+            let dayStart = date(fromDayStart: entry.dayStartEpochMs)
+            return FieldCalendarDates.year(dayStart) == year
+                && FieldCalendarDates.month(dayStart) == month
+                && entry.hasContent
         }.count
     }
 }

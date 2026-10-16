@@ -117,15 +117,15 @@ public class WeatherService: ObservableObject {
             fetchedAtEpochMs: Int64(Date().timeIntervalSince1970 * 1000),
             temperatureC: temperature,
             feelsLikeC: feelsLike,
-            humidityPercent: integer(current?["relative_humidity_2m"]) ?? 0,
+            humidityPercent: Int(number(current?["relative_humidity_2m"]) ?? 0),
             pressureHpa: number(current?["surface_pressure"]) ?? 1013.0,
             windSpeedKmh: number(current?["wind_speed_10m"]) ?? 0.0,
             windDirectionDeg: number(current?["wind_direction_10m"]) ?? 0.0,
             windGustKmh: number(current?["wind_gusts_10m"]),
             rainProbabilityPercent: hourlyList.first?.rainProbabilityPercent,
             visibilityKm: visibilityKm,
-            weatherCode: integer(current?["weather_code"]) ?? 0,
-            cloudCoverPercent: integer(current?["cloud_cover"]),
+            weatherCode: Int(number(current?["weather_code"]) ?? 0),
+            cloudCoverPercent: number(current?["cloud_cover"]).map { Int($0) },
             hourly: hourlyList,
             daily: dailyList
         )
