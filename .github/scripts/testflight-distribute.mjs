@@ -12,6 +12,10 @@
  * rather than plain logs: this repository's job logs are not readable without
  * admin rights, while check-run annotations are.
  *
+ * App Store Connect rejects some query parameters per endpoint (the
+ * `/v1/apps/{id}/builds` relationship, for instance, refuses `sort`), so each
+ * listing tries the documented forms in order instead of trusting one.
+ *
  * No third-party dependencies: the ES256 JWT is signed with node:crypto and
  * the REST calls use the built-in fetch (Node 18+).
  *
@@ -107,6 +111,21 @@ function apiError(label, path, response) {
   return new Error(`${label} failed — ${path} → HTTP ${response.status}: ${detail}`);
 }
 
+/**
+ * Tries each candidate query until one is accepted. App Store Connect refuses
+ * specific parameters per endpoint, and the error names the parameter but not
+ * the working alternative.
+ */
+async function resolveListing(token, paths) {
+  const tried = [];
+  for (const path of paths) {
+    const response = await request(token, path);
+    if (response.ok) return { path, response, tried };
+    tried.push(`${path} → HTTP ${response.status}`);
+  }
+  return { path: null, response: null, tried };
+}
+
 async function findAppId(token, bundleId) {
   const path = `/v1/apps?filter[bundleId]=${encodeURIComponent(bundleId)}&limit=1`;
   const response = await request(token, path);
@@ -119,12 +138,30 @@ async function findAppId(token, bundleId) {
 
 async function waitForProcessedBuild(token, appId, buildNumber) {
   const deadline = Date.now() + PROCESSING_TIMEOUT_MS;
-  const path = `/v1/apps/${appId}/builds?limit=20&sort=-uploadedDate`;
+  const candidates = [
+    `/v1/builds?filter[app]=${appId}&sort=-uploadedDate&limit=20`,
+    `/v1/builds?filter[app]=${appId}&limit=50`,
+    `/v1/apps/${appId}/builds?limit=50`,
+  ];
+
+  let listingPath = null;
   let state = 'not returned by the API yet';
+  let tried = [];
 
   while (Date.now() < deadline) {
-    const response = await request(token, path);
-    if (!response.ok) throw apiError('Build lookup', path, response);
+    let response;
+    if (listingPath) {
+      response = await request(token, listingPath);
+      if (!response.ok) throw apiError('Build lookup', listingPath, response);
+    } else {
+      const resolved = await resolveListing(token, candidates);
+      if (!resolved.path) {
+        throw new Error(`Could not list builds for app ${appId}. Attempts: ${resolved.tried.join(' | ')}`);
+      }
+      listingPath = resolved.path;
+      response = resolved.response;
+      annotate('notice', 'Build listing', `using ${listingPath}`);
+    }
 
     // Match on the version string rather than trusting ordering alone, so a
     // build uploaded between our pages can never be mistaken for this one.
@@ -154,10 +191,14 @@ async function waitForProcessedBuild(token, appId, buildNumber) {
 }
 
 async function listBetaGroups(token, appId) {
-  const path = `/v1/apps/${appId}/betaGroups?limit=200`;
-  const response = await request(token, path);
-  if (!response.ok) throw apiError('Beta group lookup', path, response);
-  return response.json?.data ?? [];
+  const resolved = await resolveListing(token, [
+    `/v1/betaGroups?filter[app]=${appId}&limit=200`,
+    `/v1/apps/${appId}/betaGroups?limit=200`,
+  ]);
+  if (!resolved.path) {
+    throw new Error(`Could not list beta groups for app ${appId}. Attempts: ${resolved.tried.join(' | ')}`);
+  }
+  return resolved.response.json?.data ?? [];
 }
 
 async function assignBuildToGroup(token, group, buildId) {
@@ -231,7 +272,11 @@ async function main() {
     const kind = group.attributes?.isInternalGroup ? 'internal' : 'external';
     console.log(`  assigned to "${group.attributes?.name ?? group.id}" (${kind})`);
   }
-  annotate('notice', 'TestFlight distribution', `build ${buildNumber} assigned to all ${groups.length} group(s)`);
+  annotate(
+    'notice',
+    'TestFlight distribution',
+    `build ${buildNumber} assigned to all ${groups.length} group(s)`,
+  );
 
   const externalGroups = groups.filter((group) => group.attributes?.isInternalGroup === false);
   if (externalGroups.length === 0) {
