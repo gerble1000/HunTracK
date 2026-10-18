@@ -59,7 +59,7 @@ public struct AboutScreen: View {
                     GlassPanel {
                         SectionLabel("Version")
                         MetricRow("Version", "1.1.27")
-                        MetricRow("Build", "31")
+                        MetricRow("Build", "32")
                         MetricRow("Platform", "iOS")
                     }
                     

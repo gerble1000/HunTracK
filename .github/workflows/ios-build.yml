@@ -126,19 +126,29 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
           BUNDLE_ID: uk.hunttrack.app
         run: |
-          set -euo pipefail
-          APP_DIR=$(find ios/HunTracK/build/HunTracK.xcarchive/Products/Applications \
-            -maxdepth 1 -name "*.app" -type d | head -n 1)
-          if [ -z "$APP_DIR" ]; then
-            echo "No .app bundle found in ios/HunTracK/build/HunTracK.xcarchive" >&2
-            exit 1
-          fi
-          export BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_DIR/Info.plist")
-          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          if [ ! -f "$ASC_KEY_PATH" ]; then
-            echo "App Store Connect key not found at $ASC_KEY_PATH" >&2
-            exit 1
-          fi
+          # Job logs require repo admin rights; annotations do not. Report every
+          # failure as an annotation so a red build explains itself.
+          set -uo pipefail
+          fail() { echo "::error title=TestFlight distribution failed::$1"; echo "$1" >&2; exit 1; }
+
+          ARCHIVE=ios/HunTracK/build/HunTracK.xcarchive
+          [ -d "$ARCHIVE" ] || fail "Archive not found at $ARCHIVE"
+
+          # A glob avoids `find | head` under pipefail, which aborts with no message.
+          APP_DIR=""
+          for candidate in "$ARCHIVE"/Products/Applications/*.app; do
+            if [ -d "$candidate" ]; then APP_DIR="$candidate"; break; fi
+          done
+          [ -n "$APP_DIR" ] || fail "No .app bundle under $ARCHIVE/Products/Applications"
+
+          BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_DIR/Info.plist" 2>&1) \
+            || fail "Cannot read CFBundleVersion from $APP_DIR/Info.plist: $BUILD_NUMBER"
+          export BUILD_NUMBER
+
+          ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          [ -f "$ASC_KEY_PATH" ] || fail "App Store Connect key not found at $ASC_KEY_PATH"
+          export ASC_KEY_PATH
+
           echo "Distributing build ${BUILD_NUMBER} of ${BUNDLE_ID} to all beta groups"
           node .github/scripts/testflight-distribute.mjs
 

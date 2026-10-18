@@ -8,6 +8,10 @@
  * both, using the same App Store Connect API key the workflow already
  * installs for validation and upload.
  *
+ * Diagnostics are emitted as workflow annotations (`::notice::` / `::error::`)
+ * rather than plain logs: this repository's job logs are not readable without
+ * admin rights, while check-run annotations are.
+ *
  * No third-party dependencies: the ES256 JWT is signed with node:crypto and
  * the REST calls use the built-in fetch (Node 18+).
  *
@@ -25,7 +29,16 @@ import { pathToFileURL } from 'node:url';
 
 const API_BASE = 'https://api.appstoreconnect.apple.com';
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
-const POLL_INTERVAL_MS = 15 * 1000;
+const POLL_INTERVAL_MS = 30 * 1000;
+
+/** Escapes a workflow-command payload the way GitHub requires. */
+const escapeData = (value) =>
+  String(value).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+
+/** Surfaces a message as a check-run annotation so it is readable without logs. */
+export function annotate(level, title, message) {
+  console.log(`::${level} title=${escapeData(title)}::${escapeData(message)}`);
+}
 
 /**
  * Builds a signed App Store Connect JWT.
@@ -57,14 +70,21 @@ function requireEnv(name) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function request(token, path, { method = 'GET', body } = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (cause) {
+    // A transport failure is not an HTTP status, so name the path explicitly.
+    throw new Error(`${method} ${path} could not be reached: ${cause.message}`);
+  }
+
   const text = await response.text();
   let json = null;
   if (text) {
@@ -77,35 +97,34 @@ async function request(token, path, { method = 'GET', body } = {}) {
   return { ok: response.ok, status: response.status, json, text };
 }
 
-function apiError(label, response) {
+function apiError(label, path, response) {
   const detail =
-    response.json?.errors?.map((e) => `${e.title}: ${e.detail}`).join('; ') ||
+    response.json?.errors
+      ?.map((error) => `${error.title ?? 'error'}: ${error.detail ?? error.code ?? ''}`)
+      .join('; ') ||
     response.text?.slice(0, 600) ||
     '(no response body)';
-  return new Error(`${label} failed with HTTP ${response.status} — ${detail}`);
+  return new Error(`${label} failed — ${path} → HTTP ${response.status}: ${detail}`);
 }
 
 async function findAppId(token, bundleId) {
-  const response = await request(
-    token,
-    `/v1/apps?filter[bundleId]=${encodeURIComponent(bundleId)}&limit=1`,
-  );
-  if (!response.ok) throw apiError('App lookup', response);
+  const path = `/v1/apps?filter[bundleId]=${encodeURIComponent(bundleId)}&limit=1`;
+  const response = await request(token, path);
+  if (!response.ok) throw apiError('App lookup', path, response);
   const app = response.json?.data?.[0];
   if (!app) throw new Error(`No App Store Connect app found for bundle id ${bundleId}`);
+  annotate('notice', 'App Store Connect', `app ${bundleId} resolved to id ${app.id}`);
   return app.id;
 }
 
 async function waitForProcessedBuild(token, appId, buildNumber) {
   const deadline = Date.now() + PROCESSING_TIMEOUT_MS;
-  let state = 'not visible to the API yet';
+  const path = `/v1/apps/${appId}/builds?limit=20&sort=-uploadedDate`;
+  let state = 'not returned by the API yet';
 
   while (Date.now() < deadline) {
-    const response = await request(
-      token,
-      `/v1/builds?filter[app]=${appId}&sort=-uploadedDate&limit=20`,
-    );
-    if (!response.ok) throw apiError('Build lookup', response);
+    const response = await request(token, path);
+    if (!response.ok) throw apiError('Build lookup', path, response);
 
     // Match on the version string rather than trusting ordering alone, so a
     // build uploaded between our pages can never be mistaken for this one.
@@ -115,7 +134,10 @@ async function waitForProcessedBuild(token, appId, buildNumber) {
 
     if (build) {
       state = build.attributes?.processingState ?? 'unknown';
-      if (state === 'VALID') return build;
+      if (state === 'VALID') {
+        annotate('notice', 'TestFlight build', `build ${buildNumber} is VALID (id ${build.id})`);
+        return build;
+      }
       if (state === 'FAILED' || state === 'INVALID') {
         throw new Error(`Build ${buildNumber} finished processing as ${state}`);
       }
@@ -132,22 +154,25 @@ async function waitForProcessedBuild(token, appId, buildNumber) {
 }
 
 async function listBetaGroups(token, appId) {
-  const response = await request(token, `/v1/betaGroups?filter[app]=${appId}&limit=200`);
-  if (!response.ok) throw apiError('Beta group lookup', response);
+  const path = `/v1/apps/${appId}/betaGroups?limit=200`;
+  const response = await request(token, path);
+  if (!response.ok) throw apiError('Beta group lookup', path, response);
   return response.json?.data ?? [];
 }
 
 async function assignBuildToGroup(token, group, buildId) {
-  const response = await request(token, `/v1/betaGroups/${group.id}/relationships/builds`, {
+  const path = `/v1/betaGroups/${group.id}/relationships/builds`;
+  const response = await request(token, path, {
     method: 'POST',
     body: { data: [{ type: 'builds', id: buildId }] },
   });
   if (response.ok) return; // 204 No Content on success
-  throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, response);
+  throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, path, response);
 }
 
 async function submitForBetaAppReview(token, buildId) {
-  const response = await request(token, '/v1/betaAppReviewSubmissions', {
+  const path = '/v1/betaAppReviewSubmissions';
+  const response = await request(token, path, {
     method: 'POST',
     body: {
       data: {
@@ -160,7 +185,7 @@ async function submitForBetaAppReview(token, buildId) {
   // A submission for this build already exists — exactly the state we want,
   // and re-runs of the pipeline must not fail because of it.
   if (response.status === 409) return 'already submitted';
-  throw apiError('Submitting build for Beta App Review', response);
+  throw apiError('Submitting build for Beta App Review', path, response);
 }
 
 async function main() {
@@ -180,7 +205,6 @@ async function main() {
 
   const appId = await findAppId(token, bundleId);
   const build = await waitForProcessedBuild(token, appId, buildNumber);
-  console.log(`Build ${buildNumber} is processed and valid (build id ${build.id})`);
 
   const groups = await listBetaGroups(token, appId);
   if (groups.length === 0) {
@@ -189,23 +213,37 @@ async function main() {
         'Create a group in App Store Connect first.',
     );
   }
+  annotate(
+    'notice',
+    'TestFlight groups',
+    `${groups.length} group(s): ` +
+      groups
+        .map(
+          (group) =>
+            `${group.attributes?.name ?? group.id}` +
+            `${group.attributes?.isInternalGroup ? ' [internal]' : ' [external]'}`,
+        )
+        .join(', '),
+  );
 
   for (const group of groups) {
     await assignBuildToGroup(token, group, build.id);
     const kind = group.attributes?.isInternalGroup ? 'internal' : 'external';
     console.log(`  assigned to "${group.attributes?.name ?? group.id}" (${kind})`);
   }
+  annotate('notice', 'TestFlight distribution', `build ${buildNumber} assigned to all ${groups.length} group(s)`);
 
   const externalGroups = groups.filter((group) => group.attributes?.isInternalGroup === false);
   if (externalGroups.length === 0) {
-    console.log('No external groups: internal testers can install the build now. Skipping Beta App Review.');
+    annotate('notice', 'Beta App Review', 'no external groups — internal testers can install now');
     return;
   }
 
   const state = await submitForBetaAppReview(token, build.id);
-  console.log(
-    `Beta App Review for build ${buildNumber}: ${state}. ` +
-      'External testers are notified once Apple approves it.',
+  annotate(
+    'notice',
+    'Beta App Review',
+    `build ${buildNumber}: ${state} (${externalGroups.length} external group(s))`,
   );
 }
 
@@ -214,7 +252,9 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   main().catch((error) => {
-    console.error(`\nTestFlight distribution failed: ${error.message}`);
+    const message = error?.message ?? String(error);
+    console.error(`\nTestFlight distribution failed: ${message}`);
+    annotate('error', 'TestFlight distribution failed', message);
     process.exit(1);
   });
 }
