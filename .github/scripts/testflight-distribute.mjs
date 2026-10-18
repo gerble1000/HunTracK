@@ -2,22 +2,21 @@
 /**
  * Puts a freshly uploaded build in front of testers.
  *
- * `altool --upload-app` only delivers the binary to App Store Connect; the
- * build then sits there until it is assigned to a beta group, and external
- * groups additionally need a Beta App Review submission. This script does
- * both, using the same App Store Connect API key the workflow already
- * installs for validation and upload.
+ * `altool --upload-app` only delivers the binary to App Store Connect. External
+ * testers then see nothing until the build is assigned to their beta group and
+ * submitted for Beta App Review; internal groups receive every build on their
+ * own and must not be assigned explicitly.
+ *
+ * No third-party dependencies: the ES256 JWT is signed with node:crypto and
+ * the REST calls use the built-in fetch (Node 18+).
  *
  * Diagnostics are emitted as workflow annotations (`::notice::` / `::error::`)
  * rather than plain logs: this repository's job logs are not readable without
  * admin rights, while check-run annotations are.
  *
- * App Store Connect rejects some query parameters per endpoint (the
- * `/v1/apps/{id}/builds` relationship, for instance, refuses `sort`), so each
- * listing tries the documented forms in order instead of trusting one.
- *
- * No third-party dependencies: the ES256 JWT is signed with node:crypto and
- * the REST calls use the built-in fetch (Node 18+).
+ * App Store Connect also rejects some query parameters per endpoint (the
+ * `/v1/apps/{id}/builds` relationship refuses `sort`), so each listing tries the
+ * documented forms in order instead of trusting any single one.
  *
  * Required environment:
  *   ASC_KEY_ID     App Store Connect API key ID
@@ -101,19 +100,23 @@ async function request(token, path, { method = 'GET', body } = {}) {
   return { ok: response.ok, status: response.status, json, text };
 }
 
-function apiError(label, path, response) {
-  const detail =
+function errorDetail(response) {
+  return (
     response.json?.errors
       ?.map((error) => `${error.title ?? 'error'}: ${error.detail ?? error.code ?? ''}`)
       .join('; ') ||
     response.text?.slice(0, 600) ||
-    '(no response body)';
-  return new Error(`${label} failed — ${path} → HTTP ${response.status}: ${detail}`);
+    '(no response body)'
+  );
+}
+
+function apiError(label, path, response) {
+  return new Error(`${label} failed — ${path} → HTTP ${response.status}: ${errorDetail(response)}`);
 }
 
 /**
  * Tries each candidate query until one is accepted. App Store Connect refuses
- * specific parameters per endpoint, and the error names the parameter but not
+ * specific parameters per endpoint, and its error names the parameter but not
  * the working alternative.
  */
 async function resolveListing(token, paths) {
@@ -146,7 +149,6 @@ async function waitForProcessedBuild(token, appId, buildNumber) {
 
   let listingPath = null;
   let state = 'not returned by the API yet';
-  let tried = [];
 
   while (Date.now() < deadline) {
     let response;
@@ -201,13 +203,24 @@ async function listBetaGroups(token, appId) {
   return resolved.response.json?.data ?? [];
 }
 
+/**
+ * Adds the build to one *external* beta group.
+ *
+ * Internal groups are rejected by App Store Connect ("Cannot add internal group
+ * to a build") because they already receive every build automatically, so a
+ * 422 naming an internal group is reported as auto-distributed rather than
+ * treated as a failure.
+ */
 async function assignBuildToGroup(token, group, buildId) {
   const path = `/v1/betaGroups/${group.id}/relationships/builds`;
   const response = await request(token, path, {
     method: 'POST',
     body: { data: [{ type: 'builds', id: buildId }] },
   });
-  if (response.ok) return; // 204 No Content on success
+  if (response.ok) return 'assigned'; // 204 No Content on success
+  if (response.status === 422 && /internal group/i.test(errorDetail(response))) {
+    return 'auto-distributed';
+  }
   throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, path, response);
 }
 
@@ -254,6 +267,10 @@ async function main() {
         'Create a group in App Store Connect first.',
     );
   }
+
+  const externalGroups = groups.filter((group) => group.attributes?.isInternalGroup === false);
+  const internalGroups = groups.filter((group) => group.attributes?.isInternalGroup !== false);
+
   annotate(
     'notice',
     'TestFlight groups',
@@ -267,20 +284,27 @@ async function main() {
         .join(', '),
   );
 
-  for (const group of groups) {
-    await assignBuildToGroup(token, group, build.id);
-    const kind = group.attributes?.isInternalGroup ? 'internal' : 'external';
-    console.log(`  assigned to "${group.attributes?.name ?? group.id}" (${kind})`);
+  // Internal groups need no action: Apple gives them every build.
+  for (const group of internalGroups) {
+    console.log(`  "${group.attributes?.name ?? group.id}" is internal — receives every build automatically`);
   }
+
+  const outcomes = [];
+  for (const group of externalGroups) {
+    const outcome = await assignBuildToGroup(token, group, build.id);
+    outcomes.push(`${group.attributes?.name ?? group.id}: ${outcome}`);
+    console.log(`  "${group.attributes?.name ?? group.id}" (external): ${outcome}`);
+  }
+
   annotate(
     'notice',
     'TestFlight distribution',
-    `build ${buildNumber} assigned to all ${groups.length} group(s)`,
+    `build ${buildNumber} — internal: ${internalGroups.length} group(s) automatic` +
+      (externalGroups.length ? `; external: ${outcomes.join(', ')}` : '; no external groups'),
   );
 
-  const externalGroups = groups.filter((group) => group.attributes?.isInternalGroup === false);
   if (externalGroups.length === 0) {
-    annotate('notice', 'Beta App Review', 'no external groups — internal testers can install now');
+    annotate('notice', 'Beta App Review', 'no external groups — internal testers receive the build automatically');
     return;
   }
 
