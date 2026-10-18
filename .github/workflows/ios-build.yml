@@ -118,6 +118,30 @@ jobs:
             --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}" \
             --apiIssuer "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}"
 
+      # altool only delivers the binary to App Store Connect. Without this step
+      # the build sits unassigned and testers never see it.
+      - name: Distribute Build to TestFlight Testers
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          BUNDLE_ID: uk.hunttrack.app
+        run: |
+          set -euo pipefail
+          APP_DIR=$(find ios/HunTracK/build/HunTracK.xcarchive/Products/Applications \
+            -maxdepth 1 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_DIR" ]; then
+            echo "No .app bundle found in ios/HunTracK/build/HunTracK.xcarchive" >&2
+            exit 1
+          fi
+          export BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_DIR/Info.plist")
+          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          if [ ! -f "$ASC_KEY_PATH" ]; then
+            echo "App Store Connect key not found at $ASC_KEY_PATH" >&2
+            exit 1
+          fi
+          echo "Distributing build ${BUILD_NUMBER} of ${BUNDLE_ID} to all beta groups"
+          node .github/scripts/testflight-distribute.mjs
+
       - name: Upload IPA Build Artifact
         uses: actions/upload-artifact@v4
         if: always()
