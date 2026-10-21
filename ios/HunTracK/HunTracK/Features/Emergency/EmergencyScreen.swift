@@ -89,6 +89,15 @@ public struct EmergencyScreen: View {
             )
             .font(.system(size: 14))
             .foregroundColor(theme.palette.mist)
+            
+            HStack(spacing: 8) {
+                Image(systemName: "cross.case.fill")
+                    .foregroundColor(theme.palette.danger)
+                Text("Sponsored by Gun-ICE")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(theme.palette.cream)
+            }
+            .padding(.top, 2)
         }
         .padding(.top, 8)
     }

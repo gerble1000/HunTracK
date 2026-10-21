@@ -10,37 +10,81 @@ public struct AboutScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
+                        Text("About")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(theme.palette.cream)
                         Text("HunTracK")
-                            .font(.system(size: 32, weight: .bold))
-                            .foregroundColor(theme.palette.bronze)
-                        Text("UK field companion")
-                            .font(.system(size: 14))
-                            .foregroundColor(theme.palette.mist)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(theme.palette.bronzeBright)
                     }
                     .padding(.top, 8)
                     
                     GlassPanel {
                         SectionLabel("The app")
-                        Text("HunTracK is a UK hunting, wildlife and field navigation companion. It brings maps, weather, OS Grid references, species identification, legal season guidance, permissions records and emergency information into one dark-woodland tool designed to be readable in the field.")
+                        Text("HunTracK is a field companion for UK hunters and stalkers. It brings your map, wind & scent awareness, compass, weather, species seasons, calls, and safety tools into one pocket kit — built for use outside, not at a desk.")
                             .font(.system(size: 14))
                             .foregroundColor(theme.palette.cream)
+                        Text("Know where you are, which way the wind sends your scent, range a shot, mark downed prey, and keep permissions and emergency details ready when you need them.")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.palette.mist)
+                            .padding(.top, 6)
+                        
+                        Divider().background(theme.palette.slate).padding(.vertical, 8)
+                        
+                        MetricRow("Version", "1.1.27 (35)")
+                        MetricRow("Platform", "iOS")
+                    }
+                    
+                    GlassPanel {
+                        SectionLabel("Developer")
+                        Text("GER8LE")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(theme.palette.bronzeBright)
+                        Text("Built and engineered HunTracK — app architecture, map tools, field features, and the polish you use each outing.")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.palette.cream)
+                            .padding(.top, 2)
                     }
                     
                     GlassPanel {
                         SectionLabel("Helping hand")
-                        Text("HunTracK is built to support responsible deer management, conservation and lawful field sports. Effective culling and predation control protect woodland regeneration, crops and livestock, and reduce road traffic collisions involving deer.")
-                            .font(.system(size: 14))
-                            .foregroundColor(theme.palette.cream)
-                        Text("Always obtain landowner permission, follow the law for your nation, and observe best practice on safety, welfare and carcass handling.")
+                        Text("Greg Willing")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(theme.palette.bronzeBright)
+                        Text("Design guidance and field-feature direction from someone who knows the ground. Greg helped shape how HunTracK feels in the hand and what matters when you are out on permission.")
                             .font(.system(size: 13))
-                            .foregroundColor(theme.palette.mist)
+                            .foregroundColor(theme.palette.cream)
+                            .padding(.top, 2)
+                        Text("Thank you for the helping hand.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(theme.palette.gold)
+                            .padding(.top, 6)
+                    }
+                    
+                    GlassPanel {
+                        SectionLabel("Support & Community")
+                        Text("Join our Facebook group for tips, updates, and community support:")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.palette.cream)
+                        
+                        if let url = URL(string: "https://www.facebook.com/share/g/19MMYKx2fa") {
+                            Link(destination: url) {
+                                HStack {
+                                    Text("HunTracK Facebook Group")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(theme.palette.bronzeBright)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .foregroundColor(theme.palette.bronzeBright)
+                                }
+                            }
                             .padding(.top, 4)
+                        }
                     }
                     
                     GlassPanel {
                         SectionLabel("Your data")
                         Text("HunTracK stores your markers, tracks, calendar, cull log, permissions and emergency profile locally on this device. Nothing is uploaded to a server. There are no accounts and no cloud sync in this version.")
-                            .font(.system(size: 14))
+                            .font(.system(size: 13))
                             .foregroundColor(theme.palette.cream)
                     }
                     
@@ -50,23 +94,14 @@ public struct AboutScreen: View {
                         MetricRow("Mapping", "Apple Maps")
                         MetricRow("Coordinates", "Ordnance Survey grid")
                         MetricRow("Astronomy", "SunCalc formulae")
-                        Text("Species identification notes and legal season dates are indicative only.")
-                            .font(.system(size: 12))
-                            .foregroundColor(theme.palette.mist)
-                            .padding(.top, 4)
                     }
                     
                     GlassPanel {
-                        SectionLabel("Version")
-                        MetricRow("Version", "1.1.27")
-                        MetricRow("Build", "34")
-                        MetricRow("Platform", "iOS")
+                        SectionLabel("Please remember")
+                        Text("Weather, scent checks, seasons, and activity guidance are indicative only. Always verify current laws, land permission, and safe practice before you hunt.")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.palette.mist)
                     }
-                    
-                    Text("Field conditions change. Always verify current law, land access and weather before you go out.")
-                        .font(.system(size: 12))
-                        .foregroundColor(theme.palette.mist)
-                        .padding(.top, 4)
                 }
                 .padding(16)
             }

@@ -928,6 +928,62 @@ public enum UkFieldCatalog {
         )
     ]
     
+    public static let audioPacks: [AudioPack] = [
+        AudioPack(
+            id: "uk_deer_pack",
+            name: "UK Deer Pack",
+            description: "Real deer vocalisations (roe buck). More tracks added over time.",
+            recordingCount: 1,
+            sizeBytes: 250_000,
+            tracks: [
+                AudioPackTrack(callId: "roe_growl", fileName: "roe_growl.mp3", remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c8/Male_roe_deer_growl.ogg/Male_roe_deer_growl.ogg.mp3")
+            ],
+            downloaded: true,
+            downloadProgress: 1.0
+        ),
+        AudioPack(
+            id: "uk_fox_pack",
+            name: "UK Fox Pack",
+            description: "Real red fox field recording.",
+            recordingCount: 1,
+            sizeBytes: 1_200_000,
+            tracks: [
+                AudioPackTrack(callId: "fox_field", fileName: "fox_field.mp3", remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/transcoded/7/79/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg.mp3")
+            ],
+            downloaded: true,
+            downloadProgress: 1.0
+        ),
+        AudioPack(
+            id: "uk_wildfowl_pack",
+            name: "UK Wildfowl Pack",
+            description: "Real duck and goose recordings for flight pond practice.",
+            recordingCount: 4,
+            sizeBytes: 5_500_000,
+            tracks: [
+                AudioPackTrack(callId: "duck_pack_a", fileName: "ducks.mp3", remoteUrl: "https://bigsoundbank.com/UPLOAD/mp3/0276.mp3"),
+                AudioPackTrack(callId: "mallard_xc", fileName: "mallard_62258.mp3", remoteUrl: "https://xeno-canto.org/62258/download"),
+                AudioPackTrack(callId: "mallard_xc2", fileName: "mallard_112828.mp3", remoteUrl: "https://xeno-canto.org/112828/download"),
+                AudioPackTrack(callId: "goose_hail", fileName: "canada_goose.mp3", remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/a/a7/Branta_canadensis_-_Canada_Goose_XC62259.mp3")
+            ],
+            downloaded: true,
+            downloadProgress: 1.0
+        ),
+        AudioPack(
+            id: "uk_woodland_pack",
+            name: "UK Woodland Pack",
+            description: "Real owl calls for night woodland awareness (CC0).",
+            recordingCount: 3,
+            sizeBytes: 4_000_000,
+            tracks: [
+                AudioPackTrack(callId: "owl_long_eared", fileName: "long_eared_owl.mp3", remoteUrl: "https://bigsoundbank.com/UPLOAD/mp3/0936.mp3"),
+                AudioPackTrack(callId: "owl_barn", fileName: "barn_owl.mp3", remoteUrl: "https://bigsoundbank.com/UPLOAD/mp3/1400.mp3"),
+                AudioPackTrack(callId: "owl_tawny", fileName: "tawny_owls.mp3", remoteUrl: "https://bigsoundbank.com/UPLOAD/mp3/0429.mp3")
+            ],
+            downloaded: true,
+            downloadProgress: 1.0
+        )
+    ]
+    
     public static func speciesById(_ id: String) -> Species? {
         species.first { $0.id == id }
     }

@@ -42,6 +42,9 @@ public struct MoreScreen: View {
                     NavigationLink(destination: CullScreen()) {
                         MoreRow(title: "Cull log", subtitle: "Bag table, OS Grid & CSV export", icon: "list.bullet.rectangle")
                     }
+                    NavigationLink(destination: TidesScreen()) {
+                        MoreRow(title: "Tides", subtitle: "UK high & low water forecast", icon: "water.waves")
+                    }
                     
                     SectionLabel("Safety & access")
                     NavigationLink(destination: PermissionsScreen()) {

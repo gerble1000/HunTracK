@@ -3,17 +3,13 @@ import AVFoundation
 
 // MARK: - Streamed call playback
 
-/// Streams the catalog's remote call recordings.
-///
-/// `SoundManager` is deliberately NOT used here — that is for UI sound effects.
-/// Some catalog entries are Ogg Vorbis (Wikimedia), which AVFoundation cannot
-/// decode on iOS; those surface as a friendly error rather than a crash.
 final class CallAudioPlayer: NSObject, ObservableObject {
     static let shared = CallAudioPlayer()
 
     @Published private(set) var currentCallId: String?
     @Published var errorMessage: String?
     @Published var loopEnabled: Bool = false
+    @Published var isPlaying: Bool = false
 
     private var player: AVPlayer?
     private var notifications: [NSObjectProtocol] = []
@@ -23,24 +19,25 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         super.init()
     }
 
-    var isPlayingSomething: Bool { currentCallId != nil }
+    var isPlayingSomething: Bool { currentCallId != nil && isPlaying }
 
-    func isPlaying(_ callId: String) -> Bool { currentCallId == callId }
+    func isCallPlaying(_ callId: String) -> Bool {
+        currentCallId == callId && isPlaying
+    }
 
-    /// Play the call, or stop it if it is already the active one.
-    func toggle(call: AnimalCall) {
-        if currentCallId == call.id {
+    func toggle(callId: String, remoteUrl: String) {
+        if currentCallId == callId && isPlaying {
             stop()
         } else {
-            play(call: call)
+            play(callId: callId, urlString: remoteUrl)
         }
     }
 
-    func play(call: AnimalCall) {
+    func play(callId: String, urlString: String) {
         errorMessage = nil
         teardown()
 
-        guard let url = URL(string: call.remoteUrl), url.scheme == "https" || url.scheme == "http" else {
+        guard let url = URL(string: urlString), url.scheme == "https" || url.scheme == "http" || url.isFileURL else {
             errorMessage = "This call has no playable recording URL."
             return
         }
@@ -51,9 +48,9 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         let avPlayer = AVPlayer(playerItem: item)
         avPlayer.actionAtItemEnd = .pause
         player = avPlayer
-        currentCallId = call.id
+        currentCallId = callId
+        isPlaying = true
 
-        // Loop or stop when the recording finishes.
         let endToken = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: item,
@@ -80,7 +77,6 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         }
         notifications.append(failToken)
 
-        // Surface load failures (network, 404, or an unsupported codec such as Ogg).
         let statusObservation = item.observe(\.status, options: [.new]) { [weak self] observed, _ in
             guard observed.status == .failed else { return }
             DispatchQueue.main.async {
@@ -96,7 +92,6 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         teardown()
     }
 
-    /// Stop playback and hand the audio session back to the system.
     func release() {
         teardown()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -119,6 +114,7 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         player?.pause()
         player = nil
         currentCallId = nil
+        isPlaying = false
     }
 
     private func activateSession() {
@@ -128,35 +124,89 @@ final class CallAudioPlayer: NSObject, ObservableObject {
     }
 }
 
-// MARK: - Calls screen
+// MARK: - Calls Tabs
+
+public enum CallsTab: String, CaseIterable {
+    case library = "Library"
+    case addCall = "Add call"
+    case packs = "Packs"
+    case journal = "Journal"
+}
+
+// MARK: - Calls Screen
 
 public struct CallsScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var player = CallAudioPlayer.shared
 
+    @State private var selectedTab: CallsTab = .library
     @State private var logTarget: AnimalCall?
+    @State private var logCustomTarget: UserCall?
+
+    // Add call states
+    @State private var customName: String = ""
+    @State private var customSpeciesId: String = "red_deer"
+    @State private var customNotes: String = ""
+    @State private var customUrl: String = ""
+    @State private var saveSuccessMessage: String?
 
     public init() {}
 
     public var body: some View {
         ScreenBackground {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    header
-                    if let message = player.errorMessage {
-                        errorBanner(message)
+            VStack(spacing: 0) {
+                // Tab selector bar
+                HStack(spacing: 8) {
+                    ForEach(CallsTab.allCases, id: \.self) { tab in
+                        Button(action: {
+                            SoundManager.shared.play(.click)
+                            selectedTab = tab
+                        }) {
+                            Text(tab.rawValue)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(selectedTab == tab ? theme.palette.ink : theme.palette.cream)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(selectedTab == tab ? theme.palette.bronze : theme.palette.slate.opacity(0.6))
+                                .cornerRadius(8)
+                        }
                     }
-                    library
-                    journal
+                    Spacer()
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        header
+                        if let message = player.errorMessage {
+                            errorBanner(message)
+                        }
+
+                        switch selectedTab {
+                        case .library:
+                            libraryView
+                        case .addCall:
+                            addCallView
+                        case .packs:
+                            packsView
+                        case .journal:
+                            journalView
+                        }
+                    }
+                    .padding(16)
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.release() }
         .sheet(item: $logTarget) { call in
             CallLogSheet(call: call)
+        }
+        .sheet(item: $logCustomTarget) { call in
+            CustomCallLogSheet(call: call)
         }
     }
 
@@ -167,11 +217,11 @@ public struct CallsScreen: View {
             Text("Animal calls")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(theme.palette.cream)
-            Text("Library, playback & journal")
+            Text("Play built-in calls or add your own audio files and recordings.")
                 .font(.system(size: 14))
                 .foregroundColor(theme.palette.mist)
         }
-        .padding(.top, 16)
+        .padding(.top, 4)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -180,7 +230,7 @@ public struct CallsScreen: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(theme.palette.danger)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Could not play that call")
+                    Text("Audio playback warning")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                     Text(message)
@@ -195,24 +245,101 @@ public struct CallsScreen: View {
         }
     }
 
-    // MARK: Library
+    // MARK: - Library Tab
 
-    private var library: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var libraryView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Quick banner to jump to Add Call
+            Button(action: {
+                SoundManager.shared.play(.click)
+                selectedTab = .addCall
+            }) {
+                GlassPanel(compact: true) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(theme.palette.bronzeBright)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("+ Add custom call")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(theme.palette.bronzeBright)
+                            Text("Upload an audio file or configure custom recordings.")
+                                .font(.system(size: 12))
+                                .foregroundColor(theme.palette.mist)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(theme.palette.mist)
+                    }
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            // Custom Calls if any
+            if !db.userCalls.isEmpty {
+                SectionLabel("Your custom calls")
+                ForEach(db.userCalls) { userCall in
+                    GlassPanel(compact: true) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(userCall.name)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(theme.palette.cream)
+                                if !userCall.notes.isEmpty {
+                                    Text(userCall.notes)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(theme.palette.mist)
+                                }
+                                Text("Custom · \(userCall.category)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(theme.palette.bronze)
+                            }
+                            Spacer()
+
+                            Button(action: {
+                                SoundManager.shared.play(.click)
+                                logCustomTarget = userCall
+                            }) {
+                                Image(systemName: "square.and.pencil")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(theme.palette.bronzeBright)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+
+                            if !userCall.filePath.isEmpty {
+                                Button(action: {
+                                    player.toggle(callId: "custom_\(userCall.id)", remoteUrl: userCall.filePath)
+                                }) {
+                                    Image(systemName: player.isCallPlaying("custom_\(userCall.id)") ? "stop.circle.fill" : "play.circle.fill")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(theme.palette.bronze)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+
+                            Button(action: {
+                                SoundManager.shared.play(.click)
+                                db.deleteUserCall(id: userCall.id)
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(theme.palette.danger)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+            }
+
+            // Built-in library
             HStack {
-                SectionLabel("Call library")
+                SectionLabel("Built-in library")
                 Spacer()
                 Toggle("Loop", isOn: $player.loopEnabled)
                     .labelsHidden()
                     .toggleStyle(SwitchToggleStyle(tint: theme.palette.bronze))
                 Text("Loop")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(theme.palette.mist)
-            }
-
-            if UkFieldCatalog.calls.isEmpty {
-                Text("No calls in the catalog.")
-                    .font(.system(size: 13))
                     .foregroundColor(theme.palette.mist)
             }
 
@@ -227,8 +354,8 @@ public struct CallsScreen: View {
                     ForEach(calls(in: category)) { call in
                         CallRow(
                             call: call,
-                            isPlaying: player.isPlaying(call.id),
-                            onToggle: { player.toggle(call: call) },
+                            isPlaying: player.isCallPlaying(call.id),
+                            onToggle: { player.toggle(callId: call.id, remoteUrl: call.remoteUrl) },
                             onLog: { logTarget = call }
                         )
                     }
@@ -237,7 +364,6 @@ public struct CallsScreen: View {
         }
     }
 
-    /// Category order follows the catalog so the list is stable between launches.
     private var categories: [String] {
         var seen = Set<String>()
         var ordered: [String] = []
@@ -252,16 +378,149 @@ public struct CallsScreen: View {
         UkFieldCatalog.calls.filter { $0.category == category }
     }
 
-    // MARK: Journal
+    // MARK: - Add Call Tab
 
-    private var journal: some View {
+    private var addCallView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Add a custom call — configure audio URL or field recording.")
+                .font(.system(size: 13))
+                .foregroundColor(theme.palette.mist)
+
+            GlassPanel {
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionLabel("Call details")
+
+                    TextField("Call name (e.g. Sika Stag Stalker Whistle)", text: $customName)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                    Text("Species")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(theme.palette.cream)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(UkFieldCatalog.species) { sp in
+                                Button(action: {
+                                    customSpeciesId = sp.id
+                                }) {
+                                    Text(sp.commonName)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(customSpeciesId == sp.id ? theme.palette.ink : theme.palette.cream)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(customSpeciesId == sp.id ? theme.palette.bronze : theme.palette.slate)
+                                        .cornerRadius(6)
+                                }
+                            }
+                        }
+                    }
+
+                    TextField("Audio URL / File Path (mp3 / m4a / wav)", text: $customUrl)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                    TextField("Notes / when to use", text: $customNotes)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                    if let msg = saveSuccessMessage {
+                        Text(msg)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(theme.palette.success)
+                    }
+
+                    HuntButton("Save custom call", icon: "tray.and.arrow.down") {
+                        saveCustomCall()
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    private func saveCustomCall() {
+        guard !customName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let call = UserCall(
+            name: customName.trimmingCharacters(in: .whitespaces),
+            speciesId: customSpeciesId,
+            category: "Custom",
+            description: customNotes,
+            filePath: customUrl.trimmingCharacters(in: .whitespaces),
+            notes: customNotes
+        )
+        db.addUserCall(call)
+        SoundManager.shared.play(.success)
+        saveSuccessMessage = "Custom call saved to your library!"
+        customName = ""
+        customNotes = ""
+        customUrl = ""
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            saveSuccessMessage = nil
+        }
+    }
+
+    // MARK: - Packs Tab
+
+    private var packsView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Real wildlife audio recordings for offline field practice.")
+                .font(.system(size: 13))
+                .foregroundColor(theme.palette.mist)
+
+            ForEach(db.audioPacks) { pack in
+                GlassPanel {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pack.name)
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundColor(theme.palette.cream)
+                                Text(pack.description)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(theme.palette.mist)
+                            }
+                            Spacer()
+                            if pack.downloaded {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(theme.palette.success)
+                            }
+                        }
+
+                        Text("\(pack.recordingCount) recordings · ~\(pack.sizeBytes / 1024) KB")
+                            .font(.system(size: 12))
+                            .foregroundColor(theme.palette.mist)
+
+                        if pack.downloaded {
+                            Text("Downloaded · Ready offline")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(theme.palette.success)
+                                .padding(.top, 4)
+                        } else {
+                            HuntButton("Download audio pack", icon: "arrow.down.circle") {
+                                var updated = pack
+                                updated.downloaded = true
+                                updated.downloadProgress = 1.0
+                                db.updateAudioPack(updated)
+                                SoundManager.shared.play(.success)
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Journal Tab
+
+    private var journalView: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("Call journal")
 
             if db.callJournal.isEmpty {
-                Text("No call journal entries yet.")
-                    .font(.system(size: 13))
-                    .foregroundColor(theme.palette.mist)
+                GlassPanel(compact: true) {
+                    Text("No call journal entries yet. Tap the pencil icon on any call to record responses, distance, and field notes.")
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.palette.mist)
+                }
             }
 
             ForEach(orderedJournal) { entry in
@@ -470,6 +729,76 @@ struct CallLogSheet: View {
         db.addCallJournalEntry(entry)
         SoundManager.shared.play(.success)
         dismiss()
+    }
+}
+
+// MARK: - Custom Call Log Sheet
+
+struct CustomCallLogSheet: View {
+    let call: UserCall
+
+    @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var db = DatabaseService.shared
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var response: String = ""
+    @State private var distanceText: String = ""
+    @State private var notes: String = ""
+
+    var body: some View {
+        NavigationView {
+            ScreenBackground {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        GlassPanel {
+                            SectionLabel("Custom Call")
+                            Text(call.name)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(theme.palette.cream)
+                            if let species = UkFieldCatalog.speciesById(call.speciesId) {
+                                Text(species.commonName)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(theme.palette.bronze)
+                            }
+                        }
+
+                        GlassPanel {
+                            SectionLabel("Journal entry")
+                            TextField("Response heard", text: $response)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            TextField("Distance (m)", text: $distanceText)
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            TextField("Notes", text: $notes)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                            HuntButton("Save entry", icon: "tray.and.arrow.down") {
+                                let fix = LocationManager.shared.latestFix ?? LocationManager.shared.fallbackFix()
+                                let entry = CallJournalEntry(
+                                    callId: "custom_\(call.id)",
+                                    speciesId: call.speciesId,
+                                    notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    response: response.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    distanceEstimateMeters: Int(distanceText),
+                                    latitude: fix.latitude,
+                                    longitude: fix.longitude,
+                                    weatherJson: nil,
+                                    recordedAtEpochMs: Int64(Date().timeIntervalSince1970 * 1000)
+                                )
+                                db.addCallJournalEntry(entry)
+                                SoundManager.shared.play(.success)
+                                dismiss()
+                            }
+                            .padding(.top, 6)
+                        }
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("Log call")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(leading: Button("Cancel") { dismiss() })
+        }
     }
 }
 

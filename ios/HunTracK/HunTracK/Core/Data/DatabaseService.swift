@@ -42,6 +42,12 @@ public class DatabaseService: ObservableObject {
     @Published public var callJournal: [CallJournalEntry] = [] {
         didSet { save(callJournal, Self.kCallJournal) }
     }
+    @Published public var userCalls: [UserCall] = [] {
+        didSet { save(userCalls, Self.kUserCalls) }
+    }
+    @Published public var audioPacks: [AudioPack] = [] {
+        didSet { save(audioPacks, Self.kAudioPacks) }
+    }
     @Published public var preferences: UserPreferences = UserPreferences() {
         didSet {
             save(preferences, Self.kPrefs)
@@ -72,6 +78,8 @@ public class DatabaseService: ObservableObject {
     private static let kBoundaries = "hunttrack_boundaries_v1"
     private static let kEmergency = "hunttrack_emergency_v1"
     private static let kCallJournal = "hunttrack_call_journal_v1"
+    private static let kUserCalls = "hunttrack_user_calls_v1"
+    private static let kAudioPacks = "hunttrack_audio_packs_v1"
     private static let kPrefs = "hunttrack_prefs_v2"
     private static let kWeatherCache = "hunttrack_weather_cache_v1"
     private static let kLegacyMarkers = "hunttrack_markers_v1"
@@ -110,6 +118,8 @@ public class DatabaseService: ObservableObject {
         boundaries = load([BoundaryArea].self, Self.kBoundaries) ?? []
         emergency = load(EmergencyProfile.self, Self.kEmergency) ?? EmergencyProfile()
         callJournal = load([CallJournalEntry].self, Self.kCallJournal) ?? []
+        userCalls = load([UserCall].self, Self.kUserCalls) ?? []
+        audioPacks = load([AudioPack].self, Self.kAudioPacks) ?? UkFieldCatalog.audioPacks
         preferences = load(UserPreferences.self, Self.kPrefs) ?? UserPreferences()
         cachedWeather = load(WeatherSnapshot.self, Self.kWeatherCache)
     }
@@ -492,6 +502,30 @@ public class DatabaseService: ObservableObject {
         callJournal.removeAll { $0.id == id }
     }
 
+    // MARK: - User calls
+
+    public func addUserCall(_ call: UserCall) {
+        var value = call
+        if value.id == 0 {
+            value.id = nextId(userCalls.map { $0.id })
+        }
+        userCalls.append(value)
+    }
+
+    public func deleteUserCall(id: Int64) {
+        userCalls.removeAll { $0.id == id }
+    }
+
+    // MARK: - Audio packs
+
+    public func updateAudioPack(_ pack: AudioPack) {
+        if let idx = audioPacks.firstIndex(where: { $0.id == pack.id }) {
+            audioPacks[idx] = pack
+        } else {
+            audioPacks.append(pack)
+        }
+    }
+
     // MARK: - Weather cache
 
     public func cacheWeather(_ snapshot: WeatherSnapshot) {
@@ -515,6 +549,8 @@ public class DatabaseService: ObservableObject {
         boundaries = []
         emergency = EmergencyProfile()
         callJournal = []
+        userCalls = []
+        audioPacks = UkFieldCatalog.audioPacks
         cachedWeather = nil
     }
 }

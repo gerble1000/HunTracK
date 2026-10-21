@@ -3,6 +3,8 @@ import SwiftUI
 public struct SettingsScreen: View {
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var theme = ThemeManager.shared
+    @State private var showMapGuide: Bool = false
+    @State private var showWindGuide: Bool = false
 
     public init() {}
 
@@ -68,7 +70,16 @@ public struct SettingsScreen: View {
 
                 Section(header: sectionHeader("Field training")) {
                     Toggle("Map training", isOn: mapTrainingBinding)
+                    Button("View Map Training Guide") {
+                        showMapGuide = true
+                    }
+                    .foregroundColor(theme.palette.bronzeBright)
+
                     Toggle("Wind & scent training", isOn: windTrainingBinding)
+                    Button("View Wind & Scent Training Guide") {
+                        showWindGuide = true
+                    }
+                    .foregroundColor(theme.palette.bronzeBright)
                 }
 
                 Section(header: sectionHeader("Tides")) {
@@ -97,7 +108,7 @@ public struct SettingsScreen: View {
                         Text("Version")
                             .foregroundColor(theme.palette.cream)
                         Spacer()
-                        Text("1.1.27 (34)")
+                        Text("1.1.27 (35)")
                             .foregroundColor(theme.palette.mist)
                     }
                 }
@@ -106,6 +117,12 @@ public struct SettingsScreen: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showMapGuide) {
+            MapTrainingGuideSheet(isPresented: $showMapGuide)
+        }
+        .sheet(isPresented: $showWindGuide) {
+            WindGuideSheet(isPresented: $showWindGuide)
+        }
     }
 
     // MARK: - Helpers
@@ -118,98 +135,197 @@ public struct SettingsScreen: View {
 
     private var unitSystemSummary: String {
         switch db.preferences.unitSystem {
-        case .metric: return "Metres \u{00B7} km/h \u{00B7} \u{00B0}C"
-        case .imperial: return "Yards \u{00B7} mph \u{00B7} \u{00B0}F"
+        case .metric:
+            return "Metric: km/h or m/s wind, metres distance, hectares/sq km area."
+        case .imperial:
+            return "Imperial: mph wind, yards distance, acres/sq miles area."
         }
     }
 
-    // MARK: - Preference bindings
-    //
-    // Each control writes through `db.preferences`, whose `didSet` persists the
-    // whole struct and re-applies theme/sound. Explicit `Binding(get:set:)` is
-    // used because these are nested struct fields.
+    // MARK: - Bindings
 
     private var themeModeBinding: Binding<HuntThemeMode> {
         Binding(
-            get: { db.preferences.themeMode },
-            set: { db.preferences.themeMode = $0 }
+            get: { theme.themeMode },
+            set: { mode in
+                theme.themeMode = mode
+                db.preferences.themeMode = mode.asAppThemeMode
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var unitSystemBinding: Binding<UnitSystem> {
         Binding(
             get: { db.preferences.unitSystem },
-            set: { db.preferences.unitSystem = $0 }
+            set: { newSystem in
+                db.preferences.unitSystem = newSystem
+                if newSystem == .imperial {
+                    db.preferences.useCelsius = false
+                    db.preferences.windUnit = .mph
+                } else {
+                    db.preferences.useCelsius = true
+                    db.preferences.windUnit = .kmh
+                }
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var useCelsiusBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.useCelsius },
-            set: { db.preferences.useCelsius = $0 }
+            set: {
+                db.preferences.useCelsius = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var windUnitBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.windUnit == .mph },
-            set: { db.preferences.windUnit = $0 ? .mph : .kmh }
+            set: {
+                db.preferences.windUnit = $0 ? .mph : .kmh
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var mapLayerStyleBinding: Binding<MapLayerStyle> {
         Binding(
             get: { db.preferences.mapLayerStyle },
-            set: { db.preferences.mapLayerStyle = $0 }
+            set: {
+                db.preferences.mapLayerStyle = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var showOsGridRefBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.showOsGridRef },
-            set: { db.preferences.showOsGridRef = $0 }
+            set: {
+                db.preferences.showOsGridRef = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var showCullPinsOnMapBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.showCullPinsOnMap },
-            set: { db.preferences.showCullPinsOnMap = $0 }
+            set: {
+                db.preferences.showCullPinsOnMap = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var markAnywhereBinding: Binding<Bool> {
         Binding(
-            get: { db.preferences.markAnywhereEnabled },
-            set: { db.preferences.markAnywhereEnabled = $0 }
+            get: { db.preferences.markAnywhereOnMap },
+            set: {
+                db.preferences.markAnywhereOnMap = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var soundsEnabledBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.soundsEnabled },
-            set: { db.preferences.soundsEnabled = $0 }
+            set: {
+                db.preferences.soundsEnabled = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var vibrationEnabledBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.vibrationEnabled },
-            set: { db.preferences.vibrationEnabled = $0 }
+            set: {
+                db.preferences.vibrationEnabled = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var mapTrainingBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.mapTrainingEnabled },
-            set: { db.preferences.mapTrainingEnabled = $0 }
+            set: {
+                db.preferences.mapTrainingEnabled = $0
+                SoundManager.shared.play(.click)
+            }
         )
     }
 
     private var windTrainingBinding: Binding<Bool> {
         Binding(
             get: { db.preferences.windTrainingEnabled },
-            set: { db.preferences.windTrainingEnabled = $0 }
+            set: {
+                db.preferences.windTrainingEnabled = $0
+                SoundManager.shared.play(.click)
+            }
         )
+    }
+}
+
+public struct MapTrainingGuideSheet: View {
+    @Binding var isPresented: Bool
+    @ObservedObject private var theme = ThemeManager.shared
+
+    public var body: some View {
+        NavigationView {
+            ScreenBackground {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Map Training Guide")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(theme.palette.cream)
+                            .padding(.top, 16)
+
+                        GlassPanel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Home Point")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(theme.palette.gold)
+                                Text("Long-press or tap Home button to mark your vehicle or camp. The map will display distance and heading back to safety.")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(theme.palette.mist)
+                            }
+                        }
+
+                        GlassPanel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Range Finder")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(theme.palette.gold)
+                                Text("Tap the Range button to measure line-of-sight distance and elevation from your current position to any target.")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(theme.palette.mist)
+                            }
+                        }
+
+                        GlassPanel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Live Scent Plume")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(theme.palette.gold)
+                                Text("When enabled, the map renders a live scent cone showing downwind dispersal from your current location.")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(theme.palette.mist)
+                            }
+                        }
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationBarItems(trailing: Button("Done") {
+                isPresented = false
+            }.foregroundColor(theme.palette.bronzeBright))
+        }
     }
 }

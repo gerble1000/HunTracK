@@ -717,6 +717,46 @@ public struct CallJournalEntry: Identifiable, Codable, Equatable {
     }
 }
 
+public struct UserCall: Identifiable, Codable, Equatable {
+    public var id: Int64
+    public var name: String
+    public var speciesId: String
+    public var category: String
+    public var description: String
+    public var filePath: String
+    public var createdAtEpochMs: Int64
+    public var latitude: Double?
+    public var longitude: Double?
+    public var weatherJson: String?
+    public var notes: String
+    
+    public init(
+        id: Int64 = 0,
+        name: String,
+        speciesId: String,
+        category: String = "Custom",
+        description: String = "",
+        filePath: String = "",
+        createdAtEpochMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        weatherJson: String? = nil,
+        notes: String = ""
+    ) {
+        self.id = id
+        self.name = name
+        self.speciesId = speciesId
+        self.category = category
+        self.description = description
+        self.filePath = filePath
+        self.createdAtEpochMs = createdAtEpochMs
+        self.latitude = latitude
+        self.longitude = longitude
+        self.weatherJson = weatherJson
+        self.notes = notes
+    }
+}
+
 public struct AudioPackTrack: Codable, Equatable, Hashable {
     public var callId: String
     public var fileName: String
