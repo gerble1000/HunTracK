@@ -31,7 +31,7 @@ public struct AboutScreen: View {
                         
                         Divider().background(theme.palette.slate).padding(.vertical, 8)
                         
-                        MetricRow("Version", "1.1.27 (35)")
+                        MetricRow("Version", AppVersion.display)
                         MetricRow("Platform", "iOS")
                     }
                     

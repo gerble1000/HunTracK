@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import UniformTypeIdentifiers
 
 // MARK: - Streamed call playback
 
@@ -37,7 +38,16 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         errorMessage = nil
         teardown()
 
-        guard let url = URL(string: urlString), url.scheme == "https" || url.scheme == "http" || url.isFileURL else {
+        // Accept http(s) streams as well as on-device recordings, which arrive
+        // as bare filesystem paths from the recorder and the file importer.
+        let url: URL
+        if let parsed = URL(string: urlString), parsed.scheme != nil {
+            url = parsed
+        } else {
+            url = URL(fileURLWithPath: urlString)
+        }
+
+        guard !urlString.isEmpty, url.isFileURL || url.scheme == "https" || url.scheme == "http" else {
             errorMessage = "This call has no playable recording URL."
             return
         }
@@ -135,10 +145,92 @@ public enum CallsTab: String, CaseIterable {
 
 // MARK: - Calls Screen
 
+// MARK: - Field recording
+
+/// Microphone capture and file copies both land in `Documents/Calls` so a
+/// custom call keeps working offline in the field.
+final class CallRecorder: NSObject, ObservableObject {
+    static let shared = CallRecorder()
+
+    @Published private(set) var isRecording: Bool = false
+    @Published var errorMessage: String?
+
+    private var recorder: AVAudioRecorder?
+
+    private override init() {
+        super.init()
+    }
+
+    static func callsDirectory() -> URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Calls", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }
+
+    func startRecording() {
+        errorMessage = nil
+
+        guard !isRecording else { return }
+
+        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard granted else {
+                    self.errorMessage = "Microphone access is off. Enable it in Settings > HunTracK."
+                    return
+                }
+                self.beginRecording()
+            }
+        }
+    }
+
+    @discardableResult
+    func stopRecording() -> URL? {
+        guard let recorder = recorder else { return nil }
+        let url = recorder.url
+        recorder.stop()
+        self.recorder = nil
+        isRecording = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func beginRecording() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            try session.setActive(true)
+
+            let stamp = Int(Date().timeIntervalSince1970)
+            let url = Self.callsDirectory().appendingPathComponent("call_\(stamp).m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100.0,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            ]
+
+            let recorder = try AVAudioRecorder(url: url, settings: settings)
+            guard recorder.record() else {
+                errorMessage = "Recording could not start on this device."
+                return
+            }
+            self.recorder = recorder
+            isRecording = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
 public struct CallsScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var player = CallAudioPlayer.shared
+    @ObservedObject private var recorder = CallRecorder.shared
 
     @State private var selectedTab: CallsTab = .library
     @State private var logTarget: AnimalCall?
@@ -150,6 +242,8 @@ public struct CallsScreen: View {
     @State private var customNotes: String = ""
     @State private var customUrl: String = ""
     @State private var saveSuccessMessage: String?
+    @State private var showAudioImporter: Bool = false
+    @State private var importError: String?
 
     public init() {}
 
@@ -207,6 +301,13 @@ public struct CallsScreen: View {
         }
         .sheet(item: $logCustomTarget) { call in
             CustomCallLogSheet(call: call)
+        }
+        .fileImporter(
+            isPresented: $showAudioImporter,
+            allowedContentTypes: [.audio],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
         }
     }
 
@@ -421,6 +522,60 @@ public struct CallsScreen: View {
                     TextField("Notes / when to use", text: $customNotes)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
 
+                    Text("Audio")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(theme.palette.cream)
+
+                    HStack(spacing: 10) {
+                        Button(action: { toggleRecording() }) {
+                            Label(
+                                recorder.isRecording ? "Stop & save recording" : "Start recording",
+                                systemImage: recorder.isRecording ? "stop.circle.fill" : "mic.fill"
+                            )
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(recorder.isRecording ? theme.palette.danger : theme.palette.slate)
+                            )
+                            .foregroundColor(recorder.isRecording ? theme.palette.cream : theme.palette.bronzeBright)
+                        }
+
+                        Button(action: {
+                            SoundManager.shared.play(.click)
+                            showAudioImporter = true
+                        }) {
+                            Label("Upload audio file", systemImage: "square.and.arrow.up")
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12).fill(theme.palette.slate)
+                                )
+                                .foregroundColor(theme.palette.bronzeBright)
+                        }
+                    }
+
+                    if recorder.isRecording {
+                        Text("Recording… tap stop when the call is finished.")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(theme.palette.danger)
+                    }
+
+                    if !customUrl.isEmpty {
+                        Text(customUrl)
+                            .font(.system(size: 11))
+                            .foregroundColor(theme.palette.mist)
+                            .lineLimit(2)
+                    }
+
+                    if let error = recorder.errorMessage ?? importError {
+                        Text(error)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(theme.palette.danger)
+                    }
+
                     if let msg = saveSuccessMessage {
                         Text(msg)
                             .font(.system(size: 13, weight: .semibold))
@@ -433,6 +588,50 @@ public struct CallsScreen: View {
                     .padding(.top, 4)
                 }
             }
+        }
+    }
+
+    private func toggleRecording() {
+        SoundManager.shared.play(.click)
+        importError = nil
+
+        if recorder.isRecording {
+            if let url = recorder.stopRecording() {
+                customUrl = url.path
+                saveSuccessMessage = "Recording saved — name it, then tap Save custom call."
+                SoundManager.shared.play(.success)
+            }
+        } else {
+            saveSuccessMessage = nil
+            recorder.startRecording()
+        }
+    }
+
+    /// Copies a picked file into `Documents/Calls` so playback works without the
+    /// original provider and the call survives the security-scoped URL expiring.
+    private func handleImport(_ result: Result<[URL], Error>) {
+        importError = nil
+
+        switch result {
+        case .success(let urls):
+            guard let picked = urls.first else { return }
+            let scoped = picked.startAccessingSecurityScopedResource()
+            defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
+
+            let destination = CallRecorder.callsDirectory().appendingPathComponent(picked.lastPathComponent)
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.copyItem(at: picked, to: destination)
+                customUrl = destination.path
+                saveSuccessMessage = "Audio file ready — name it, then tap Save custom call."
+                SoundManager.shared.play(.success)
+            } catch {
+                importError = error.localizedDescription
+            }
+        case .failure(let error):
+            importError = error.localizedDescription
         }
     }
 

@@ -30,7 +30,7 @@ public struct HomeScreen: View {
                     weatherPanel
                     astronomyPanel(astro)
                     gpsPanel(fix)
-                    tidePanel
+                    tidePanel(now: now)
                     quickAddButton
 
                     Text("Guidance only — verify local regulations and conditions.")
@@ -127,16 +127,36 @@ public struct HomeScreen: View {
         GlassPanel {
             SectionLabel("Weather")
             if let w = weatherService.weather {
-                MetricRow("Temperature", String(format: "%.1f°C", w.temperatureC))
-                MetricRow("Feels like", String(format: "%.1f°C", w.feelsLikeC))
+                Text("Updated \(HomeScreen.relativeAge(w.fetchedAtEpochMs))") 
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(theme.palette.gold)
+
+                Text(HomeScreen.weatherCodeLabel(w.weatherCode))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(theme.palette.cream)
+
+                MetricRow("Temperature", formatTemp(w.temperatureC))
+                MetricRow("Feels like", formatTemp(w.feelsLikeC))
                 MetricRow("Humidity", "\(w.humidityPercent)%")
                 MetricRow("Pressure", String(format: "%.1f hPa", w.pressureHpa))
-                MetricRow("Wind", String(format: "%.1f km/h", w.windSpeedKmh))
+                MetricRow(
+                    "Wind",
+                    "\(formatWind(w.windSpeedKmh)) \(HomeScreen.bearingToCardinal(w.windDirectionDeg))"
+                )
+                if let gust = w.windGustKmh {
+                    MetricRow("Gusts", formatWind(gust))
+                }
+                if let rain = w.rainProbabilityPercent {
+                    MetricRow("Rain chance", "\(rain)%")
+                }
+                if let vis = w.visibilityKm {
+                    MetricRow("Visibility", formatVisibility(vis))
+                }
             } else if weatherService.loading {
                 Text("Loading weather…")
                     .foregroundColor(theme.palette.mist)
             } else {
-                Text("Waiting for location fix…")
+                Text(weatherService.error ?? "Waiting for location fix…")
                     .foregroundColor(theme.palette.mist)
             }
         }
@@ -228,29 +248,49 @@ public struct HomeScreen: View {
     }
 
     @ViewBuilder
-    private var tidePanel: some View {
-        if db.preferences.tidesEnabled,
-           !db.preferences.tideStationId.isEmpty,
-           !tideEvents.isEmpty {
+    private func tidePanel(now: Int64) -> some View {
+        if db.preferences.tidesEnabled {
             GlassPanel {
                 SectionLabel("Tides")
-                Text(db.preferences.tideStationName.isEmpty ? "Selected port" : db.preferences.tideStationName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(theme.palette.cream)
 
-                ForEach(Array(tideEvents.prefix(3).indices), id: \.self) { index in
-                    let event = tideEvents[index]
-                    MetricRow(
-                        index == 0
-                            ? "\(HomeScreen.tideLabel(event.type)) (next)"
-                            : HomeScreen.tideLabel(event.type),
-                        "\(HomeScreen.formatTime(event.epochMs)) · \(String(format: "%.1f m", event.heightMeters))"
-                    )
+                if db.preferences.tideStationId.isEmpty {
+                    Text("Select a port in Settings → UK tide times")
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.palette.mist)
+                } else {
+                    Text(db.preferences.tideStationName.isEmpty ? "Selected port" : db.preferences.tideStationName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(theme.palette.cream)
+                    Text("Approximate · offline estimate")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(theme.palette.mist)
+
+                    let upcoming = tideEvents
+                        .filter { $0.epochMs >= now - Int64(30 * 60 * 1000) }
+                        .prefix(4)
+
+                    if upcoming.isEmpty {
+                        Text("No upcoming tides — pull to refresh")
+                            .font(.system(size: 13))
+                            .foregroundColor(theme.palette.mist)
+                            .padding(.top, 8)
+                    } else {
+                        ForEach(Array(upcoming.indices), id: \.self) { index in
+                            let event = upcoming[index]
+                            MetricRow(
+                                index == 0
+                                    ? "\(HomeScreen.tideLabel(event.type)) (next)"
+                                    : HomeScreen.tideLabel(event.type),
+                                "\(HomeScreen.formatTime(event.epochMs)) · \(String(format: "%.1f m", event.heightMeters))"
+                            )
+                        }
+                    }
+
+                    Text("Calculated on device from the lunar cycle — approximate.")
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.palette.mist)
+                        .padding(.top, 6)
                 }
-
-                Text("Calculated on device from the lunar cycle — approximate.")
-                    .font(.system(size: 12))
-                    .foregroundColor(theme.palette.mist)
             }
         }
     }
@@ -279,6 +319,24 @@ public struct HomeScreen: View {
         tideEvents = LunarTideCalculator.forecast(profile: profile, fromEpochMs: now, days: 2)
     }
 
+    private func formatTemp(_ celsius: Double) -> String {
+        db.preferences.useCelsius
+            ? String(format: "%.1f°C", celsius)
+            : String(format: "%.1f°F", celsius * 9 / 5 + 32)
+    }
+
+    private func formatWind(_ kmh: Double) -> String {
+        db.preferences.windUnit == .mph
+            ? String(format: "%.1f mph", kmh * 0.621371)
+            : String(format: "%.1f km/h", kmh)
+    }
+
+    private func formatVisibility(_ km: Double) -> String {
+        db.preferences.unitSystem == .imperial
+            ? String(format: "%.1f mi", km * 0.621371)
+            : String(format: "%.1f km", km)
+    }
+
     private func colorForLevel(_ level: ActivityLevel) -> Color {
         switch level {
         case .high: return theme.palette.success
@@ -300,6 +358,37 @@ public struct HomeScreen: View {
     static func formatTime(_ epochMs: Int64?) -> String {
         guard let epochMs = epochMs else { return "—" }
         return timeFormatter.string(from: Date(timeIntervalSince1970: Double(epochMs) / 1000))
+    }
+
+    /// Ported from Android's `relativeAge` used by the Home weather panel.
+    static func relativeAge(_ epochMs: Int64) -> String {
+        let minutes = max(0, Int((Date().timeIntervalSince1970 * 1000 - Double(epochMs)) / 60000))
+        if minutes < 1 { return "just now" }
+        if minutes == 1 { return "1 min ago" }
+        if minutes < 60 { return "\(minutes) min ago" }
+        return "\(minutes / 60)h ago"
+    }
+
+    /// Ported from Android's `weatherCodeLabel` (WMO codes).
+    static func weatherCodeLabel(_ code: Int) -> String {
+        switch code {
+        case 0: return "Clear sky"
+        case 1: return "Mainly clear"
+        case 2: return "Partly cloudy"
+        case 3: return "Overcast"
+        case 45, 48: return "Fog"
+        case 51, 53, 55: return "Drizzle"
+        case 56, 57: return "Freezing drizzle"
+        case 61, 63, 65: return "Rain"
+        case 66, 67: return "Freezing rain"
+        case 71, 73, 75: return "Snow"
+        case 77: return "Snow grains"
+        case 80, 81, 82: return "Rain showers"
+        case 85, 86: return "Snow showers"
+        case 95: return "Thunderstorm"
+        case 96, 99: return "Thunderstorm with hail"
+        default: return "Mixed conditions"
+        }
     }
 
     /// Ported from Android's `moonPhaseLabel`.

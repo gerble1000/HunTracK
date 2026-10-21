@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 public struct GlassPanel<Content: View>: View {
     let compact: Bool
@@ -115,5 +116,21 @@ public struct ScreenBackground<Content: View>: View {
                 .ignoresSafeArea()
             content
         }
+    }
+}
+
+/// Single source of truth for the version shown in About and Settings, so the
+/// displayed build tracks Info.plist instead of drifting from it.
+public enum AppVersion {
+    public static var short: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.27"
+    }
+
+    public static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+
+    public static var display: String {
+        "\(short) (\(build))"
     }
 }

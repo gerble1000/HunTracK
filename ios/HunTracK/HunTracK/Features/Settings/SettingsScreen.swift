@@ -108,7 +108,7 @@ public struct SettingsScreen: View {
                         Text("Version")
                             .foregroundColor(theme.palette.cream)
                         Spacer()
-                        Text("1.1.27 (35)")
+                        Text(AppVersion.display)
                             .foregroundColor(theme.palette.mist)
                     }
                 }
