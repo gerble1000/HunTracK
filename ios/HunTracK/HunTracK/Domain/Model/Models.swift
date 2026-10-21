@@ -881,3 +881,17 @@ public struct TideForecast: Codable, Equatable {
         self.source = source
     }
 }
+
+/// Per-station TideTimes.org.uk payload kept for offline use, mirroring the
+/// Android `TideEventsCacheEntity` row.
+public struct TideCacheEntry: Codable, Equatable {
+    public var stationId: String
+    public var events: [TideEvent]
+    public var fetchedAtEpochMs: Int64
+
+    public init(stationId: String, events: [TideEvent], fetchedAtEpochMs: Int64) {
+        self.stationId = stationId
+        self.events = events
+        self.fetchedAtEpochMs = fetchedAtEpochMs
+    }
+}

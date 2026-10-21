@@ -60,6 +60,11 @@ public class DatabaseService: ObservableObject {
         didSet { saveOptional(cachedWeather, Self.kWeatherCache) }
     }
 
+    /// Live TideTimes.org.uk payloads keyed by station id (Android `tide_events_cache`).
+    @Published public var tideCache: [String: TideCacheEntry] = [:] {
+        didSet { save(tideCache, Self.kTideCache) }
+    }
+
     // MARK: - Transient session state (not persisted)
 
     /// Boundary capture started from the Permissions wallet, completed on the map.
@@ -82,6 +87,7 @@ public class DatabaseService: ObservableObject {
     private static let kAudioPacks = "hunttrack_audio_packs_v1"
     private static let kPrefs = "hunttrack_prefs_v2"
     private static let kWeatherCache = "hunttrack_weather_cache_v1"
+    private static let kTideCache = "hunttrack_tide_cache_v1"
     private static let kLegacyMarkers = "hunttrack_markers_v1"
     private static let kLegacyPrefs = "hunttrack_prefs_v1"
 
@@ -122,6 +128,7 @@ public class DatabaseService: ObservableObject {
         audioPacks = load([AudioPack].self, Self.kAudioPacks) ?? UkFieldCatalog.audioPacks
         preferences = load(UserPreferences.self, Self.kPrefs) ?? UserPreferences()
         cachedWeather = load(WeatherSnapshot.self, Self.kWeatherCache)
+        tideCache = load([String: TideCacheEntry].self, Self.kTideCache) ?? [:]
     }
 
     private func load<T: Decodable>(_ type: T.Type, _ key: String) -> T? {
@@ -534,6 +541,23 @@ public class DatabaseService: ObservableObject {
 
     public func clearWeatherCache() {
         cachedWeather = nil
+    }
+
+    // MARK: - Tide cache
+
+    public func cacheTideEvents(stationId: String, events: [TideEvent], fetchedAtEpochMs: Int64) {
+        guard !events.isEmpty else { return }
+        var updated = tideCache
+        updated[stationId] = TideCacheEntry(
+            stationId: stationId,
+            events: events,
+            fetchedAtEpochMs: fetchedAtEpochMs
+        )
+        tideCache = updated
+    }
+
+    public func clearTideCache() {
+        tideCache = [:]
     }
 
     // MARK: - Danger zone

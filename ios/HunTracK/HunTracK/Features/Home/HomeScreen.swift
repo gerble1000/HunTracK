@@ -8,7 +8,7 @@ public struct HomeScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
     @State private var showingQuickAdd = false
     @State private var showingCopySheet = false
-    @State private var tideEvents: [TideEvent] = []
+    @ObservedObject private var tides = TideService.shared
 
     public init() {}
 
@@ -30,7 +30,7 @@ public struct HomeScreen: View {
                     weatherPanel
                     astronomyPanel(astro)
                     gpsPanel(fix)
-                    tidePanel(now: now)
+                    tidePanel
                     quickAddButton
 
                     Text("Guidance only — verify local regulations and conditions.")
@@ -60,10 +60,10 @@ public struct HomeScreen: View {
                 let fallback = location.fallbackFix()
                 weatherService.fetchWeather(latitude: fallback.latitude, longitude: fallback.longitude)
             }
-            recomputeTides()
+            tides.load()
         }
-        .onChange(of: db.preferences.tidesEnabled) { _ in recomputeTides() }
-        .onChange(of: db.preferences.tideStationId) { _ in recomputeTides() }
+        .onChange(of: db.preferences.tidesEnabled) { _ in tides.load() }
+        .onChange(of: db.preferences.tideStationId) { _ in tides.load() }
     }
 
     // MARK: - Panels
@@ -248,7 +248,7 @@ public struct HomeScreen: View {
     }
 
     @ViewBuilder
-    private func tidePanel(now: Int64) -> some View {
+    private var tidePanel: some View {
         if db.preferences.tidesEnabled {
             GlassPanel {
                 SectionLabel("Tides")
@@ -261,16 +261,14 @@ public struct HomeScreen: View {
                     Text(db.preferences.tideStationName.isEmpty ? "Selected port" : db.preferences.tideStationName)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
-                    Text("Approximate · offline estimate")
+                    Text(tides.sourceLabel.isEmpty ? "Loading tide times…" : tides.sourceLabel)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(theme.palette.mist)
 
-                    let upcoming = tideEvents
-                        .filter { $0.epochMs >= now - Int64(30 * 60 * 1000) }
-                        .prefix(4)
+                    let upcoming = tides.upcomingEvents(limit: 4)
 
                     if upcoming.isEmpty {
-                        Text("No upcoming tides — pull to refresh")
+                        Text(tides.loading ? "Loading tide times…" : "No upcoming tides — pull to refresh")
                             .font(.system(size: 13))
                             .foregroundColor(theme.palette.mist)
                             .padding(.top, 8)
@@ -286,12 +284,24 @@ public struct HomeScreen: View {
                         }
                     }
 
-                    Text("Calculated on device from the lunar cycle — approximate.")
+                    Text(tideFooter)
                         .font(.system(size: 12))
                         .foregroundColor(theme.palette.mist)
                         .padding(.top, 6)
                 }
             }
+        }
+    }
+
+    private var tideFooter: String {
+        guard let source = tides.forecast?.source else {
+            return "Calculated on device from the lunar cycle — approximate."
+        }
+        switch source {
+        case .live: return "Live from TideTimes.org.uk — verify against local charts."
+        case .cache: return "Cached tide times, refreshed daily when online."
+        case .calculated: return "Calculated on device from the lunar cycle — approximate."
+        case .unavailable: return "Tide times unavailable offline."
         }
     }
 
@@ -304,20 +314,6 @@ public struct HomeScreen: View {
     }
 
     // MARK: - Logic
-
-    /// Only runs when tides are switched on with a station chosen, and is capped
-    /// at a two-day window because the lunar model samples every 5 minutes.
-    private func recomputeTides() {
-        guard db.preferences.tidesEnabled,
-              !db.preferences.tideStationId.isEmpty,
-              let profile = UkTideStationCatalog.profileFor(stationId: db.preferences.tideStationId)
-        else {
-            tideEvents = []
-            return
-        }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        tideEvents = LunarTideCalculator.forecast(profile: profile, fromEpochMs: now, days: 2)
-    }
 
     private func formatTemp(_ celsius: Double) -> String {
         db.preferences.useCelsius

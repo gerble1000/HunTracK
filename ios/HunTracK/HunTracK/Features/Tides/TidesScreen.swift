@@ -254,6 +254,9 @@ private enum TideFormat {
         return formatter
     }()
 
+    /// Same layout as `event`; named for the "Updated … (live)" caption.
+    static var updated: DateFormatter { event }
+
     static let dayHeading: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_GB")
@@ -271,6 +274,334 @@ private enum TideFormat {
     }
 }
 
+// MARK: - Live tide client
+
+/// Fetches UK high/low water from the daily pages on
+/// [tidetimes.org.uk](https://www.tidetimes.org.uk). No API key; times are
+/// published in Europe/London (GMT/BST as appropriate).
+public enum TideTimesClient {
+
+    struct FetchError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    private static let baseURL = "https://www.tidetimes.org.uk"
+    private static let userAgent = "HunTracK/1.1 (iOS; UK tide times; +https://www.tidetimes.org.uk)"
+
+    /// Only BST/local rows (`class="vis2"`) are read; the GMT duplicates are
+    /// skipped, exactly as the Android client does.
+    private static let rowRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: "<tr class=\"vis2\">\\s*<td class=\"tal\">(High|Low)</td>\\s*<td class=\"tac\"><span>(\\d{2}:\\d{2})</span></td>\\s*<td class=\"tar\">([\\d.]+)m</td>",
+        options: [.caseInsensitive]
+    )
+
+    public static let london: TimeZone = TimeZone(identifier: "Europe/London") ?? TimeZone(identifier: "UTC")!
+
+    public static var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = london
+        return calendar
+    }
+
+    /// Fetches up to seven daily pages concurrently and merges them in time order.
+    public static func fetchEvents(
+        slug: String,
+        days: Int = 7,
+        completion: @escaping (Result<[TideEvent], Error>) -> Void
+    ) {
+        let dayCount = min(max(days, 1), 7)
+        let today = Date()
+
+        var results = [[TideEvent]?](repeating: nil, count: dayCount)
+        var firstError: Error?
+        let lock = NSLock()
+        let group = DispatchGroup()
+
+        for offset in 0..<dayCount {
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+            group.enter()
+            fetchDay(slug: slug, date: date) { result in
+                lock.lock()
+                switch result {
+                case .success(let events):
+                    results[offset] = events
+                case .failure(let error):
+                    if firstError == nil { firstError = error }
+                }
+                lock.unlock()
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            let merged = results.compactMap { $0 }.flatMap { $0 }.sorted { $0.epochMs < $1.epochMs }
+            if merged.isEmpty, let error = firstError {
+                completion(.failure(error))
+            } else {
+                completion(.success(merged))
+            }
+        }
+    }
+
+    private static func fetchDay(
+        slug: String,
+        date: Date,
+        completion: @escaping (Result<[TideEvent], Error>) -> Void
+    ) {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_GB")
+        formatter.timeZone = london
+        formatter.dateFormat = "yyyyMMdd"
+
+        let trimmed = slug.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(baseURL)/\(trimmed)-tide-times-\(formatter.string(from: date))") else {
+            completion(.failure(FetchError(message: "Invalid tide station URL")))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 20
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                completion(.failure(FetchError(message: "TideTimes HTTP \(http.statusCode)")))
+                return
+            }
+            guard let data = data,
+                  let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1),
+                  !html.isEmpty else {
+                completion(.failure(FetchError(message: "Empty TideTimes response")))
+                return
+            }
+            completion(.success(parseDayHtml(html: html, date: date)))
+        }.resume()
+    }
+
+    /// Parses one day page into high/low water events.
+    public static func parseDayHtml(html: String, date: Date) -> [TideEvent] {
+        guard let regex = rowRegex else { return [] }
+
+        let calendar = self.calendar
+        let dayStart = calendar.startOfDay(for: date)
+        var events: [TideEvent] = []
+        let fullRange = NSRange(html.startIndex..<html.endIndex, in: html)
+
+        regex.enumerateMatches(in: html, options: [], range: fullRange) { match, _, _ in
+            guard let match = match, match.numberOfRanges == 4 else { return }
+
+            func group(_ index: Int) -> String {
+                guard let range = Range(match.range(at: index), in: html) else { return "" }
+                return String(html[range])
+            }
+
+            let type: TideEventType
+            switch group(1).lowercased() {
+            case "high": type = .high
+            case "low": type = .low
+            default: type = .unknown
+            }
+
+            let timeParts = group(2).split(separator: ":")
+            guard timeParts.count == 2,
+                  let hour = Int(timeParts[0]),
+                  let minute = Int(timeParts[1]),
+                  let height = Double(group(3)),
+                  let stamp = calendar.date(byAdding: DateComponents(hour: hour, minute: minute), to: dayStart) else {
+                return
+            }
+
+            events.append(TideEvent(
+                epochMs: Int64(stamp.timeIntervalSince1970 * 1000),
+                type: type,
+                heightMeters: height,
+                isApproximate: false
+            ))
+        }
+
+        return events.sorted { $0.epochMs < $1.epochMs }
+    }
+}
+
+// MARK: - Live tide service
+
+/// Live/cached/calculated tide source, ported from Android's `TideRepository`.
+///
+/// Order of preference: fresh cache for today → live TideTimes.org.uk fetch →
+/// stale cache → on-device lunar estimate.
+public final class TideService: ObservableObject {
+    public static let shared = TideService()
+
+    @Published public private(set) var forecast: TideForecast?
+    @Published public private(set) var loading: Bool = false
+    @Published public private(set) var error: String?
+
+    private var inFlight: Bool = false
+
+    private init() {}
+
+    /// "Live · TideTimes.org.uk" and friends, matching the Android Home card.
+    public var sourceLabel: String {
+        guard let forecast = forecast else { return "" }
+        switch forecast.source {
+        case .live: return "Live · TideTimes.org.uk"
+        case .cache: return "Cached · TideTimes.org.uk"
+        case .calculated: return "Approximate · offline estimate"
+        case .unavailable: return "Unavailable"
+        }
+    }
+
+    public var updatedLabel: String? {
+        guard let forecast = forecast else { return nil }
+        let suffix: String
+        switch forecast.source {
+        case .live: suffix = "live"
+        case .cache: suffix = "cached"
+        case .calculated: suffix = "offline estimate"
+        case .unavailable: suffix = "offline"
+        }
+        return "Updated \(TideFormat.updated.string(from: Date(timeIntervalSince1970: Double(forecast.fetchedAtEpochMs) / 1000))) (\(suffix))"
+    }
+
+    /// Events still ahead of the current time, newest last.
+    public func upcomingEvents(limit: Int = 14) -> [TideEvent] {
+        guard let events = forecast?.events else { return [] }
+        let cutoff = Self.nowMs() - Int64(30 * 60 * 1000)
+        return Array(events.filter { $0.epochMs >= cutoff }.prefix(limit))
+    }
+
+    /// Loads using the stored preferences; a no-op when tides are switched off.
+    public func load(forceRefresh: Bool = false) {
+        let prefs = DatabaseService.shared.preferences
+        guard prefs.tidesEnabled, !prefs.tideStationId.isEmpty else {
+            forecast = nil
+            error = nil
+            return
+        }
+        load(stationId: prefs.tideStationId, forceRefresh: forceRefresh)
+    }
+
+    public func load(stationId: String, forceRefresh: Bool = false) {
+        guard let profile = UkTideStationCatalog.profileFor(stationId: stationId) else {
+            forecast = nil
+            error = "Select a UK tide station to see tide times."
+            return
+        }
+
+        let station = profile.station
+        let now = Self.nowMs()
+        let cached = DatabaseService.shared.tideCache[station.id]
+
+        // Today's live cache is good; older or approximate payloads get refetched.
+        if !forceRefresh,
+           let cached = cached,
+           !cached.events.isEmpty,
+           !Self.needsDailyRefresh(cached.fetchedAtEpochMs, now),
+           cached.events.allSatisfy({ !$0.isApproximate }) {
+            forecast = TideForecast(
+                station: station,
+                events: cached.events,
+                fetchedAtEpochMs: cached.fetchedAtEpochMs,
+                source: .cache
+            )
+            error = nil
+            loading = false
+            return
+        }
+
+        guard !inFlight else { return }
+
+        loading = true
+        error = nil
+        inFlight = true
+
+        TideTimesClient.fetchEvents(slug: profile.slug, days: 7) { [weak self] result in
+            guard let self = self else { return }
+            self.inFlight = false
+            self.loading = false
+
+            switch result {
+            case .success(let events) where !events.isEmpty:
+                let fetchedAt = Self.nowMs()
+                DatabaseService.shared.cacheTideEvents(
+                    stationId: station.id,
+                    events: events,
+                    fetchedAtEpochMs: fetchedAt
+                )
+                self.forecast = TideForecast(
+                    station: station,
+                    events: events,
+                    fetchedAtEpochMs: fetchedAt,
+                    source: .live
+                )
+                self.error = nil
+
+            case .success:
+                self.fallBack(profile: profile, cached: cached)
+
+            case .failure:
+                // Android swallows fetch errors and quietly falls back.
+                self.fallBack(profile: profile, cached: cached)
+            }
+        }
+    }
+
+    public func clearCache() {
+        DatabaseService.shared.clearTideCache()
+        forecast = nil
+        error = nil
+    }
+
+    /// Drops the in-memory forecast (switching tides off, clearing the station).
+    public func reset() {
+        forecast = nil
+        error = nil
+        loading = false
+    }
+
+    public func nearestStation(latitude: Double, longitude: Double) -> TideStation? {
+        UkTideStationCatalog.nearestProfile(latitude: latitude, longitude: longitude)?.station
+    }
+
+    // MARK: Internals
+
+    private func fallBack(profile: TideStationProfile, cached: TideCacheEntry?) {
+        if let cached = cached, !cached.events.isEmpty {
+            forecast = TideForecast(
+                station: profile.station,
+                events: cached.events,
+                fetchedAtEpochMs: cached.fetchedAtEpochMs,
+                source: .cache
+            )
+        } else {
+            let now = Self.nowMs()
+            forecast = TideForecast(
+                station: profile.station,
+                events: LunarTideCalculator.forecast(profile: profile, fromEpochMs: now, days: 7),
+                fetchedAtEpochMs: now,
+                source: .calculated
+            )
+        }
+    }
+
+    private static func needsDailyRefresh(_ fetchedAtEpochMs: Int64, _ nowEpochMs: Int64) -> Bool {
+        let calendar = TideTimesClient.calendar
+        let fetchedDay = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(fetchedAtEpochMs) / 1000))
+        let today = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(nowEpochMs) / 1000))
+        return fetchedDay < today
+    }
+
+    private static func nowMs() -> Int64 {
+        Int64(Date().timeIntervalSince1970 * 1000)
+    }
+}
+
 // MARK: - Settings section
 
 /// Tide settings block, designed to be embedded either in Settings or on its own screen.
@@ -278,24 +609,20 @@ public struct TideSettingsSection: View {
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var location = LocationManager.shared
     @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var tides = TideService.shared
 
-    @State private var events: [TideEvent] = []
     @State private var note: String?
 
     public init() {}
 
     private var stations: [TideStation] { UkTideStationCatalog.allStations() }
 
-    private var activeProfile: TideStationProfile? {
-        let stationId = db.preferences.tideStationId
-        guard !stationId.isEmpty else { return nil }
-        return UkTideStationCatalog.profileFor(stationId: stationId)
-    }
+    private var upcomingEvents: [TideEvent] { tides.upcomingEvents() }
 
     public var body: some View {
         GlassPanel {
             SectionLabel("UK tide times")
-            Text("Approximate high and low water, calculated on this device from the lunar cycle and each port's tidal range. Verify against local charts before relying on it.")
+            Text("Live high and low water from TideTimes.org.uk — refreshed daily when online. Cached for offline use, with the approximate on-device estimate used only when there is no cache.")
                 .font(.system(size: 12))
                 .foregroundColor(theme.palette.mist)
 
@@ -304,7 +631,11 @@ public struct TideSettingsSection: View {
                 set: { newValue in
                     db.preferences.tidesEnabled = newValue
                     db.savePreferences()
-                    recompute()
+                    if newValue {
+                        tides.load()
+                    } else {
+                        tides.reset()
+                    }
                 }
             ))
             .font(.system(size: 15))
@@ -316,7 +647,33 @@ public struct TideSettingsSection: View {
                     .foregroundColor(theme.palette.mist)
                     .padding(.top, 4)
             } else {
-                MetricRow("Station", db.preferences.tideStationName)
+                Text("Station: \(db.preferences.tideStationName)")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(theme.palette.cream)
+                    .padding(.top, 4)
+            }
+
+            if let updated = tides.updatedLabel {
+                Text(updated)
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.palette.mist)
+            }
+
+            if let message = note ?? tides.error {
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.palette.gold)
+                    .padding(.top, 2)
+            }
+
+            if tides.loading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading tide times…")
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.palette.mist)
+                }
+                .padding(.vertical, 6)
             }
 
             stationPicker
@@ -327,25 +684,30 @@ public struct TideSettingsSection: View {
             }
             .padding(.top, 4)
 
-            if let note = note {
-                Text(note)
-                    .font(.system(size: 12))
-                    .foregroundColor(theme.palette.gold)
-                    .padding(.top, 2)
+            HuntButton("Refresh tide times", icon: "arrow.clockwise") {
+                note = nil
+                tides.load(forceRefresh: true)
             }
+            .padding(.top, 4)
 
-            if db.preferences.tidesEnabled && !events.isEmpty {
+            HuntButton("Clear tide cache", icon: "trash") {
+                tides.clearCache()
+                note = "Tide cache cleared."
+            }
+            .padding(.top, 4)
+
+            if db.preferences.tidesEnabled && !upcomingEvents.isEmpty {
                 eventList
             }
 
-            Text("Source: on-device model (calculated, approximate)")
+            Text("Source: \(tides.sourceLabel.isEmpty ? "on-device model (calculated, approximate)" : tides.sourceLabel)")
                 .font(.system(size: 11))
                 .foregroundColor(theme.palette.mist)
                 .padding(.top, 4)
         }
-        .onAppear { recompute() }
-        .onChange(of: db.preferences.tideStationId) { _ in recompute() }
-        .onChange(of: db.preferences.tidesEnabled) { _ in recompute() }
+        .onAppear { tides.load() }
+        .onChange(of: db.preferences.tideStationId) { _ in tides.load() }
+        .onChange(of: db.preferences.tidesEnabled) { _ in tides.load() }
     }
 
     private var stationPicker: some View {
@@ -360,7 +722,8 @@ public struct TideSettingsSection: View {
                     db.preferences.tideStationLatitude = profile.station.latitude
                     db.preferences.tideStationLongitude = profile.station.longitude
                     db.savePreferences()
-                    recompute()
+                    note = nil
+                    tides.load(stationId: profile.station.id, forceRefresh: true)
                 }
             )) {
                 Text("None").tag("")
@@ -377,7 +740,7 @@ public struct TideSettingsSection: View {
         VStack(alignment: .leading, spacing: 2) {
             SectionLabel("Next tides")
                 .padding(.top, 8)
-            ForEach(events) { event in
+            ForEach(upcomingEvents) { event in
                 HStack {
                     Text(TideFormat.typeLabel(event.type))
                         .font(.system(size: 14, weight: .semibold))
@@ -411,7 +774,7 @@ public struct TideSettingsSection: View {
         note = location.latestFix == nil
             ? "GPS not fixed yet — used a default UK position."
             : nil
-        recompute()
+        tides.load(stationId: profile.station.id, forceRefresh: true)
     }
 
     private func clearStation() {
@@ -421,19 +784,7 @@ public struct TideSettingsSection: View {
         db.preferences.tideStationLongitude = nil
         db.savePreferences()
         note = nil
-        events = []
-    }
-
-    /// Recalculates the upcoming high/low waters. Two days of events is enough
-    /// for the list and keeps the sample count reasonable.
-    private func recompute() {
-        guard db.preferences.tidesEnabled, let profile = activeProfile else {
-            events = []
-            return
-        }
-        let from = Int64(Date().timeIntervalSince1970 * 1000)
-        let result = LunarTideCalculator.forecast(profile: profile, fromEpochMs: from, days: 2)
-        events = Array(result.prefix(14))
+        tides.reset()
     }
 }
 
