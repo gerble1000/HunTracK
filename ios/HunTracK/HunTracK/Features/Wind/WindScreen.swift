@@ -85,7 +85,7 @@ public struct WindScreen: View {
         let plume = ScentPlumeGeometry.forConditions(
             speedKmh: w.windSpeedKmh,
             gustKmh: w.windGustKmh,
-            humidityPercent: w.relativeHumidityPercent,
+            humidityPercent: w.humidityPercent,
             temperatureC: w.temperatureC
         )
         let riskThreshold = max(35.0, plume.halfAngleDeg * 2.0)
@@ -127,7 +127,7 @@ public struct WindScreen: View {
                             let plume = ScentPlumeGeometry.forConditions(
                                 speedKmh: w.windSpeedKmh,
                                 gustKmh: w.windGustKmh,
-                                humidityPercent: w.relativeHumidityPercent,
+                                humidityPercent: w.humidityPercent,
                                 temperatureC: w.temperatureC
                             )
                             

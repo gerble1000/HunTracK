@@ -146,10 +146,10 @@ public struct SettingsScreen: View {
 
     private var themeModeBinding: Binding<HuntThemeMode> {
         Binding(
-            get: { theme.themeMode },
+            get: { theme.mode },
             set: { mode in
-                theme.themeMode = mode
-                db.preferences.themeMode = mode.asAppThemeMode
+                theme.mode = mode
+                db.preferences.themeMode = mode
                 SoundManager.shared.play(.click)
             }
         )
@@ -224,9 +224,9 @@ public struct SettingsScreen: View {
 
     private var markAnywhereBinding: Binding<Bool> {
         Binding(
-            get: { db.preferences.markAnywhereOnMap },
+            get: { db.preferences.markAnywhereEnabled },
             set: {
-                db.preferences.markAnywhereOnMap = $0
+                db.preferences.markAnywhereEnabled = $0
                 SoundManager.shared.play(.click)
             }
         )
