@@ -103,9 +103,14 @@ private struct MapViewHost: UIViewRepresentable {
     var mapStyle: MapLayerStyle
     var bronze: UIColor
 
+    /// True while a "Draw it" boundary capture is in progress: map panning is
+    /// disabled so a one-finger drag sketches the fence line instead.
+    var isDrawing: Bool
+
     var onRegionChanged: (CLLocationCoordinate2D) -> Void
     var onSelectMarker: (Int64) -> Void
     var onMapTapped: (CLLocationCoordinate2D) -> Void
+    var onDrawPoint: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -137,6 +142,17 @@ private struct MapViewHost: UIViewRepresentable {
         tap.cancelsTouchesInView = false
         mapView.addGestureRecognizer(tap)
 
+        // Freehand fence drawing: single-finger drag, only active in draw mode.
+        let drawPan = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleDrawPan(_:))
+        )
+        drawPan.maximumNumberOfTouches = 1
+        drawPan.cancelsTouchesInView = false
+        drawPan.delegate = context.coordinator
+        mapView.addGestureRecognizer(drawPan)
+        context.coordinator.drawRecognizer = drawPan
+
         context.coordinator.applyStyle(mapView, style: mapStyle)
         return mapView
     }
@@ -146,6 +162,11 @@ private struct MapViewHost: UIViewRepresentable {
         coordinator.parent = self
 
         coordinator.applyStyle(mapView, style: mapStyle)
+
+        // Panning/zooming would fight the stroke, so lock the map while drawing.
+        mapView.isScrollEnabled = !isDrawing
+        mapView.isZoomEnabled = !isDrawing
+        mapView.isRotateEnabled = !isDrawing
 
         if coordinator.lastRegionToken != regionRequestToken {
             coordinator.lastRegionToken = regionRequestToken
@@ -180,11 +201,12 @@ private struct MapViewHost: UIViewRepresentable {
 
 // MARK: - Coordinator
 
-private final class Coordinator: NSObject, MKMapViewDelegate {
+private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
     var parent: MapViewHost
     var lastSnapshot: MapContentSnapshot?
     var lastRegionToken: Int = -1
     var lastStyle: MapLayerStyle?
+    var drawRecognizer: UIPanGestureRecognizer?
     private var appliedAnnotations: [MKAnnotation] = []
     private var overlayKinds: [ObjectIdentifier: OverlayKind] = [:]
 
@@ -317,6 +339,36 @@ private final class Coordinator: NSObject, MKMapViewDelegate {
         parent.onMapTapped(coordinate)
     }
 
+    /// Samples the finger as it drags, so a fence line can be sketched freehand
+    /// the way Android's draw mode does (tap-to-add still works too).
+    @objc func handleDrawPan(_ gesture: UIPanGestureRecognizer) {
+        guard parent.isDrawing, let mapView = gesture.view as? MKMapView else { return }
+        switch gesture.state {
+        case .began, .changed:
+            let point = gesture.location(in: mapView)
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+            parent.onDrawPoint(coordinate)
+        default:
+            break
+        }
+    }
+
+    // MARK: UIGestureRecognizerDelegate
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer === drawRecognizer {
+            return parent.isDrawing
+        }
+        return true
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
     // MARK: MKMapViewDelegate
 
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -447,6 +499,7 @@ public struct MapScreen: View {
                     showCulls: db.preferences.showCullPinsOnMap,
                     homingTarget: homingTarget,
                     pendingPoints: pendingPoints,
+                    isDrawing: capture?.mode == .draw,
                     mapStyle: db.preferences.mapLayerStyle,
                     bronze: UIColor(theme.palette.bronze),
                     onRegionChanged: { coordinate in
@@ -458,6 +511,9 @@ public struct MapScreen: View {
                     },
                     onMapTapped: { coordinate in
                         handleMapTap(coordinate)
+                    },
+                    onDrawPoint: { coordinate in
+                        appendDraftPoint(coordinate, minimumMeters: 5, playClick: false)
                     }
                 )
                 .ignoresSafeArea()
@@ -707,7 +763,8 @@ public struct MapScreen: View {
     private var captureHelp: String {
         capture?.mode == .walk
             ? "Walk the boundary — each GPS fix is appended in order."
-            : "Tap the map to add boundary corners in order."
+            : "Drag on the map to draw the fence line — lift your finger to finish. "
+                + "You can also tap corners one at a time."
     }
 
     private var addMarkerButton: some View {
@@ -857,13 +914,22 @@ public struct MapScreen: View {
     // MARK: - Actions
 
     private func handleMapTap(_ coordinate: CLLocationCoordinate2D) {
+        appendDraftPoint(coordinate, minimumMeters: 3, playClick: true)
+    }
+
+    /// Adds a draft corner, ignoring samples that are too close to the previous one
+    /// so a dragged stroke (or a twitchy tap) cannot pile up duplicate points.
+    private func appendDraftPoint(
+        _ coordinate: CLLocationCoordinate2D,
+        minimumMeters: Double,
+        playClick: Bool
+    ) {
         guard capture?.mode == .draw else { return }
-        // Guard against accidental duplicate taps at the same spot.
         if let last = pendingPoints.last {
             let moved = DatabaseService.haversineMeters(
                 last.latitude, last.longitude, coordinate.latitude, coordinate.longitude
             )
-            guard moved > 3 else { return }
+            guard moved > minimumMeters else { return }
         }
         pendingPoints.append(
             BoundaryPoint(
@@ -872,7 +938,9 @@ public struct MapScreen: View {
                 orderIndex: pendingPoints.count
             )
         )
-        sound.play(.click)
+        if playClick {
+            sound.play(.click)
+        }
     }
 
     private func appendWalkPoint(_ fix: GpsFix) {

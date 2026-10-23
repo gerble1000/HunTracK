@@ -197,14 +197,22 @@ public struct CalendarScreen: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                         .multilineTextAlignment(.center)
-                    Button {
-                        goToToday()
-                    } label: {
+                    if isViewingToday {
+                        // Only label the bar "Today" when the visible period really is today.
                         Text("Today")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(theme.palette.bronzeBright)
+                    } else {
+                        Button {
+                            goToToday()
+                        } label: {
+                            Text("Back to today")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(theme.palette.bronzeBright)
+                                .underline()
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Spacer()
@@ -408,6 +416,10 @@ public struct CalendarScreen: View {
     }
 
     // MARK: Actions
+
+    private var isViewingToday: Bool {
+        FieldCalendarDates.isSameDay(selectedDate, FieldCalendarDates.today())
+    }
 
     private func loadDraft(for date: Date) {
         let start = FieldCalendarDates.dayStart(for: date)

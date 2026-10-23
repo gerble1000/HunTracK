@@ -1079,3 +1079,108 @@ public enum UkFieldCatalog {
     
     public static let gooseMoreInformation = "Geese (Canada, Greylag, Pink-footed, European White-fronted): 1 Sep \u{2013} 31 Jan\n\nOpen season dates can vary slightly by foreshore vs inland in England and Wales. Always verify current law with GOV.UK or your regional authority before shooting.\n\nCanada and greylag occur UK-wide as feral or naturalised birds. Pink-footed geese winter in large skeins, especially Scotland and north-west England. European white-fronted geese use local winter sites such as the Severn Estuary and parts of Wales."
 }
+
+
+// MARK: - Species reference photos
+
+/// Bundled male/female reference photos, mirrored 1:1 from the Android
+/// drawable-nodpi assets so both apps show the same images.
+public enum SpeciesImageCatalog {
+
+    public static func photoName(speciesId: String, isMale: Bool) -> String? {
+        let key = "species_\(speciesId)_\(isMale ? "male" : "female")"
+        return photoNames.contains(key) ? key : nil
+    }
+
+    public static func hasPhoto(speciesId: String, isMale: Bool) -> Bool {
+        photoName(speciesId: speciesId, isMale: isMale) != nil
+    }
+
+    /// Best available photo for a card or overview block.
+    public static func previewPhotoName(speciesId: String) -> String? {
+        photoName(speciesId: speciesId, isMale: true)
+            ?? photoName(speciesId: speciesId, isMale: false)
+    }
+
+    /// Muntjac reference shots are wide/full-body, so they are fitted rather than cropped.
+    public static func usesFit(_ speciesId: String) -> Bool { speciesId == "muntjac" }
+
+    private static let photoNames: Set<String> = [
+        "species_american_mink_female",
+        "species_american_mink_male",
+        "species_black_rat_female",
+        "species_black_rat_male",
+        "species_brown_hare_female",
+        "species_brown_hare_male",
+        "species_brown_rat_female",
+        "species_brown_rat_male",
+        "species_canada_goose_female",
+        "species_canada_goose_male",
+        "species_carrion_crow_female",
+        "species_carrion_crow_male",
+        "species_chinese_water_deer_female",
+        "species_chinese_water_deer_male",
+        "species_common_snipe_female",
+        "species_common_snipe_male",
+        "species_fallow_deer_female",
+        "species_fallow_deer_male",
+        "species_fox_female",
+        "species_fox_male",
+        "species_gadwall_female",
+        "species_gadwall_male",
+        "species_goldeneye_female",
+        "species_goldeneye_male",
+        "species_grey_squirrel_female",
+        "species_grey_squirrel_male",
+        "species_greylag_goose_female",
+        "species_greylag_goose_male",
+        "species_hooded_crow_female",
+        "species_hooded_crow_male",
+        "species_jackdaw_female",
+        "species_jackdaw_male",
+        "species_jay_female",
+        "species_jay_male",
+        "species_magpie_female",
+        "species_magpie_male",
+        "species_mallard_female",
+        "species_mallard_male",
+        "species_muntjac_female",
+        "species_muntjac_male",
+        "species_pheasant_female",
+        "species_pheasant_male",
+        "species_pink_footed_goose_female",
+        "species_pink_footed_goose_male",
+        "species_pintail_female",
+        "species_pintail_male",
+        "species_pochard_female",
+        "species_pochard_male",
+        "species_rabbit_female",
+        "species_rabbit_male",
+        "species_red_deer_female",
+        "species_red_deer_male",
+        "species_red_legged_partridge_female",
+        "species_red_legged_partridge_male",
+        "species_roe_deer_female",
+        "species_roe_deer_male",
+        "species_rook_female",
+        "species_rook_male",
+        "species_scaup_female",
+        "species_scaup_male",
+        "species_shoveler_female",
+        "species_shoveler_male",
+        "species_sika_deer_female",
+        "species_sika_deer_male",
+        "species_teal_female",
+        "species_teal_male",
+        "species_tufted_duck_female",
+        "species_tufted_duck_male",
+        "species_white_fronted_goose_female",
+        "species_white_fronted_goose_male",
+        "species_wigeon_female",
+        "species_wigeon_male",
+        "species_woodcock_female",
+        "species_woodcock_male",
+        "species_woodpigeon_female",
+        "species_woodpigeon_male"
+    ]
+}

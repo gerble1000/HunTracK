@@ -248,29 +248,48 @@ public struct SpeciesScreen: View {
         .padding(.horizontal, 16)
     }
 
+    /// Every card is the same size, like Android: fixed photo thumbnail plus a
+    /// fixed-height text column, so rows never jump around as you scroll.
     private func speciesCard(_ species: Species) -> some View {
         GlassPanel {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(species.commonName)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(theme.palette.cream)
-                Text(species.scientificName)
-                    .font(.system(size: 13, weight: .light))
-                    .italic()
-                    .foregroundColor(theme.palette.bronze)
-                Text(species.summary)
-                    .font(.system(size: 13))
-                    .foregroundColor(theme.palette.mist)
-                    .lineLimit(3)
-                    .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 12) {
+                    SpeciesThumbnail(speciesId: species.id)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(species.commonName)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(theme.palette.cream)
+                            .lineLimit(1)
+                        Text(species.scientificName)
+                            .font(.system(size: 12, weight: .light))
+                            .italic()
+                            .foregroundColor(theme.palette.bronze)
+                            .lineLimit(1)
+                        Text(species.summary)
+                            .font(.system(size: 12))
+                            .foregroundColor(theme.palette.mist)
+                            .lineLimit(2)
+                            .padding(.top, 2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Spacer(minLength: 0)
 
                 if let preview = SeasonStatus.previewLine(speciesId: species.id, nation: nation) {
                     Text(preview)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
-                        .padding(.top, 6)
+                        .lineLimit(2)
                 }
+
+                Text("Tap for full ID & legal seasons \u{203A}")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(theme.palette.gold)
             }
+            // One fixed card height for every species, so the menu never staggers.
+            .frame(height: 124, alignment: .topLeading)
         }
     }
 
@@ -380,6 +399,9 @@ public struct SpeciesDetailScreen: View {
     private var overviewPanel: some View {
         GlassPanel {
             SectionLabel("Overview")
+            if let name = SpeciesImageCatalog.previewPhotoName(speciesId: species.id) {
+                SpeciesPhoto(name: name, speciesId: species.id)
+            }
             Text(species.summary)
                 .foregroundColor(theme.palette.cream)
         }
@@ -388,8 +410,18 @@ public struct SpeciesDetailScreen: View {
     private var identificationPanel: some View {
         GlassPanel {
             SectionLabel("Identification")
-            SpeciesTraitBlock(label: sexTerms.male, text: species.maleTraits)
-            SpeciesTraitBlock(label: sexTerms.female, text: species.femaleTraits)
+            SpeciesTraitBlock(
+                label: sexTerms.male,
+                text: species.maleTraits,
+                photoName: SpeciesImageCatalog.photoName(speciesId: species.id, isMale: true),
+                photoSpeciesId: species.id
+            )
+            SpeciesTraitBlock(
+                label: sexTerms.female,
+                text: species.femaleTraits,
+                photoName: SpeciesImageCatalog.photoName(speciesId: species.id, isMale: false),
+                photoSpeciesId: species.id
+            )
             SpeciesTraitBlock(label: "Young", text: species.youngTraits)
         }
     }
@@ -633,6 +665,8 @@ private struct SeasonStatusPill: View {
 private struct SpeciesTraitBlock: View {
     let label: String
     let text: String
+    var photoName: String? = nil
+    var photoSpeciesId: String = ""
     @ObservedObject private var theme = ThemeManager.shared
 
     var body: some View {
@@ -643,11 +677,67 @@ private struct SpeciesTraitBlock: View {
                 Text(label)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
+                if let photoName = photoName {
+                    SpeciesPhoto(name: photoName, speciesId: photoSpeciesId)
+                }
                 Text(text)
                     .font(.system(size: 14))
                     .foregroundColor(theme.palette.cream)
             }
             .padding(.bottom, 8)
         }
+    }
+}
+
+// MARK: - Photos
+
+/// Card thumbnail at a fixed size, mirrored from the Android species drawables.
+private struct SpeciesThumbnail: View {
+    let speciesId: String
+    @ObservedObject private var theme = ThemeManager.shared
+
+    var body: some View {
+        Group {
+            if let name = SpeciesImageCatalog.previewPhotoName(speciesId: speciesId) {
+                Image(name)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    theme.palette.slate
+                    Image(systemName: "pawprint.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(theme.palette.bronze)
+                }
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(theme.palette.glassBorder, lineWidth: 1)
+        )
+    }
+}
+
+/// Reference photo using Android's fixed heights (200 pt to fit muntjac, 180 pt crop
+/// elsewhere), so every species page lays out identically.
+private struct SpeciesPhoto: View {
+    let name: String
+    let speciesId: String
+    @ObservedObject private var theme = ThemeManager.shared
+
+    private var fitsWholeAnimal: Bool { SpeciesImageCatalog.usesFit(speciesId) }
+
+    var body: some View {
+        Image(name)
+            .resizable()
+            .aspectRatio(contentMode: fitsWholeAnimal ? .fit : .fill)
+            .frame(height: fitsWholeAnimal ? 200 : 180)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .background(theme.palette.charcoal.opacity(0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 4)
     }
 }
