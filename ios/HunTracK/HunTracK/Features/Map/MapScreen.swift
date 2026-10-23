@@ -499,9 +499,9 @@ public struct MapScreen: View {
                     showCulls: db.preferences.showCullPinsOnMap,
                     homingTarget: homingTarget,
                     pendingPoints: pendingPoints,
-                    isDrawing: capture?.mode == .draw,
                     mapStyle: db.preferences.mapLayerStyle,
                     bronze: UIColor(theme.palette.bronze),
+                    isDrawing: capture?.mode == .draw,
                     onRegionChanged: { coordinate in
                         centre = coordinate
                         updateGridRef(coordinate)
