@@ -7,8 +7,12 @@ public struct PermissionsScreen: View {
     /// Non-nil while the permission editor sheet is open. `id == 0` means "new".
     @State private var editorDraft: HuntingPermission?
     @State private var showingBoundarySheet = false
+    @Environment(\.dismiss) private var dismiss
+    private let captureOnCurrentMap: Bool
 
-    public init() {}
+    public init(captureOnCurrentMap: Bool = false) {
+        self.captureOnCurrentMap = captureOnCurrentMap
+    }
 
     public var body: some View {
         ScreenBackground {
@@ -39,12 +43,12 @@ public struct PermissionsScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Permissions Wallet")
-                .font(.system(size: 28, weight: .bold))
+                .font(.field(size: 28, weight: .bold))
                 .foregroundColor(theme.palette.cream)
                 .padding(.top, 16)
 
             Text("Store your landowner permission records, shoot boundaries, and contact verification.")
-                .font(.system(size: 14))
+                .font(.field(size: 14))
                 .foregroundColor(theme.palette.mist)
         }
     }
@@ -58,10 +62,10 @@ public struct PermissionsScreen: View {
             if db.permissions.isEmpty {
                 GlassPanel {
                     Text("No permissions stored yet.")
-                        .font(.system(size: 14))
+                        .font(.field(size: 14))
                         .foregroundColor(theme.palette.mist)
                     Text("Add a landowner's written permission to keep the details and any linked boundary to hand in the field.")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
             } else {
@@ -102,10 +106,10 @@ public struct PermissionsScreen: View {
             if db.boundaries.isEmpty {
                 GlassPanel {
                     Text("No boundary areas yet.")
-                        .font(.system(size: 14))
+                        .font(.field(size: 14))
                         .foregroundColor(theme.palette.mist)
                     Text("Record your permitted ground, no-go zones and emergency safe zones, then view them overlaid on the Map.")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
             } else {
@@ -139,10 +143,10 @@ public struct PermissionsScreen: View {
                             .frame(width: 10, height: 10)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(zone.displayName)
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.field(size: 15, weight: .semibold))
                                 .foregroundColor(theme.palette.cream)
                             Text(zone.summary)
-                                .font(.system(size: 12))
+                                .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
                         }
                     }
@@ -155,11 +159,15 @@ public struct PermissionsScreen: View {
 
             if db.pendingBoundary != nil {
                 Text("Boundary capture ready — finish it on the Map tab.")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.success)
             }
         }
-        .sheet(isPresented: $showingBoundarySheet) {
+        .sheet(isPresented: $showingBoundarySheet, onDismiss: {
+            // When opened from Map's menu, uncover the map after the setup
+            // sheet closes; selecting the already-active Map tab cannot pop us.
+            if captureOnCurrentMap && db.pendingBoundary != nil { dismiss() }
+        }) {
             PermissionBoundarySheet(
                 permissions: db.permissions
             ) { pending in
@@ -183,12 +191,12 @@ private struct PermissionCard: View {
         GlassPanel {
             HStack(alignment: .top, spacing: 8) {
                 Text(permission.displayLabel)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.field(size: 20, weight: .bold))
                     .foregroundColor(theme.palette.cream)
                 Spacer()
                 if permission.isExpired {
                     Text("EXPIRED")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.field(size: 11, weight: .bold))
                         .foregroundColor(theme.palette.cream)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -215,7 +223,7 @@ private struct PermissionCard: View {
 
             if !permission.notes.isEmpty {
                 Text(permission.notes)
-                    .font(.system(size: 13))
+                    .font(.field(size: 13))
                     .foregroundColor(theme.palette.mist)
             }
 
@@ -224,17 +232,17 @@ private struct PermissionCard: View {
                     ? "Permission has lapsed — do not shoot on this ground."
                     : "Verified written permission valid on the agreed boundaries."
             )
-            .font(.system(size: 12))
+            .font(.field(size: 12))
             .foregroundColor(permission.isExpired ? theme.palette.danger : theme.palette.success)
             .padding(.top, 2)
 
             HStack(spacing: 12) {
                 Button("Edit") { onEdit() }
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
 
                 Button("Delete") { onDelete() }
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.danger)
 
                 Spacer()
@@ -260,7 +268,7 @@ private struct BoundaryCard: View {
                     .fill(Color(hex: boundary.zoneType.mapColorHex))
                     .frame(width: 10, height: 10)
                 Text(boundary.name.isEmpty ? boundary.zoneType.displayName : boundary.name)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.field(size: 17, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
                 Spacer()
             }
@@ -273,13 +281,13 @@ private struct BoundaryCard: View {
 
             if !boundary.notes.isEmpty {
                 Text(boundary.notes)
-                    .font(.system(size: 13))
+                    .font(.field(size: 13))
                     .foregroundColor(theme.palette.mist)
             }
 
             HStack {
                 Button("Delete boundary") { onDelete() }
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.danger)
                 Spacer()
             }
@@ -328,7 +336,7 @@ private struct PermissionEditorSheet: View {
                         )
                         if draft.validToEpochMs < draft.validFromEpochMs {
                             Text("End date is before the start date.")
-                                .font(.system(size: 12))
+                                .font(.field(size: 12))
                                 .foregroundColor(theme.palette.danger)
                         }
                     }
@@ -386,12 +394,20 @@ private struct PermissionEditorSheet: View {
 
 // MARK: - Boundary capture setup
 
-private struct PermissionBoundarySheet: View {
+struct PermissionBoundarySheet: View {
     let permissions: [HuntingPermission]
     let onStart: (PendingBoundaryCreation) -> Void
+    let returnToPermissions: Bool
+
+    init(permissions: [HuntingPermission], initialMode: BoundaryCaptureMode = .walk, returnToPermissions: Bool = true, onStart: @escaping (PendingBoundaryCreation) -> Void) {
+        self.permissions = permissions
+        self.onStart = onStart
+        self.returnToPermissions = returnToPermissions
+        self._mode = State(initialValue: initialMode)
+    }
 
     @State private var name: String = ""
-    @State private var mode: BoundaryCaptureMode = .walk
+    @State private var mode: BoundaryCaptureMode
     @State private var zoneType: BoundaryZoneType = .hunting
     @State private var linkedPermissionId: Int64?
 
@@ -420,7 +436,7 @@ private struct PermissionBoundarySheet: View {
 
                     Section(header: Text("What this zone means").foregroundColor(theme.palette.bronze)) {
                         Text(zoneType.summary)
-                            .font(.system(size: 13))
+                            .font(.field(size: 13))
                             .foregroundColor(theme.palette.mist)
                     }
 
@@ -442,7 +458,7 @@ private struct PermissionBoundarySheet: View {
                                         ? zoneType.displayName
                                         : name,
                                     zoneType: zoneType,
-                                    returnToPermissions: true,
+                                    returnToPermissions: returnToPermissions,
                                     permissionId: linkedPermissionId
                                 )
                             )
@@ -451,7 +467,7 @@ private struct PermissionBoundarySheet: View {
                         .foregroundColor(theme.palette.bronze)
 
                         Text("The Map tab records the GPS outline for a walked boundary, or lets you draw the outline by hand.")
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }
                 }

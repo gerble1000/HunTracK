@@ -623,7 +623,7 @@ public struct TideSettingsSection: View {
         GlassPanel {
             SectionLabel("UK tide times")
             Text("Live high and low water from TideTimes.org.uk — refreshed daily when online. Cached for offline use, with the approximate on-device estimate used only when there is no cache.")
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
 
             Toggle("Show UK tide times", isOn: Binding(
@@ -638,30 +638,30 @@ public struct TideSettingsSection: View {
                     }
                 }
             ))
-            .font(.system(size: 15))
+            .font(.field(size: 15))
             .foregroundColor(theme.palette.cream)
 
             if db.preferences.tideStationName.isEmpty {
                 Text("No tide station selected")
-                    .font(.system(size: 13))
+                    .font(.field(size: 13))
                     .foregroundColor(theme.palette.mist)
                     .padding(.top, 4)
             } else {
                 Text("Station: \(db.preferences.tideStationName)")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.field(size: 15, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
                     .padding(.top, 4)
             }
 
             if let updated = tides.updatedLabel {
                 Text(updated)
-                    .font(.system(size: 11))
+                    .font(.field(size: 11))
                     .foregroundColor(theme.palette.mist)
             }
 
             if let message = note ?? tides.error {
                 Text(message)
-                    .font(.system(size: 12))
+                    .font(.field(size: 12))
                     .foregroundColor(theme.palette.gold)
                     .padding(.top, 2)
             }
@@ -670,7 +670,7 @@ public struct TideSettingsSection: View {
                 HStack(spacing: 8) {
                     ProgressView()
                     Text("Loading tide times…")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
                 .padding(.vertical, 6)
@@ -701,7 +701,7 @@ public struct TideSettingsSection: View {
             }
 
             Text("Source: \(tides.sourceLabel.isEmpty ? "on-device model (calculated, approximate)" : tides.sourceLabel)")
-                .font(.system(size: 11))
+                .font(.field(size: 11))
                 .foregroundColor(theme.palette.mist)
                 .padding(.top, 4)
         }
@@ -743,14 +743,14 @@ public struct TideSettingsSection: View {
             ForEach(upcomingEvents) { event in
                 HStack {
                     Text(TideFormat.typeLabel(event.type))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.field(size: 14, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                     Spacer()
                     Text(TideFormat.event.string(from: Date(timeIntervalSince1970: Double(event.epochMs) / 1000)))
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                     Text(String(format: "%.2f m%@", event.heightMeters, event.isApproximate ? " ~" : ""))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.field(size: 13, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
                 }
                 .padding(.vertical, 2)
@@ -802,10 +802,10 @@ public struct TidesScreen: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Tides")
-                            .font(.system(size: 28, weight: .bold))
+                            .font(.field(size: 28, weight: .bold))
                             .foregroundColor(theme.palette.cream)
                         Text("UK high & low water")
-                            .font(.system(size: 14))
+                            .font(.field(size: 14))
                             .foregroundColor(theme.palette.mist)
                     }
                     .padding(.top, 8)
@@ -815,10 +815,10 @@ public struct TidesScreen: View {
                     GlassPanel {
                         SectionLabel("Using tides in the field")
                         Text("Rising water pushes fish and wildfowl inshore and concentrates feeding activity around the tide edges. Slack water either side of high and low is usually the most productive window, and an incoming tide is generally better than a falling one for foreshore and estuary shooting.")
-                            .font(.system(size: 13))
+                            .font(.field(size: 13))
                             .foregroundColor(theme.palette.cream)
                         Text("Check your quarry's legal season and any local byelaws before shooting on tidal ground.")
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                             .padding(.top, 4)
                     }

@@ -43,6 +43,52 @@ public enum OsGridRef {
         return gridRefToEastNorth(ref) != nil
     }
 
+    /// British National Grid lines, not a latitude/longitude graticule. Sampling
+    /// both axes keeps the OSGB projection's curvature at wider zoom levels.
+    public static func gridLinesForViewport(
+        south: Double, west: Double, north: Double, east: Double, spacingMeters: Double
+    ) -> [GridLine] {
+        guard spacingMeters > 0, south < north, west < east,
+              north >= 49, south <= 61, east >= -9, west <= 3 else { return [] }
+        let bottom = max(49, south), top = min(61, north)
+        let left = max(-9, west), right = min(3, east)
+        var projected: [(Double, Double)] = []
+        for row in 0...4 {
+            for column in 0...4 {
+                let lat = bottom + (top - bottom) * Double(row) / 4
+                let lon = left + (right - left) * Double(column) / 4
+                if let point = wgs84ToEastNorth(lat: lat, lon: lon) { projected.append(point) }
+            }
+        }
+        guard !projected.isEmpty else { return [] }
+        let eMin = max(0, projected.map { $0.0 }.min()! - spacingMeters)
+        let eMax = min(700000, projected.map { $0.0 }.max()! + spacingMeters)
+        let nMin = max(0, projected.map { $0.1 }.min()! - spacingMeters)
+        let nMax = min(1300000, projected.map { $0.1 }.max()! + spacingMeters)
+        let majorEvery = spacingMeters >= 10000 ? 100000.0 : (spacingMeters >= 1000 ? 10000.0 : 1000.0)
+        var lines: [GridLine] = []
+        for vertical in [true, false] {
+            let lower = vertical ? eMin : nMin
+            let upper = vertical ? eMax : nMax
+            let start = floor(lower / spacingMeters) * spacingMeters
+            let count = min(48, max(0, Int((upper - start) / spacingMeters) + 1))
+            for index in 0..<count {
+                let value = start + Double(index) * spacingMeters
+                let points = (0...32).compactMap { sample -> LatLng? in
+                    let fraction = Double(sample) / 32
+                    return eastNorthToWgs84(
+                        easting: vertical ? value : eMin + (eMax - eMin) * fraction,
+                        northing: vertical ? nMin + (nMax - nMin) * fraction : value
+                    )
+                }
+                if points.count >= 2 {
+                    lines.append(GridLine(points: points, major: abs(value.truncatingRemainder(dividingBy: majorEvery)) < 0.5))
+                }
+            }
+        }
+        return lines
+    }
+
     private static func wgs84ToEastNorth(lat: Double, lon: Double) -> (Double, Double)? {
         let (phi, lambda) = wgs84ToOsgb36(phi: lat * .pi / 180.0, lambda: lon * .pi / 180.0)
         let (e, n) = latLonToEastNorth(phi: phi, lambda: lambda)

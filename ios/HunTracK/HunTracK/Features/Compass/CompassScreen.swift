@@ -11,7 +11,7 @@ public struct CompassScreen: View {
         ScreenBackground {
             VStack(spacing: 24) {
                 Text("Compass")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.field(size: 28, weight: .bold))
                     .foregroundColor(theme.palette.cream)
                     .padding(.top, 16)
                 
@@ -44,7 +44,7 @@ public struct CompassScreen: View {
                 }
                 
                 Text("\(Int(compass.heading.magneticHeading))°")
-                    .font(.system(size: 36, weight: .bold))
+                    .font(.field(size: 36, weight: .bold))
                     .foregroundColor(theme.palette.cream)
                 
                 GlassPanel {

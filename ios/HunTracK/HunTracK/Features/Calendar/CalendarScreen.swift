@@ -159,10 +159,10 @@ public struct CalendarScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Field calendar")
-                .font(.system(size: 28, weight: .bold))
+                .font(.field(size: 28, weight: .bold))
                 .foregroundColor(theme.palette.cream)
             Text("Plan hunts, log outings, and note what happened each day")
-                .font(.system(size: 13))
+                .font(.field(size: 13))
                 .foregroundColor(theme.palette.mist)
         }
         .padding(.top, 8)
@@ -184,7 +184,7 @@ public struct CalendarScreen: View {
                     stepPeriod(forward: false)
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.field(size: 18, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
                         .frame(width: 44, height: 32)
                 }
@@ -194,20 +194,20 @@ public struct CalendarScreen: View {
 
                 VStack(spacing: 2) {
                     Text(FieldCalendarDates.periodLabel(viewMode, selectedDate))
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.field(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                         .multilineTextAlignment(.center)
                     if isViewingToday {
                         // Only label the bar "Today" when the visible period really is today.
                         Text("Today")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.field(size: 13, weight: .semibold))
                             .foregroundColor(theme.palette.bronzeBright)
                     } else {
                         Button {
                             goToToday()
                         } label: {
                             Text("Back to today")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.field(size: 13, weight: .semibold))
                                 .foregroundColor(theme.palette.bronzeBright)
                                 .underline()
                         }
@@ -221,7 +221,7 @@ public struct CalendarScreen: View {
                     stepPeriod(forward: true)
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.field(size: 18, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
                         .frame(width: 44, height: 32)
                 }
@@ -257,7 +257,7 @@ public struct CalendarScreen: View {
             HStack(spacing: 0) {
                 ForEach(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], id: \.self) { label in
                     Text(label)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.field(size: 10, weight: .semibold))
                         .foregroundColor(theme.palette.mist)
                         .frame(maxWidth: .infinity)
                 }
@@ -280,7 +280,7 @@ public struct CalendarScreen: View {
             }
 
             Text("Tap a day to open details")
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
                 .padding(.top, 8)
         }
@@ -346,7 +346,7 @@ public struct CalendarScreen: View {
             }
 
             Text("Tap a month to open the grid")
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
         }
     }
@@ -369,12 +369,12 @@ public struct CalendarScreen: View {
         return GlassPanel {
             SectionLabel("Day details")
             Text(FieldCalendarDates.periodLabel(.day, selectedDate))
-                .font(.system(size: 17, weight: .semibold))
+                .font(.field(size: 17, weight: .semibold))
                 .foregroundColor(theme.palette.cream)
 
             if saved?.hasContent == true {
                 Text("Last saved notes on this day")
-                    .font(.system(size: 12))
+                    .font(.field(size: 12))
                     .foregroundColor(theme.palette.mist)
             }
 
@@ -405,7 +405,7 @@ public struct CalendarScreen: View {
                     clearDay()
                 } label: {
                     Text("Clear")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                         .foregroundColor(theme.palette.mist)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
@@ -502,7 +502,7 @@ private struct CalendarScreenDayCell: View {
                 Button(action: action) {
                     VStack(spacing: 2) {
                         Text("\(FieldCalendarDates.dayNumber(date))")
-                            .font(.system(size: 13, weight: isToday ? .bold : .regular))
+                            .font(.field(size: 13, weight: isToday ? .bold : .regular))
                             .foregroundColor(isSelected ? theme.palette.cream : theme.palette.mist)
                         Circle()
                             .fill(hasEntry ? theme.palette.bronzeBright : Color.clear)
@@ -545,10 +545,10 @@ private struct CalendarScreenYearMonthCell: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.field(size: 15, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(.field(size: 11))
                     .foregroundColor(entryCount > 0 ? theme.palette.bronzeBright : theme.palette.mist)
                     .multilineTextAlignment(.center)
             }

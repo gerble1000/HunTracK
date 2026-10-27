@@ -50,6 +50,7 @@ public struct CullScreen: View {
                             ForEach(UkFieldCatalog.cullLogSpecies) { species in
                                 Chip(
                                     label: species.commonName,
+                                    speciesId: species.id,
                                     selected: filterSpeciesId == species.id
                                 ) {
                                     filterSpeciesId = species.id
@@ -61,7 +62,7 @@ public struct CullScreen: View {
 
                     if let message = message {
                         Text(message)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.field(size: 13, weight: .semibold))
                             .foregroundColor(theme.palette.bronzeBright)
                     }
 
@@ -95,10 +96,10 @@ public struct CullScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Cull log")
-                .font(.system(size: 32, weight: .bold))
+                .font(.field(size: 32, weight: .bold))
                 .foregroundColor(theme.palette.cream)
             Text("Spreadsheet view for bag records \u{2014} map pins optional")
-                .font(.system(size: 14))
+                .font(.field(size: 14))
                 .foregroundColor(theme.palette.mist)
         }
         .padding(.top, 8)
@@ -107,10 +108,10 @@ public struct CullScreen: View {
     private var summaryPanel: some View {
         GlassPanel {
             Text("Total in view: \(yearTotal)")
-                .font(.system(size: 20, weight: .bold))
+                .font(.field(size: 20, weight: .bold))
                 .foregroundColor(theme.palette.bronzeBright)
             Text("\(filtered.count) rows")
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
 
             HStack(spacing: 10) {
@@ -119,7 +120,7 @@ public struct CullScreen: View {
                 if let csvURL = csvURL {
                     ShareLink(item: csvURL, preview: SharePreview("HunTracK cull log")) {
                         Text("Share CSV")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.field(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(
@@ -130,7 +131,7 @@ public struct CullScreen: View {
                     }
                 } else {
                     Text("Share CSV")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(
@@ -152,7 +153,7 @@ public struct CullScreen: View {
 
                     if filtered.isEmpty {
                         Text("No culls yet \u{2014} tap Add cull")
-                            .font(.system(size: 14))
+                            .font(.field(size: 14))
                             .foregroundColor(theme.palette.mist)
                             .padding(.vertical, 12)
                     } else {
@@ -167,8 +168,8 @@ public struct CullScreen: View {
 
     private var tableHeaderRow: some View {
         HStack(spacing: 10) {
-            tableCell("Date", width: 72, isHeader: true)
-            tableCell("Species", width: 100, isHeader: true)
+            tableCell("Date", width: 100, isHeader: true)
+            tableCell("Species", width: 180, isHeader: true)
             tableCell("Sex", width: 56, isHeader: true)
             tableCell("Age", width: 64, isHeader: true)
             tableCell("Qty", width: 36, isHeader: true)
@@ -184,13 +185,17 @@ public struct CullScreen: View {
             openEdit(record)
         } label: {
             HStack(spacing: 10) {
-                tableCell(Self.dateLabel(record.culledAtEpochMs), width: 72)
-                tableCell(record.speciesLabel, width: 100)
+                tableCell(Self.dateLabel(record.culledAtEpochMs), width: 100)
+                HStack(spacing: 6) {
+                    AnimalIcon(speciesId: record.speciesId, category: .cull, size: 32)
+                    Text(record.speciesLabel).font(.body).lineLimit(2)
+                }
+                .frame(width: 180, alignment: .leading)
                 tableCell(record.sex.label, width: 56)
                 tableCell(record.ageClass.label, width: 64)
                 tableCell(String(record.count), width: 36)
                 Text(record.osGridRef.isEmpty ? "\u{2014}" : record.osGridRef)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.field(size: 12, design: .monospaced))
                     .foregroundColor(theme.palette.bronzeBright)
                     .frame(width: 120, alignment: .leading)
                     .lineLimit(1)
@@ -210,10 +215,10 @@ public struct CullScreen: View {
 
     private func tableCell(_ text: String, width: CGFloat, isHeader: Bool = false) -> some View {
         Text(text)
-            .font(.system(size: isHeader ? 11 : 12, weight: isHeader ? .bold : .regular))
+            .font(.field(size: isHeader ? 11 : 12, weight: isHeader ? .bold : .regular))
             .foregroundColor(isHeader ? theme.palette.mist : theme.palette.cream)
             .frame(width: width, alignment: .leading)
-            .lineLimit(1)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Derived state
@@ -327,6 +332,9 @@ public struct CullScreen: View {
                 db.addMarker(marker)
                 linkedId = db.markers.last?.id
             }
+        } else if let existingId = linkedId {
+            db.deleteMarker(id: existingId)
+            linkedId = nil
         }
 
         let grid: String
@@ -395,7 +403,7 @@ private struct CullEditorSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(isNew ? "Add cull" : "Edit cull")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.field(size: 24, weight: .bold))
                             .foregroundColor(theme.palette.cream)
 
                         SectionLabel("Species")
@@ -404,6 +412,7 @@ private struct CullEditorSheet: View {
                                 ForEach(UkFieldCatalog.cullLogSpecies) { species in
                                     Chip(
                                         label: species.commonName,
+                                        speciesId: species.id,
                                         selected: draft.speciesId == species.id
                                     ) {
                                         draft.speciesId = species.id
@@ -474,7 +483,7 @@ private struct CullEditorSheet: View {
 
                         if !draft.osGridRef.isEmpty {
                             Text(draft.osGridRef)
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.field(size: 17, weight: .semibold))
                                 .foregroundColor(theme.palette.bronzeBright)
                         }
 
@@ -523,6 +532,7 @@ private struct CullEditorSheet: View {
 
 private struct Chip: View {
     let label: String
+    var speciesId: String? = nil
     let selected: Bool
     let action: () -> Void
 
@@ -530,8 +540,13 @@ private struct Chip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 6) {
+                if let speciesId = speciesId {
+                    AnimalIcon(speciesId: speciesId, size: 28)
+                }
+                Text(label)
+            }
+                .font(.body.weight(.semibold))
                 .foregroundColor(selected ? theme.palette.charcoal : theme.palette.cream)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)

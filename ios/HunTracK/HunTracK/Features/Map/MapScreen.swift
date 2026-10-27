@@ -68,13 +68,15 @@ private enum OverlayKind {
     case route
     case pendingBoundary
     case zone(BoundaryZoneType)
+    case grid(major: Bool)
+    case plume(core: Bool)
 }
 
 // MARK: - Snapshot used to keep updateUIView idempotent
 
 private struct MapContentSnapshot: Equatable {
-    var markerIds: [Int64] = []
-    var cullIds: [Int64] = []
+    var markers: [FieldMarker] = []
+    var culls: [CullRecord] = []
     var boundaryIds: [Int64] = []
     var boundaryPointCounts: [Int: Int] = [:]
     var routeIds: [Int64] = []
@@ -101,13 +103,18 @@ private struct MapViewHost: UIViewRepresentable {
     var homingTarget: CLLocationCoordinate2D?
     var pendingPoints: [BoundaryPoint]
     var mapStyle: MapLayerStyle
+    var showGrid: Bool
+    var northUpToken: Int
+    var windFix: GpsFix?
+    var windWeather: WeatherSnapshot?
     var bronze: UIColor
 
     /// True while a "Draw it" boundary capture is in progress: map panning is
     /// disabled so a one-finger drag sketches the fence line instead.
     var isDrawing: Bool
 
-    var onRegionChanged: (CLLocationCoordinate2D) -> Void
+    var onRegionChanged: (CLLocationCoordinate2D, Double) -> Void
+    var onUserPanned: () -> Void
     var onSelectMarker: (Int64) -> Void
     var onMapTapped: (CLLocationCoordinate2D) -> Void
     var onDrawPoint: (CLLocationCoordinate2D) -> Void
@@ -134,12 +141,22 @@ private struct MapViewHost: UIViewRepresentable {
         mapView.isRotateEnabled = true
         mapView.isPitchEnabled = false
         mapView.pointOfInterestFilter = .excludingAll
+        // MapKit can still clamp this requested range for a map type/location.
+        mapView.setCameraZoomRange(MKMapView.CameraZoomRange(minCenterCoordinateDistance: 1, maxCenterCoordinateDistance: 2000000), animated: false)
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleTap(_:))
         )
         tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
+        let longPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPress.delegate = context.coordinator
+        mapView.addGestureRecognizer(longPress)
+        tap.require(toFail: longPress)
         mapView.addGestureRecognizer(tap)
 
         // Freehand fence drawing: single-finger drag, only active in draw mode.
@@ -162,6 +179,12 @@ private struct MapViewHost: UIViewRepresentable {
         coordinator.parent = self
 
         coordinator.applyStyle(mapView, style: mapStyle)
+        if coordinator.lastNorthUpToken != northUpToken {
+            coordinator.lastNorthUpToken = northUpToken
+            let camera = mapView.camera.copy() as! MKMapCamera
+            camera.heading = 0
+            mapView.setCamera(camera, animated: true)
+        }
 
         // Panning/zooming would fight the stroke, so lock the map while drawing.
         mapView.isScrollEnabled = !isDrawing
@@ -179,8 +202,8 @@ private struct MapViewHost: UIViewRepresentable {
         }
 
         let snapshot = MapContentSnapshot(
-            markerIds: markers.map { $0.id },
-            cullIds: showCulls ? culls.filter { $0.latitude != nil && $0.longitude != nil }.map { $0.id } : [],
+            markers: markers,
+            culls: showCulls ? culls.filter { $0.latitude != nil && $0.longitude != nil } : [],
             boundaryIds: boundaries.map { $0.id },
             boundaryPointCounts: Self.countMap(boundaries.map { (Int($0.id), $0.points.count) }),
             routeIds: routes.map { $0.id },
@@ -193,9 +216,12 @@ private struct MapViewHost: UIViewRepresentable {
             pendingCoordinates: pendingPoints.map { "\($0.orderIndex):\($0.latitude):\($0.longitude)" }
         )
 
-        guard coordinator.lastSnapshot != snapshot else { return }
-        coordinator.lastSnapshot = snapshot
-        coordinator.rebuild(mapView: mapView, host: self)
+        if coordinator.lastSnapshot != snapshot {
+            coordinator.lastSnapshot = snapshot
+            coordinator.rebuild(mapView: mapView, host: self)
+        }
+        coordinator.updateGrid(mapView)
+        coordinator.updatePlume(mapView)
     }
 }
 
@@ -209,6 +235,13 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     var drawRecognizer: UIPanGestureRecognizer?
     private var appliedAnnotations: [MKAnnotation] = []
     private var overlayKinds: [ObjectIdentifier: OverlayKind] = [:]
+    var lastNorthUpToken = 0
+    private var gridOverlays: [MKPolyline] = []
+    private var plumeOverlays: [MKPolygon] = []
+    private var gridKey = ""
+    private var lastPlumeFix: GpsFix?
+    private var lastPlumeWeather: WeatherSnapshot?
+    private var lastPlumeFresh = false
 
     init(parent: MapViewHost) {
         self.parent = parent
@@ -232,13 +265,20 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     func rebuild(mapView: MKMapView, host: MapViewHost) {
         mapView.removeOverlays(mapView.overlays)
         overlayKinds.removeAll()
+        gridOverlays = []
+        plumeOverlays = []
+        gridKey = ""
+        lastPlumeFix = nil
+        lastPlumeWeather = nil
+        lastPlumeFresh = false
         if !appliedAnnotations.isEmpty {
             mapView.removeAnnotations(appliedAnnotations)
             appliedAnnotations.removeAll()
         }
 
         // --- Field markers ---
-        for marker in host.markers {
+        let linkedCullIds = Set(host.culls.filter { $0.latitude != nil && $0.longitude != nil }.compactMap { $0.linkedMarkerId })
+        for marker in host.markers where !linkedCullIds.contains(marker.id) {
             let annotation = HuntAnnotation(
                 coordinate: CLLocationCoordinate2D(latitude: marker.latitude, longitude: marker.longitude),
                 title: marker.name,
@@ -332,6 +372,12 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         }
     }
 
+    @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, !parent.isDrawing,
+              let mapView = gesture.view as? MKMapView else { return }
+        parent.onMapTapped(mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView))
+    }
+
     @objc func handleTap(_ gesture: UITapGestureRecognizer) {
         guard let mapView = gesture.view as? MKMapView else { return }
         let point = gesture.location(in: mapView)
@@ -353,7 +399,83 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         }
     }
 
+    func updateGrid(_ mapView: MKMapView) {
+        let region = mapView.region
+        let span = region.span.latitudeDelta * 111000
+        let spacing: Double = span > 500000 ? 100000 : (span > 50000 ? 10000 : (span > 5000 ? 1000 : 100))
+        let key = "\(parent.showGrid):\(region.center.latitude):\(region.center.longitude):\(region.span.latitudeDelta):\(region.span.longitudeDelta)"
+        guard gridKey != key else { return }
+        gridKey = key
+        mapView.removeOverlays(gridOverlays)
+        for line in gridOverlays { overlayKinds.removeValue(forKey: ObjectIdentifier(line)) }
+        gridOverlays = []
+        guard parent.showGrid else { return }
+        let lines = OsGridRef.gridLinesForViewport(
+            south: region.center.latitude - region.span.latitudeDelta / 2,
+            west: region.center.longitude - region.span.longitudeDelta / 2,
+            north: region.center.latitude + region.span.latitudeDelta / 2,
+            east: region.center.longitude + region.span.longitudeDelta / 2,
+            spacingMeters: spacing
+        )
+        for grid in lines {
+            let coordinates = grid.points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            let line = MKPolyline(coordinates: coordinates, count: coordinates.count)
+            overlayKinds[ObjectIdentifier(line)] = .grid(major: grid.major)
+            gridOverlays.append(line)
+            mapView.addOverlay(line, level: .aboveRoads)
+        }
+    }
+
+    func updatePlume(_ mapView: MKMapView) {
+        let fresh = parent.windWeather.map { Date().timeIntervalSince1970 * 1000 - Double($0.fetchedAtEpochMs) < 1800000 } ?? false
+        guard lastPlumeFix != parent.windFix || lastPlumeWeather != parent.windWeather || lastPlumeFresh != fresh else { return }
+        lastPlumeFix = parent.windFix
+        lastPlumeWeather = parent.windWeather
+        lastPlumeFresh = fresh
+        mapView.removeOverlays(plumeOverlays)
+        for plume in plumeOverlays { overlayKinds.removeValue(forKey: ObjectIdentifier(plume)) }
+        plumeOverlays = []
+        guard fresh, let fix = parent.windFix, let weather = parent.windWeather,
+              DatabaseService.haversineMeters(fix.latitude, fix.longitude, weather.latitude, weather.longitude) < 15000 else { return }
+        let plume = ScentPlumeGeometry.forConditions(
+            speedKmh: weather.windSpeedKmh, gustKmh: weather.windGustKmh,
+            humidityPercent: weather.humidityPercent, temperatureC: weather.temperatureC
+        )
+        let bearing = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
+        for core in [false, true] {
+            let length = plume.lengthM * (core ? 0.8 : 1)
+            let angle = plume.halfAngleDeg * (core ? 0.65 : 1)
+            var coordinates = [CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)]
+            for sample in 0...24 {
+                coordinates.append(destination(fix, meters: length, bearing: bearing - angle + 2 * angle * Double(sample) / 24))
+            }
+            let polygon = MKPolygon(coordinates: coordinates, count: coordinates.count)
+            overlayKinds[ObjectIdentifier(polygon)] = .plume(core: core)
+            plumeOverlays.append(polygon)
+            mapView.addOverlay(polygon, level: .aboveRoads)
+        }
+    }
+
+    private func destination(_ fix: GpsFix, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
+        let distance = meters / 6371000
+        let direction = bearing * .pi / 180
+        let lat = fix.latitude * .pi / 180
+        let lon = fix.longitude * .pi / 180
+        let targetLat = asin(sin(lat) * cos(distance) + cos(lat) * sin(distance) * cos(direction))
+        let targetLon = lon + atan2(sin(direction) * sin(distance) * cos(lat), cos(distance) - sin(lat) * sin(targetLat))
+        return CLLocationCoordinate2D(latitude: targetLat * 180 / .pi, longitude: targetLon * 180 / .pi)
+    }
+
     // MARK: UIGestureRecognizerDelegate
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        var view = touch.view
+        while let current = view {
+            if current is MKAnnotationView || current is UIControl { return false }
+            view = current.superview
+        }
+        return true
+    }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer === drawRecognizer {
@@ -364,14 +486,36 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
 
     func gestureRecognizer(
         _ gestureRecognizer: UIGestureRecognizer,
+        shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        guard let tap = gestureRecognizer as? UITapGestureRecognizer,
+              let other = otherGestureRecognizer as? UITapGestureRecognizer else { return false }
+        return tap.numberOfTapsRequired == 1 && other.numberOfTapsRequired == 2
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        true
+        // A tap must fail when the user pans/pinches; a drawn stroke may coexist
+        // with MapKit's disabled recognizers without blocking pencil input.
+        gestureRecognizer === drawRecognizer || otherGestureRecognizer === drawRecognizer
     }
 
     // MARK: MKMapViewDelegate
 
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+        if annotation is MKUserLocation {
+            let identifier = "hunt-user"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            view.annotation = annotation
+            view.image = UIImage(systemName: "figure.stand", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30, weight: .bold))?
+                .withTintColor(parent.bronze, renderingMode: .alwaysOriginal)
+            view.canShowCallout = false
+            view.accessibilityLabel = "Your GPS location"
+            return view
+        }
         guard let hunt = annotation as? HuntAnnotation else { return nil }
 
         let identifier = "hunt-\(hunt.kind.rawValue)"
@@ -385,16 +529,28 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         view.animatesWhenAdded = false
 
         switch hunt.kind {
-        case .fieldMarker: view.glyphImage = UIImage(systemName: "mappin")
-        case .cull: view.glyphImage = UIImage(systemName: "scope")
+        case .fieldMarker:
+            let marker = parent.markers.first { $0.id == hunt.recordId }
+            view.glyphImage = markerGlyph(speciesId: marker?.speciesId, category: marker?.category ?? .otherWildlife)
+        case .cull:
+            let record = parent.culls.first { $0.id == hunt.recordId }
+            view.glyphImage = markerGlyph(speciesId: record?.speciesId, category: .cull)
         case .homing: view.glyphImage = UIImage(systemName: "arrow.down.circle")
         case .boundaryPoint: view.glyphImage = UIImage(systemName: "circle.fill")
         }
 
-        if hunt.kind == .fieldMarker {
-            view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
-        }
+        view.rightCalloutAccessoryView = hunt.kind == .fieldMarker ? UIButton(type: .detailDisclosure) : nil
         return view
+    }
+
+    private func markerGlyph(speciesId: String?, category: MarkerCategory) -> UIImage? {
+        if let name = MarkerArtwork.photoName(speciesId: speciesId, category: category), let image = UIImage(named: name) {
+            return UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { _ in
+                UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 30, height: 30)).addClip()
+                image.draw(in: CGRect(x: 0, y: 0, width: 30, height: 30))
+            }.withRenderingMode(.alwaysOriginal)
+        }
+        return UIImage(systemName: MarkerArtwork.symbol(for: category))
     }
 
     func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -434,17 +590,41 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             renderer.lineDashPattern = [6, 4]
             return renderer
 
+        case .grid(let major):
+            guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
+            let renderer = MKPolylineRenderer(polyline: line)
+            renderer.strokeColor = UIColor.systemYellow.withAlphaComponent(major ? 0.8 : 0.45)
+            renderer.lineWidth = major ? 1.5 : 0.75
+            return renderer
+
+        case .plume(let core):
+            guard let polygon = overlay as? MKPolygon else { return MKOverlayRenderer(overlay: overlay) }
+            let renderer = MKPolygonRenderer(polygon: polygon)
+            renderer.fillColor = core ? UIColor.systemPink.withAlphaComponent(0.3) : UIColor.systemGray.withAlphaComponent(0.25)
+            renderer.strokeColor = UIColor.systemPink.withAlphaComponent(0.35)
+            renderer.lineWidth = 1
+            return renderer
+
         case .none:
             // Not one of ours (e.g. a future MKTileOverlay) — use the default renderer.
             return MKOverlayRenderer(overlay: overlay)
         }
     }
 
+    func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+        let gestures = (mapView.gestureRecognizers ?? []) + mapView.subviews.flatMap { $0.gestureRecognizers ?? [] }
+        if gestures.contains(where: { $0.state == .began || $0.state == .changed }) {
+            DispatchQueue.main.async { [weak self] in self?.parent.onUserPanned() }
+        }
+    }
+
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
         let centre = mapView.centerCoordinate
+        let span = min(2000000, max(1, mapView.region.span.latitudeDelta * 111000))
+        updateGrid(mapView)
         // Hop to the next runloop so we never mutate SwiftUI state mid-update.
         DispatchQueue.main.async { [weak self] in
-            self?.parent.onRegionChanged(centre)
+            self?.parent.onRegionChanged(centre, span)
         }
     }
 }
@@ -456,6 +636,7 @@ public struct MapScreen: View {
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var sound = SoundManager.shared
+    @ObservedObject private var weatherService = WeatherService.shared
 
     @State private var centre = CLLocationCoordinate2D(latitude: 52.4862, longitude: -1.8904)
     @State private var regionRequestToken = 0
@@ -465,6 +646,13 @@ public struct MapScreen: View {
     @State private var showingLayers = false
     @State private var showingGridInput = false
     @State private var showingHoming = false
+    @State private var showingBoundarySetup = false
+    @State private var boundaryMode: BoundaryCaptureMode = .draw
+    @State private var northUpToken = 0
+    @State private var markerCoordinate: CLLocationCoordinate2D?
+    @State private var followUser = true
+    @State private var lastWeatherRequest: GpsFix?
+    @State private var mapMessage: String?
 
     @State private var selectedMarker: FieldMarker?
     @State private var gridInput = ""
@@ -475,6 +663,7 @@ public struct MapScreen: View {
     @State private var homingTarget: CLLocationCoordinate2D?
     @State private var homingLabel = ""
     @State private var showArrivalAlert = false
+    @State private var arrivalNotified = false
 
     @State private var capture: PendingBoundaryCreation?
     @State private var pendingPoints: [BoundaryPoint] = []
@@ -491,7 +680,9 @@ public struct MapScreen: View {
                     centre: centre,
                     spanMeters: spanMeters,
                     regionRequestToken: regionRequestToken,
-                    markers: db.markers,
+                    markers: db.markers.filter { marker in
+                        db.preferences.showCullPinsOnMap || marker.category != .cull
+                    },
                     culls: db.culls,
                     boundaries: db.boundaries,
                     routes: db.routes,
@@ -500,12 +691,18 @@ public struct MapScreen: View {
                     homingTarget: homingTarget,
                     pendingPoints: pendingPoints,
                     mapStyle: db.preferences.mapLayerStyle,
+                    showGrid: db.preferences.showOsGridRef,
+                    northUpToken: northUpToken,
+                    windFix: location.latestFix,
+                    windWeather: weatherService.weather ?? db.cachedWeather,
                     bronze: UIColor(theme.palette.bronze),
                     isDrawing: capture?.mode == .draw,
-                    onRegionChanged: { coordinate in
+                    onRegionChanged: { coordinate, visibleSpan in
                         centre = coordinate
+                        spanMeters = visibleSpan
                         updateGridRef(coordinate)
                     },
+                    onUserPanned: { followUser = false },
                     onSelectMarker: { markerId in
                         selectedMarker = db.markers.first { $0.id == markerId }
                     },
@@ -520,14 +717,15 @@ public struct MapScreen: View {
 
                 topBar
             }
-            .overlay(alignment: .bottomTrailing) { addMarkerButton }
-            .overlay(alignment: .bottom) { bottomPanel }
+            .overlay(alignment: .trailing) { mapControls.padding(.trailing, 14) }
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomPanel }
         }
         .sheet(isPresented: $showingAddSheet) {
             QuickAddMarkerSheet(
                 isPresented: $showingAddSheet,
-                latitude: centre.latitude,
-                longitude: centre.longitude
+                latitude: markerCoordinate?.latitude ?? centre.latitude,
+                longitude: markerCoordinate?.longitude ?? centre.longitude,
+                useMyFix: markerCoordinate == nil
             )
         }
         .sheet(isPresented: $showingLayers) {
@@ -535,6 +733,19 @@ public struct MapScreen: View {
         }
         .sheet(isPresented: $showingHoming) {
             homingSheet
+        }
+        .sheet(isPresented: $showingBoundarySetup) {
+            PermissionBoundarySheet(permissions: db.permissions, initialMode: boundaryMode, returnToPermissions: false) { pending in
+                db.pendingBoundary = pending
+            }
+        }
+        .alert("Map", isPresented: Binding(
+            get: { mapMessage != nil },
+            set: { if !$0 { mapMessage = nil } }
+        )) {
+            Button("OK") { mapMessage = nil }
+        } message: {
+            Text(mapMessage ?? "")
         }
         .sheet(item: $selectedMarker) { marker in
             MarkerDetailSheet(marker: marker) {
@@ -566,20 +777,28 @@ public struct MapScreen: View {
                 regionRequestToken += 1
             }
             updateGridRef(centre)
-            capture = db.pendingBoundary
-            boundaryName = db.pendingBoundary?.name ?? ""
+            syncBoundaryCapture()
+            refreshWindIfNeeded()
         }
         .onChange(of: location.latestFix) { fix in
             guard let fix = fix else { return }
+            if followUser {
+                centre = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
+                regionRequestToken += 1
+            }
+            refreshWindIfNeeded()
             recordIfNeeded(fix)
             checkHomingArrival(fix)
             if capture?.mode == .walk {
                 appendWalkPoint(fix)
             }
         }
-        .onChange(of: db.pendingBoundary?.name) { _ in
-            capture = db.pendingBoundary
-            boundaryName = db.pendingBoundary?.name ?? ""
+        .onChange(of: db.pendingBoundary) { _ in
+            syncBoundaryCapture()
+        }
+        .onChange(of: db.preferences.showOsGridRef) { _ in updateGridRef(centre) }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            refreshWindIfNeeded()
         }
     }
 
@@ -589,13 +808,13 @@ public struct MapScreen: View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
                 Text("Map")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.field(size: 22, weight: .bold))
                     .foregroundColor(theme.palette.cream)
                 Spacer()
 
                 if db.preferences.showOsGridRef {
                     Text(mapCentreGridRef ?? "Outside GB")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(.field(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundColor(theme.palette.bronzeBright)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -608,7 +827,7 @@ public struct MapScreen: View {
                     showingLayers = true
                 } label: {
                     Image(systemName: "square.3.layers.3d")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.field(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
                         .padding(8)
                         .background(theme.palette.charcoal.opacity(0.75))
@@ -616,12 +835,14 @@ public struct MapScreen: View {
                 }
             }
 
-            HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
                 recordButton
                 homingButton
+                mapMenu
                 if let route = activeRoute {
                     Text(routeText(route))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.field(size: 11, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
@@ -642,7 +863,7 @@ public struct MapScreen: View {
                         }
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.field(size: 14, weight: .semibold))
                             .foregroundColor(theme.palette.mist)
                             .padding(7)
                             .background(theme.palette.charcoal.opacity(0.75))
@@ -651,12 +872,15 @@ public struct MapScreen: View {
                 }
             }
 
+            }
+
             if capture != nil {
                 captureBar
             }
         }
         .padding(.horizontal, 14)
         .padding(.top, 8)
+        .background(theme.palette.forestDeep.opacity(0.9))
     }
 
     private var activeRoute: Route? {
@@ -681,7 +905,7 @@ public struct MapScreen: View {
                 Image(systemName: activeRouteId == nil ? "record.circle" : "stop.circle.fill")
                 Text(activeRouteId == nil ? "Record" : "Stop")
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(.field(size: 12, weight: .bold))
             .foregroundColor(activeRouteId == nil ? theme.palette.cream : theme.palette.danger)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -692,25 +916,13 @@ public struct MapScreen: View {
 
     private var homingButton: some View {
         Button {
-            if homingTarget == nil {
-                // Prefer an existing homing marker, else use the map centre.
-                if let marker = db.markers.first(where: { $0.category == .homing }) {
-                    homingTarget = CLLocationCoordinate2D(latitude: marker.latitude, longitude: marker.longitude)
-                    homingLabel = marker.name
-                } else {
-                    homingTarget = centre
-                    homingLabel = "Map centre"
-                }
-                sound.play(.markerPlace)
-            } else {
-                endHoming()
-            }
+            showingHoming = true
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: homingTarget == nil ? "arrow.down.circle" : "xmark.circle")
                 Text(homingTarget == nil ? "Homing" : "End homing")
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(.field(size: 12, weight: .bold))
             .foregroundColor(homingTarget == nil ? theme.palette.cream : theme.palette.success)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -723,15 +935,15 @@ public struct MapScreen: View {
         GlassPanel(compact: true) {
             SectionLabel("Boundary capture")
             Text(capture?.zoneType.displayName ?? "")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.field(size: 15, weight: .semibold))
                 .foregroundColor(theme.palette.cream)
             Text(captureHelp)
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
 
             HStack(spacing: 10) {
                 Text("\(pendingPoints.count) points")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
 
                 if capture?.mode == .walk {
@@ -740,7 +952,7 @@ public struct MapScreen: View {
                             appendWalkPoint(fix)
                         }
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
                 }
             }
@@ -749,12 +961,13 @@ public struct MapScreen: View {
                 HuntButton("Save boundary", icon: "checkmark") {
                     saveBoundary()
                 }
-                Button("Cancel") {
-                    capture = nil
-                    pendingPoints = []
-                    db.pendingBoundary = nil
+                .disabled(pendingPoints.count < 3)
+                Button("Undo point") {
+                    if !pendingPoints.isEmpty { pendingPoints.removeLast() }
                 }
-                .font(.system(size: 13, weight: .semibold))
+                .disabled(pendingPoints.isEmpty)
+                Button("Cancel") { finishBoundaryCapture() }
+                .font(.field(size: 13, weight: .semibold))
                 .foregroundColor(theme.palette.mist)
             }
         }
@@ -767,18 +980,109 @@ public struct MapScreen: View {
                 + "You can also tap corners one at a time."
     }
 
-    private var addMarkerButton: some View {
-        Button {
-            showingAddSheet = true
+    private var mapMenu: some View {
+        Menu {
+            Button {
+                guard let fix = location.latestFix else { mapMessage = "Wait for a GPS fix before setting home here."; return }
+                homingTarget = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
+                homingLabel = "Home"
+                db.addMarker(FieldMarker(category: .homing, name: "Home", latitude: fix.latitude, longitude: fix.longitude))
+            } label: { Label("Home here", systemImage: "flag.fill") }
+            Button { northUpToken += 1 } label: { Label("North up", systemImage: "location.north.fill") }
+            Button { startBoundarySetup(.walk) } label: { Label("Walk fence", systemImage: "figure.walk") }
+            Button { startBoundarySetup(.draw) } label: { Label("Draw fence", systemImage: "pencil.tip.crop.circle") }
+            NavigationLink(destination: PermissionsScreen(captureOnCurrentMap: true)) { Label("Boundaries & permissions", systemImage: "doc.text") }
+            Button { showingLayers = true } label: { Label("Layers & offline maps", systemImage: "square.3.layers.3d") }
+            Button { showingGridInput = true } label: { Label("Go to OS Grid", systemImage: "number") }
+            Toggle("Tap or hold to mark", isOn: Binding(
+                get: { db.preferences.markAnywhereEnabled },
+                set: { db.preferences.markAnywhereEnabled = $0 }
+            ))
         } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(theme.palette.charcoal)
-                .frame(width: 56, height: 56)
-                .background(Circle().fill(theme.palette.bronze))
-                .shadow(radius: 4)
+            Label("Menu", systemImage: "line.3.horizontal")
+                .font(.field(size: 14, weight: .semibold))
+                .padding(8)
+                .foregroundColor(theme.palette.cream)
+                .background(theme.palette.charcoal.opacity(0.85))
+                .cornerRadius(8)
         }
-        .padding(24)
+    }
+
+    private var mapControls: some View {
+        VStack(spacing: 8) {
+            mapControl("Zoom in around GPS", symbol: "plus") { zoom(by: 0.5) }
+            mapControl("Zoom out around GPS", symbol: "minus") { zoom(by: 2) }
+            mapControl("Centre on my GPS location", symbol: "figure.stand") { recenter() }
+            HuntMarkLocationButton {
+                markerCoordinate = nil
+                showingAddSheet = true
+            }
+            .disabled(location.latestFix == nil || capture != nil)
+        }
+    }
+
+    private func mapControl(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.field(size: 22, weight: .bold))
+                .frame(width: 48, height: 48)
+                .foregroundColor(theme.palette.cream)
+                .background(theme.palette.charcoal.opacity(0.9))
+                .cornerRadius(10)
+        }
+        .accessibilityLabel(title)
+    }
+
+    private func zoom(by factor: Double) {
+        guard let fix = location.latestFix else { mapMessage = "Wait for a GPS fix to zoom around your location."; return }
+        followUser = false
+        centre = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
+        spanMeters = min(2000000, max(1, spanMeters * factor))
+        regionRequestToken += 1
+    }
+
+    private func recenter() {
+        guard let fix = location.latestFix else { mapMessage = "Your GPS location is not available yet."; return }
+        followUser = true
+        centre = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
+        regionRequestToken += 1
+    }
+
+    private func startBoundarySetup(_ mode: BoundaryCaptureMode) {
+        guard capture == nil else { mapMessage = "Save or cancel the current boundary first."; return }
+        boundaryMode = mode
+        showingBoundarySetup = true
+    }
+
+    private func syncBoundaryCapture() {
+        guard capture != db.pendingBoundary else { return }
+        capture = db.pendingBoundary
+        pendingPoints = []
+        boundaryName = db.pendingBoundary?.name ?? ""
+        if capture?.mode == .draw { followUser = false }
+        if capture?.mode == .walk, let fix = location.latestFix { appendWalkPoint(fix) }
+    }
+
+    private func finishBoundaryCapture() {
+        let returnToPermissions = capture?.returnToPermissions == true
+        capture = nil
+        pendingPoints = []
+        db.pendingBoundary = nil
+        if returnToPermissions {
+            NotificationCenter.default.post(name: .boundaryCaptureFinished, object: nil)
+        }
+    }
+
+    private func refreshWindIfNeeded() {
+        guard let fix = location.latestFix, !weatherService.loading else { return }
+        let recent = weatherService.weather ?? db.cachedWeather
+        if let recent = recent,
+           Date().timeIntervalSince1970 * 1000 - Double(recent.fetchedAtEpochMs) < 600000,
+           DatabaseService.haversineMeters(fix.latitude, fix.longitude, recent.latitude, recent.longitude) < 5000 { return }
+        if let last = lastWeatherRequest,
+           Date().timeIntervalSince1970 * 1000 - Double(last.timestampEpochMs) < 60000 { return }
+        lastWeatherRequest = GpsFix(latitude: fix.latitude, longitude: fix.longitude, accuracyMeters: fix.accuracyMeters)
+        weatherService.fetchWeather(latitude: fix.latitude, longitude: fix.longitude)
     }
 
     // MARK: - Bottom panel
@@ -791,16 +1095,16 @@ public struct MapScreen: View {
                     VStack(alignment: .leading, spacing: 3) {
                         SectionLabel("Homing retrieve")
                         Text(homingLabel.isEmpty ? "Target" : homingLabel)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.field(size: 14, weight: .semibold))
                             .foregroundColor(theme.palette.cream)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 3) {
                         Text(homingDistanceText)
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.field(size: 16, weight: .bold))
                             .foregroundColor(theme.palette.bronzeBright)
                         Text(homingBearingText)
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }
                 }
@@ -816,16 +1120,16 @@ public struct MapScreen: View {
                             .fill(Color(hex: boundary.zoneType.mapColorHex))
                             .frame(width: 8, height: 8)
                         Text(boundary.name)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.field(size: 13, weight: .semibold))
                             .foregroundColor(theme.palette.cream)
                         Spacer()
                         Text(areaText(boundary))
-                            .font(.system(size: 11))
+                            .font(.field(size: 11))
                             .foregroundColor(theme.palette.mist)
                         Button("Delete") {
                             db.deleteBoundary(id: boundary.id)
                         }
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.field(size: 11, weight: .semibold))
                         .foregroundColor(theme.palette.danger)
                     }
                 }
@@ -841,18 +1145,18 @@ public struct MapScreen: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Homing retrieve")
-                            .font(.system(size: 26, weight: .bold))
+                            .font(.field(size: 26, weight: .bold))
                             .foregroundColor(theme.palette.cream)
 
                         GlassPanel {
                             SectionLabel("Target")
                             Text(homingLabel.isEmpty ? "Not set" : homingLabel)
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.field(size: 18, weight: .semibold))
                                 .foregroundColor(theme.palette.cream)
                             MetricRow("Distance", homingDistanceText)
                             MetricRow("Bearing", homingBearingText)
                             Text("An arrival alert fires inside 25 m, and the target is highlighted on the map.")
-                                .font(.system(size: 12))
+                                .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
                         }
 
@@ -872,11 +1176,11 @@ public struct MapScreen: View {
                                             Image(systemName: "arrow.down.circle")
                                                 .foregroundColor(theme.palette.success)
                                             Text(marker.name)
-                                                .font(.system(size: 14, weight: .semibold))
+                                                .font(.field(size: 14, weight: .semibold))
                                                 .foregroundColor(theme.palette.cream)
                                             Spacer()
                                             Text(distanceText(marker))
-                                                .font(.system(size: 12))
+                                                .font(.field(size: 12))
                                                 .foregroundColor(theme.palette.mist)
                                         }
                                     }
@@ -895,7 +1199,7 @@ public struct MapScreen: View {
                                 endHoming()
                                 showingHoming = false
                             }
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.field(size: 14, weight: .semibold))
                             .foregroundColor(theme.palette.danger)
                         }
                     }
@@ -904,6 +1208,7 @@ public struct MapScreen: View {
             }
             .navigationTitle("Homing")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { showingHoming = false } } }
         }
     }
 
@@ -914,7 +1219,13 @@ public struct MapScreen: View {
     // MARK: - Actions
 
     private func handleMapTap(_ coordinate: CLLocationCoordinate2D) {
-        appendDraftPoint(coordinate, minimumMeters: 3, playClick: true)
+        if capture?.mode == .draw {
+            appendDraftPoint(coordinate, minimumMeters: 3, playClick: true)
+        } else if capture == nil, db.preferences.markAnywhereEnabled {
+            followUser = false
+            markerCoordinate = coordinate
+            showingAddSheet = true
+        }
     }
 
     /// Adds a draft corner, ignoring samples that are too close to the previous one
@@ -981,9 +1292,7 @@ public struct MapScreen: View {
             }
         }
 
-        self.capture = nil
-        pendingPoints = []
-        db.pendingBoundary = nil
+        finishBoundaryCapture()
         sound.play(.success)
     }
 
@@ -1007,16 +1316,17 @@ public struct MapScreen: View {
         let distance = DatabaseService.haversineMeters(
             fix.latitude, fix.longitude, target.latitude, target.longitude
         )
-        guard distance <= 25 else { return }
-        homingTarget = nil
+        guard distance <= 25 else { arrivalNotified = false; return }
+        guard !arrivalNotified else { return }
+        arrivalNotified = true
         sound.play(.arrival)
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
         showArrivalAlert = true
     }
 
     private func endHoming() {
         homingTarget = nil
         homingLabel = ""
+        arrivalNotified = false
     }
 
     private func updateGridRef(_ coordinate: CLLocationCoordinate2D) {
@@ -1031,7 +1341,11 @@ public struct MapScreen: View {
     }
 
     private func goToGridRef(_ ref: String) {
-        guard let target = OsGridRef.osGridToLatLng(ref) else { return }
+        guard let target = OsGridRef.osGridToLatLng(ref) else {
+            mapMessage = "That OS Grid reference is not valid. Use a British National Grid reference such as SU 37290 15552."
+            return
+        }
+        followUser = false
         centre = CLLocationCoordinate2D(latitude: target.latitude, longitude: target.longitude)
         regionRequestToken += 1
         sound.play(.gpsLock)
@@ -1110,6 +1424,7 @@ private struct MapLayersSheet: View {
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var location = LocationManager.shared
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationView {
@@ -1119,7 +1434,7 @@ private struct MapLayersSheet: View {
                         GlassPanel {
                             SectionLabel("Map layers")
                             Text("Pick a basemap")
-                                .font(.system(size: 13))
+                                .font(.field(size: 13))
                                 .foregroundColor(theme.palette.mist)
                             Picker("Basemap", selection: Binding(
                                 get: { db.preferences.mapLayerStyle },
@@ -1134,7 +1449,7 @@ private struct MapLayersSheet: View {
 
                         GlassPanel {
                             SectionLabel("OS Grid & culls")
-                            Toggle("Show OS Grid Reference", isOn: Binding(
+                            Toggle("Show OS Grid lines & refs", isOn: Binding(
                                 get: { db.preferences.showOsGridRef },
                                 set: { db.preferences.showOsGridRef = $0 }
                             ))
@@ -1153,40 +1468,41 @@ private struct MapLayersSheet: View {
             }
             .navigationTitle("Layers")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() } } }
         }
     }
 
     private var offlinePanel: some View {
         GlassPanel {
-            SectionLabel("Offline packs")
-            Text("Registers the area you are standing in so it is available in the field.")
-                .font(.system(size: 12))
+            SectionLabel("Saved areas & offline use")
+            Text("Markers, tracks and boundaries are stored on this device. Saving an area only saves its coordinates; it does not download basemap tiles. iOS maps need an internet connection and cached tiles are not guaranteed offline.")
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
 
             if db.offlineRegions.isEmpty {
-                Text("No packs saved yet.")
-                    .font(.system(size: 13))
+                Text("No areas saved yet.")
+                    .font(.field(size: 13))
                     .foregroundColor(theme.palette.mist)
             } else {
                 ForEach(db.offlineRegions) { region in
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(region.name)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.field(size: 13, weight: .semibold))
                                 .foregroundColor(theme.palette.cream)
                             Text(String(format: "N %.4f  S %.4f  E %.4f  W %.4f",
                                         region.north, region.south, region.east, region.west))
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(.field(size: 10, design: .monospaced))
                                 .foregroundColor(theme.palette.mist)
-                            Text(region.status.label)
-                                .font(.system(size: 11, weight: .semibold))
+                            Text("Area coordinates saved · no offline tiles")
+                                .font(.field(size: 11, weight: .semibold))
                                 .foregroundColor(theme.palette.bronzeBright)
                         }
                         Spacer()
                         Button("Delete") {
                             db.deleteRegion(id: region.id)
                         }
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.field(size: 11, weight: .semibold))
                         .foregroundColor(theme.palette.danger)
                     }
                     .padding(.vertical, 3)
@@ -1194,14 +1510,15 @@ private struct MapLayersSheet: View {
             }
 
             Button {
-                let fix = location.latestFix ?? location.fallbackFix()
+                guard let fix = location.latestFix else { return }
                 _ = db.createRegionAround(latitude: fix.latitude, longitude: fix.longitude)
             } label: {
-                Text("Download 15 sq mile pack around me")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("Save 15 sq mile area coordinates around me")
+                    .font(.field(size: 13, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
             }
             .padding(.top, 4)
+            .disabled(location.latestFix == nil)
         }
     }
 }
@@ -1221,7 +1538,7 @@ private struct MarkerDetailSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(marker.name)
-                            .font(.system(size: 26, weight: .bold))
+                            .font(.field(size: 26, weight: .bold))
                             .foregroundColor(theme.palette.cream)
 
                         GlassPanel {
@@ -1273,17 +1590,18 @@ public struct QuickAddMarkerSheet: View {
     @State private var name: String = ""
     @State private var category: MarkerCategory = .highSeat
     @State private var notes: String = ""
-    @State private var useMyFix: Bool = true
+    @State private var useMyFix: Bool
     @State private var saveOfflineArea: Bool = false
 
     @ObservedObject private var location = LocationManager.shared
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var theme = ThemeManager.shared
 
-    public init(isPresented: Binding<Bool>, latitude: Double = 0, longitude: Double = 0) {
+    public init(isPresented: Binding<Bool>, latitude: Double = 0, longitude: Double = 0, useMyFix: Bool = true) {
         self._isPresented = isPresented
         self.latitude = latitude
         self.longitude = longitude
+        self._useMyFix = State(initialValue: useMyFix)
     }
 
     private var fix: GpsFix {
@@ -1301,7 +1619,7 @@ public struct QuickAddMarkerSheet: View {
                         TextField("Name", text: $name)
                         Picker("Category", selection: $category) {
                             ForEach(MarkerCategory.allCases, id: \.self) { cat in
-                                Text(cat.label).tag(cat)
+                                Label(cat.label, systemImage: MarkerArtwork.symbol(for: cat)).tag(cat)
                             }
                         }
                         TextField("Notes (optional)", text: $notes)
@@ -1318,11 +1636,16 @@ public struct QuickAddMarkerSheet: View {
                         } else {
                             Text("Outside GB").foregroundColor(theme.palette.mist)
                         }
-                        MetricRow("GPS accuracy", String(format: "±%.0f m", fix.accuracyMeters))
+                        if let gps = location.latestFix {
+                            MetricRow("GPS accuracy", String(format: "±%.0f m", gps.accuracyMeters))
+                        } else if useMyFix {
+                            Text("Waiting for GPS — a marker will not be saved at the fallback location.")
+                                .foregroundColor(theme.palette.gold)
+                        }
                     }
 
                     Section(header: Text("Offline").foregroundColor(theme.palette.bronze)) {
-                        Toggle("Also save a 15 sq mile offline pack here", isOn: $saveOfflineArea)
+                        Toggle("Also save this area's coordinates (not map tiles)", isOn: $saveOfflineArea)
                     }
 
                     Button("Save Marker") {
@@ -1344,7 +1667,9 @@ public struct QuickAddMarkerSheet: View {
                         isPresented = false
                     }
                     .foregroundColor(theme.palette.bronze)
+                    .disabled(useMyFix && location.latestFix == nil)
                 }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Add Field Marker")
             .navigationBarItems(leading: Button("Cancel") { isPresented = false })

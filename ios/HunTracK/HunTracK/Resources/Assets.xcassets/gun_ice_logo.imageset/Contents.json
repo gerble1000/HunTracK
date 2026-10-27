@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "gun_ice_logo.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

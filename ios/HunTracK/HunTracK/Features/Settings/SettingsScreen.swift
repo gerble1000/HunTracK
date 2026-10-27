@@ -14,10 +14,10 @@ public struct SettingsScreen: View {
                 Section(header: sectionHeader("Account")) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Local guest")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.field(size: 16, weight: .semibold))
                             .foregroundColor(theme.palette.cream)
                         Text("Cloud accounts coming soon")
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }
                     .padding(.vertical, 2)
@@ -39,7 +39,7 @@ public struct SettingsScreen: View {
                     .pickerStyle(.segmented)
 
                     Text(unitSystemSummary)
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
 
                     Toggle("Use Celsius", isOn: useCelsiusBinding)
@@ -94,8 +94,8 @@ public struct SettingsScreen: View {
                         Text("Clear weather cache")
                             .foregroundColor(theme.palette.bronzeBright)
                     }
-                    Text("Offline map packs are managed from the Map screen.")
-                        .font(.system(size: 12))
+                    Text("Saved map areas are managed from Map → Layers. iOS basemap tiles require an internet connection.")
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                 }
 
@@ -129,7 +129,7 @@ public struct SettingsScreen: View {
 
     private func sectionHeader(_ title: String) -> Text {
         Text(title)
-            .font(.system(size: 11, weight: .bold))
+            .font(.field(size: 11, weight: .bold))
             .foregroundColor(theme.palette.bronze)
     }
 
@@ -283,17 +283,17 @@ public struct MapTrainingGuideSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Map Training Guide")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.field(size: 22, weight: .bold))
                             .foregroundColor(theme.palette.cream)
                             .padding(.top, 16)
 
                         GlassPanel {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Home Point")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
                                 Text("Long-press or tap Home button to mark your vehicle or camp. The map will display distance and heading back to safety.")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
                         }
@@ -301,10 +301,10 @@ public struct MapTrainingGuideSheet: View {
                         GlassPanel {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Range Finder")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
                                 Text("Tap the Range button to measure line-of-sight distance and elevation from your current position to any target.")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
                         }
@@ -312,10 +312,10 @@ public struct MapTrainingGuideSheet: View {
                         GlassPanel {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Live Scent Plume")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
                                 Text("When enabled, the map renders a live scent cone showing downwind dispersal from your current location.")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
                         }

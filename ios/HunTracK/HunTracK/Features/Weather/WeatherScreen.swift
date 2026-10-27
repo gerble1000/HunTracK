@@ -13,14 +13,14 @@ public struct WeatherScreen: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Weather")
-                            .font(.system(size: 32, weight: .bold))
+                            .font(.field(size: 32, weight: .bold))
                             .foregroundColor(theme.palette.cream)
                         Text("UK forecast · live · Open-Meteo")
-                            .font(.system(size: 14))
+                            .font(.field(size: 14))
                             .foregroundColor(theme.palette.mist)
                         if let w = weatherService.weather {
                             Text("Updated \(Self.relativeAge(w.fetchedAtEpochMs))")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.field(size: 12, weight: .semibold))
                                 .foregroundColor(theme.palette.gold)
                         }
                     }
@@ -48,7 +48,7 @@ public struct WeatherScreen: View {
             GlassPanel {
                 SectionLabel("Alerts")
                 Text(alerts.joined(separator: " · "))
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.field(size: 16, weight: .semibold))
                     .foregroundColor(theme.palette.gold)
             }
         }
@@ -60,17 +60,17 @@ public struct WeatherScreen: View {
             if let w = weatherService.weather {
                 HStack(spacing: 16) {
                     Image(systemName: Self.weatherSymbol(w.weatherCode))
-                        .font(.system(size: 48))
+                        .font(.field(size: 48))
                         .foregroundColor(theme.palette.gold)
                     VStack(alignment: .leading) {
                         Text(Self.weatherCodeLabel(w.weatherCode))
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.field(size: 16, weight: .semibold))
                             .foregroundColor(theme.palette.cream)
                         Text(formatTemp(w.temperatureC))
-                            .font(.system(size: 36, weight: .bold))
+                            .font(.field(size: 36, weight: .bold))
                             .foregroundColor(theme.palette.bronze)
                         Text("Feels like \(formatTemp(w.feelsLikeC))")
-                            .font(.system(size: 14))
+                            .font(.field(size: 14))
                             .foregroundColor(theme.palette.mist)
                     }
                 }
@@ -102,7 +102,7 @@ public struct WeatherScreen: View {
             if hours.isEmpty {
                 GlassPanel {
                     Text("Hourly forecast unavailable.")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
             } else {
@@ -129,7 +129,7 @@ public struct WeatherScreen: View {
             if days.isEmpty {
                 GlassPanel {
                     Text("Daily forecast unavailable.")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
             } else {
@@ -241,22 +241,22 @@ public struct HourCard: View {
         GlassPanel(compact: true) {
             VStack(spacing: 6) {
                 Text(Self.time(hour.epochMs))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
                 Image(systemName: Self.symbol(hour.weatherCode))
-                    .font(.system(size: 20))
+                    .font(.field(size: 20))
                     .foregroundColor(theme.palette.gold)
                 Text(Self.temp(hour.temperatureC, useCelsius: useCelsius))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.field(size: 16, weight: .bold))
                     .foregroundColor(theme.palette.bronze)
                 Text("\(hour.rainProbabilityPercent)%")
-                    .font(.system(size: 11))
+                    .font(.field(size: 11))
                     .foregroundColor(theme.palette.mist)
                 Text(Self.wind(hour.windSpeedKmh, unit: windUnit))
-                    .font(.system(size: 11))
+                    .font(.field(size: 11))
                     .foregroundColor(theme.palette.mist)
                 Text(Self.cardinal(hour.windDirectionDeg))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.field(size: 11, weight: .semibold))
                     .foregroundColor(theme.palette.mist)
             }
             .frame(width: 62)
@@ -318,11 +318,11 @@ public struct DayCard: View {
         GlassPanel {
             HStack {
                 Text(Self.dayName(day.epochMs))
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.field(size: 16, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
                 Spacer()
                 Image(systemName: Self.symbol(day.weatherCode))
-                    .font(.system(size: 18))
+                    .font(.field(size: 18))
                     .foregroundColor(theme.palette.gold)
             }
 
@@ -333,7 +333,7 @@ public struct DayCard: View {
             let flags = Self.flags(day)
             if !flags.isEmpty {
                 Text(flags.joined(separator: " · "))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.gold)
                     .padding(.top, 2)
             }

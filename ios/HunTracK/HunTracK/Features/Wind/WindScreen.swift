@@ -101,16 +101,16 @@ public struct WindScreen: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Wind & Scent")
-                                .font(.system(size: 28, weight: .bold))
+                                .font(.field(size: 28, weight: .bold))
                                 .foregroundColor(theme.palette.cream)
                             Text("Will animals smell you from downwind?")
-                                .font(.system(size: 14))
+                                .font(.field(size: 14))
                                 .foregroundColor(theme.palette.mist)
                         }
                         Spacer()
                         Button(action: { showGuide = true }) {
                             Image(systemName: "questionmark.circle")
-                                .font(.system(size: 22))
+                                .font(.field(size: 22))
                                 .foregroundColor(theme.palette.bronzeBright)
                         }
                     }
@@ -152,7 +152,7 @@ public struct WindScreen: View {
                                     // Downwind arrow (your scent travels this way)
                                     VStack(spacing: 0) {
                                         Image(systemName: "arrow.down")
-                                            .font(.system(size: 38, weight: .black))
+                                            .font(.field(size: 38, weight: .black))
                                             .foregroundColor(theme.palette.bronzeBright)
                                         Spacer()
                                     }
@@ -162,47 +162,47 @@ public struct WindScreen: View {
                                 .padding(.vertical, 8)
                                 
                                 Text("\(String(format: "%.1f km/h", w.windSpeedKmh)) · \(character.label)")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.field(size: 18, weight: .bold))
                                     .foregroundColor(theme.palette.cream)
                                 
                                 if let gust = w.windGustKmh {
                                     Text("Gusts up to \(String(format: "%.1f km/h", gust))")
-                                        .font(.system(size: 14))
+                                        .font(.field(size: 14))
                                         .foregroundColor(theme.palette.mist)
                                 }
                                 
                                 HStack(spacing: 20) {
                                     VStack(spacing: 2) {
                                         Text("Wind from")
-                                            .font(.system(size: 12))
+                                            .font(.field(size: 12))
                                             .foregroundColor(theme.palette.mist)
                                         Text("\(fromCard) (\(Int(w.windDirectionDeg))°)")
-                                            .font(.system(size: 15, weight: .semibold))
+                                            .font(.field(size: 15, weight: .semibold))
                                             .foregroundColor(theme.palette.gold)
                                     }
                                     Divider().frame(height: 24)
                                     VStack(spacing: 2) {
                                         Text("Scent drifts to")
-                                            .font(.system(size: 12))
+                                            .font(.field(size: 12))
                                             .foregroundColor(theme.palette.mist)
                                         Text("\(downCard) (\(downwind)°)")
-                                            .font(.system(size: 15, weight: .bold))
+                                            .font(.field(size: 15, weight: .bold))
                                             .foregroundColor(theme.palette.bronzeBright)
                                     }
                                     Divider().frame(height: 24)
                                     VStack(spacing: 2) {
                                         Text("Plume length")
-                                            .font(.system(size: 12))
+                                            .font(.field(size: 12))
                                             .foregroundColor(theme.palette.mist)
                                         Text("~\(Int(plume.lengthM))m")
-                                            .font(.system(size: 15, weight: .semibold))
+                                            .font(.field(size: 15, weight: .semibold))
                                             .foregroundColor(theme.palette.cream)
                                     }
                                 }
                                 .padding(.top, 4)
                                 
                                 Text("Your scent travels downwind towards \(downwind)°. Approach quarry from downwind (into the face of the wind) and keep a minimum standoff of \(Int(plume.approachStandoffM))m.")
-                                    .font(.system(size: 13))
+                                    .font(.field(size: 13))
                                     .foregroundColor(theme.palette.mist)
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 8)
@@ -211,14 +211,14 @@ public struct WindScreen: View {
                         } else {
                             VStack(spacing: 10) {
                                 Text("Waiting for live wind data…")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                                 Button("Refresh Weather") {
                                     if let fix = hunterFix {
                                         weatherService.fetchWeather(latitude: fix.latitude, longitude: fix.longitude)
                                     }
                                 }
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.field(size: 14, weight: .semibold))
                                 .foregroundColor(theme.palette.bronzeBright)
                             }
                             .frame(maxWidth: .infinity)
@@ -231,7 +231,7 @@ public struct WindScreen: View {
                     if db.markers.isEmpty {
                         GlassPanel(compact: true) {
                             Text("No markers placed yet. Drop markers on the map to evaluate live scent risk.")
-                                .font(.system(size: 14))
+                                .font(.field(size: 14))
                                 .foregroundColor(theme.palette.mist)
                         }
                     } else {
@@ -247,10 +247,10 @@ public struct WindScreen: View {
                                         HStack {
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(marker.name)
-                                                    .font(.system(size: 16, weight: .semibold))
+                                                    .font(.field(size: 16, weight: .semibold))
                                                     .foregroundColor(theme.palette.cream)
                                                 Text(marker.category.label)
-                                                    .font(.system(size: 13))
+                                                    .font(.field(size: 13))
                                                     .foregroundColor(theme.palette.mist)
                                             }
                                             Spacer()
@@ -261,7 +261,7 @@ public struct WindScreen: View {
                                                     Image(systemName: "exclamationmark.triangle.fill")
                                                     Text("RISK")
                                                 }
-                                                .font(.system(size: 12, weight: .bold))
+                                                .font(.field(size: 12, weight: .bold))
                                                 .foregroundColor(theme.palette.danger)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
@@ -272,7 +272,7 @@ public struct WindScreen: View {
                                                     Image(systemName: "checkmark.circle.fill")
                                                     Text("CLEAR")
                                                 }
-                                                .font(.system(size: 12, weight: .bold))
+                                                .font(.field(size: 12, weight: .bold))
                                                 .foregroundColor(theme.palette.success)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
@@ -280,7 +280,7 @@ public struct WindScreen: View {
                                                 .cornerRadius(6)
                                             case .unknown:
                                                 Text("Waiting GPS")
-                                                    .font(.system(size: 12))
+                                                    .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.mist)
                                             }
                                         }
@@ -288,12 +288,12 @@ public struct WindScreen: View {
                                         if let dist = eval.distanceM, let bearingDeg = eval.bearingDeg {
                                             HStack(spacing: 12) {
                                                 Text("\(Int(dist))m away")
-                                                    .font(.system(size: 13))
+                                                    .font(.field(size: 13))
                                                     .foregroundColor(theme.palette.mist)
                                                 Text("·")
                                                     .foregroundColor(theme.palette.mist)
                                                 Text("\(Int(bearingDeg))° \(cardinalDirection(bearingDeg))")
-                                                    .font(.system(size: 13))
+                                                    .font(.field(size: 13))
                                                     .foregroundColor(theme.palette.mist)
                                             }
                                         }
@@ -302,11 +302,11 @@ public struct WindScreen: View {
                                             Divider().background(theme.palette.slate)
                                             if eval.risk == .risk {
                                                 Text("⚠️ WARNING: Your scent cone is drifting straight towards this target location. Consider circling around for an upwind approach.")
-                                                    .font(.system(size: 12))
+                                                    .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.danger)
                                             } else {
                                                 Text("✓ Clear: Scent is drifting away from this target. Safe approach vector.")
-                                                    .font(.system(size: 12))
+                                                    .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.success)
                                             }
                                         }
@@ -337,17 +337,17 @@ public struct WindGuideSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Wind & Scent Field Guide")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.field(size: 22, weight: .bold))
                             .foregroundColor(theme.palette.cream)
                             .padding(.top, 16)
                         
                         GlassPanel {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Rule 1: The Face of the Wind")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
                                 Text("Always stalk into the face of the wind or across it. Scent travels downwind at the speed of the air mass, alerting deer long before you arrive.")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
                         }
@@ -355,10 +355,10 @@ public struct WindGuideSheet: View {
                         GlassPanel {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Thermal Drafts")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
                                 Text("In early morning, cool air drains downhill into valleys and hollows. As sunlight warms the hillside, thermals lift upward. Watch the transition period where scent can eddy unpredictably.")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
                         }
@@ -366,10 +366,10 @@ public struct WindGuideSheet: View {
                         GlassPanel {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Wind Burn & Standoff")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
                                 Text("High winds compress the scent cone into a narrow stream with rapid dispersal. Light winds (under 3 km/h) allow scent to pool and spread wide. Maintain at least 60–100m standoff.")
-                                    .font(.system(size: 14))
+                                    .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
                         }

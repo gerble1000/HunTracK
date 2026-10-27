@@ -13,7 +13,15 @@ public enum HuntSound {
 public class SoundManager: ObservableObject {
     public static let shared = SoundManager()
     
-    @Published public var soundsEnabled: Bool = true
+    @Published public var soundsEnabled: Bool = true {
+        didSet {
+            if !soundsEnabled {
+                chirpPlayer?.stop()
+                trillPlayer?.stop()
+                roarPlayer?.stop()
+            }
+        }
+    }
     @Published public var vibrationEnabled: Bool = true
     
     private var chirpPlayer: AVAudioPlayer?
@@ -31,7 +39,7 @@ public class SoundManager: ObservableObject {
     }
     
     private func configureAudioSession() {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
     }
     

@@ -120,6 +120,7 @@ public struct SpeciesScreen: View {
     /// nil means "All". This filter is applied to the list (previously dead state).
     @State private var selectedGroup: SpeciesGroup? = nil
     @State private var nation: UkNation = .england
+    @ScaledMetric(relativeTo: .body) private var speciesCardHeight: CGFloat = 176
 
     public init() {}
 
@@ -145,10 +146,10 @@ public struct SpeciesScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("UK Species")
-                .font(.system(size: 28, weight: .bold))
+                .font(.field(size: 28, weight: .bold))
                 .foregroundColor(theme.palette.cream)
             Text("Tap any species for ID guide & seasons")
-                .font(.system(size: 14))
+                .font(.field(size: 14))
                 .foregroundColor(theme.palette.mist)
         }
         .padding(.horizontal, 16)
@@ -218,7 +219,7 @@ public struct SpeciesScreen: View {
     private var disclaimerPanel: some View {
         GlassPanel {
             Text(UkFieldCatalog.legalDisclaimer)
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.gold)
         }
         .padding(.horizontal, 16)
@@ -230,7 +231,7 @@ public struct SpeciesScreen: View {
         LazyVStack(spacing: 10) {
             if filteredSpecies.isEmpty {
                 Text("No species match your filters.")
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.mist)
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
@@ -258,16 +259,16 @@ public struct SpeciesScreen: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(species.commonName)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.field(size: 17, weight: .semibold))
                             .foregroundColor(theme.palette.cream)
                             .lineLimit(1)
                         Text(species.scientificName)
-                            .font(.system(size: 12, weight: .light))
+                            .font(.field(size: 12, weight: .light))
                             .italic()
                             .foregroundColor(theme.palette.bronze)
                             .lineLimit(1)
                         Text(species.summary)
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                             .lineLimit(2)
                             .padding(.top, 2)
@@ -279,17 +280,17 @@ public struct SpeciesScreen: View {
 
                 if let preview = SeasonStatus.previewLine(speciesId: species.id, nation: nation) {
                     Text(preview)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.field(size: 11, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
                         .lineLimit(2)
                 }
 
                 Text("Tap for full ID & legal seasons \u{203A}")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.field(size: 10, weight: .semibold))
                     .foregroundColor(theme.palette.gold)
             }
             // One fixed card height for every species, so the menu never staggers.
-            .frame(height: 124, alignment: .topLeading)
+            .frame(height: speciesCardHeight, alignment: .topLeading)
         }
     }
 
@@ -319,7 +320,7 @@ private struct SpeciesFilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 13, weight: selected ? .bold : .semibold))
+                .font(.field(size: 13, weight: selected ? .bold : .semibold))
                 .foregroundColor(selected ? theme.palette.ink : theme.palette.cream)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -386,10 +387,10 @@ public struct SpeciesDetailScreen: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(species.commonName)
-                .font(.system(size: 28, weight: .bold))
+                .font(.field(size: 28, weight: .bold))
                 .foregroundColor(theme.palette.cream)
             Text(species.scientificName)
-                .font(.system(size: 16, weight: .medium))
+                .font(.field(size: 16, weight: .medium))
                 .italic()
                 .foregroundColor(theme.palette.bronze)
         }
@@ -463,11 +464,11 @@ public struct SpeciesDetailScreen: View {
             if seasons.isEmpty {
                 GlassPanel {
                     Text("No season rows for this nation \u{2014} verify with local authority.")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                     if !species.seasonsNote.isEmpty {
                         Text(species.seasonsNote)
-                            .font(.system(size: 13))
+                            .font(.field(size: 13))
                             .foregroundColor(theme.palette.mist)
                             .padding(.top, 4)
                     }
@@ -475,7 +476,7 @@ public struct SpeciesDetailScreen: View {
             } else {
                 if !species.seasonsNote.isEmpty {
                     Text(species.seasonsNote)
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
                 // LegalSeason is Equatable but NOT Hashable, so index the array.
@@ -504,13 +505,13 @@ public struct SpeciesDetailScreen: View {
                     ForEach(relatedCalls) { call in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(call.name)
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.field(size: 15, weight: .semibold))
                                 .foregroundColor(theme.palette.cream)
                             Text(call.description)
-                                .font(.system(size: 12))
+                                .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
                             Text("Open Calls from More to listen")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.field(size: 11, weight: .semibold))
                                 .foregroundColor(theme.palette.bronzeBright)
                                 .padding(.top, 2)
                         }
@@ -523,7 +524,7 @@ public struct SpeciesDetailScreen: View {
 
     private var disclaimerFooter: some View {
         Text(UkFieldCatalog.legalDisclaimer)
-            .font(.system(size: 11))
+            .font(.field(size: 11))
             .foregroundColor(theme.palette.mist)
             .padding(.top, 4)
     }
@@ -539,7 +540,7 @@ public struct SpeciesDetailScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Geese \u{2014} more information")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.field(size: 22, weight: .bold))
                         .foregroundColor(theme.palette.cream)
                         .padding(.top, 16)
 
@@ -547,7 +548,7 @@ public struct SpeciesDetailScreen: View {
                     // cannot destructure a single tuple parameter.
                     ForEach(gooseParagraphs.indices, id: \.self) { index in
                         Text(gooseParagraphs[index])
-                            .font(.system(size: 14))
+                            .font(.field(size: 14))
                             .foregroundColor(theme.palette.mist)
                     }
 
@@ -583,25 +584,25 @@ private struct SeasonCardView: View {
             statusButtons
 
             Text(season.sexLabel)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.field(size: 16, weight: .semibold))
                 .foregroundColor(theme.palette.cream)
                 .padding(.top, 10)
 
             Text(SeasonStatus.formatRange(from: season.openFromMonthDay, to: season.openToMonthDay))
-                .font(.system(size: 19, weight: .bold))
+                .font(.field(size: 19, weight: .bold))
                 .foregroundColor(theme.palette.bronzeBright)
                 .padding(.top, 2)
 
             if isClosedRealDates {
                 Text("Currently closed \u{2014} do not shoot this class.")
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.danger)
                     .padding(.top, 6)
             }
 
             if !season.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(season.notes)
-                    .font(.system(size: 12))
+                    .font(.field(size: 12))
                     .foregroundColor(theme.palette.gold)
                     .padding(.top, 6)
             }
@@ -641,7 +642,7 @@ private struct SeasonStatusPill: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 13, weight: active ? .bold : .regular))
+            .font(.field(size: 13, weight: active ? .bold : .regular))
             .foregroundColor(active ? activeColor : theme.palette.mist.opacity(0.65))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
@@ -675,13 +676,13 @@ private struct SpeciesTraitBlock: View {
         } else {
             VStack(alignment: .leading, spacing: 3) {
                 Text(label)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.field(size: 13, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
                 if let photoName = photoName {
                     SpeciesPhoto(name: photoName, speciesId: photoSpeciesId)
                 }
                 Text(text)
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.cream)
             }
             .padding(.bottom, 8)
@@ -706,7 +707,7 @@ private struct SpeciesThumbnail: View {
                 ZStack {
                     theme.palette.slate
                     Image(systemName: "pawprint.fill")
-                        .font(.system(size: 22))
+                        .font(.field(size: 22))
                         .foregroundColor(theme.palette.bronze)
                 }
             }
@@ -733,7 +734,7 @@ private struct SpeciesPhoto: View {
         Image(name)
             .resizable()
             .aspectRatio(contentMode: fitsWholeAnimal ? .fit : .fill)
-            .frame(height: fitsWholeAnimal ? 200 : 180)
+            .frame(height: 200)
             .frame(maxWidth: .infinity)
             .clipped()
             .background(theme.palette.charcoal.opacity(0.35))

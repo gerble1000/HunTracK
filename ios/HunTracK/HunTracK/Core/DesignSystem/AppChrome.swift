@@ -18,12 +18,20 @@ public struct HuntTopBar: View {
 
     public var body: some View {
         HStack(spacing: 4) {
+            Button(action: onTitleTap) {
+                Label("Home", systemImage: "house.fill")
+                    .labelStyle(.iconOnly)
+                    .frame(width: 44, height: 44)
+                    .foregroundColor(theme.palette.bronzeBright)
+            }
+            .accessibilityLabel("Back to Home")
+
             Button(action: {
                 SoundManager.shared.play(.click)
                 onTitleTap()
             }) {
                 Text("HunTracK")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.field(size: 18, weight: .bold))
                     .foregroundColor(theme.palette.cream)
             }
             .buttonStyle(PlainButtonStyle())
@@ -32,7 +40,7 @@ public struct HuntTopBar: View {
 
             Button(action: cycleTheme) {
                 Image(systemName: themeIconName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.field(size: 18, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
                     .frame(width: 38, height: 38)
             }
@@ -41,7 +49,7 @@ public struct HuntTopBar: View {
 
             Button(action: toggleSound) {
                 Image(systemName: db.preferences.soundsEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.field(size: 18, weight: .semibold))
                     .foregroundColor(db.preferences.soundsEnabled ? theme.palette.bronzeBright : theme.palette.mist)
                     .frame(width: 38, height: 38)
             }
@@ -110,11 +118,11 @@ public struct HuntMarkLocationButton: View {
             SoundManager.shared.play(.click)
             action()
         }) {
-            Image(systemName: "plus")
-                .font(.system(size: 22, weight: .bold))
+            Image(systemName: "mappin.and.ellipse")
+                .font(.field(size: 22, weight: .bold))
                 .foregroundColor(theme.palette.charcoal)
                 .frame(width: 56, height: 56)
-                .background(Circle().fill(theme.palette.bronze))
+                .background(RoundedRectangle(cornerRadius: 12).fill(theme.palette.bronze))
                 .shadow(radius: 4)
         }
         .buttonStyle(PlainButtonStyle())
@@ -163,7 +171,7 @@ public struct HuntQuickAddMarkerSheet: View {
                         }
                         if location.latestFix == nil {
                             Text("Using UK fallback until satellite lock")
-                                .font(.system(size: 12))
+                                .font(.field(size: 12))
                                 .foregroundColor(theme.palette.gold)
                         }
                     }
@@ -201,6 +209,7 @@ public struct HuntQuickAddMarkerSheet: View {
 public struct HuntTabShell<Content: View>: View {
     let onTitleTap: () -> Void
     let content: Content
+    @State private var navigationID = UUID()
 
     public init(onTitleTap: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         self.onTitleTap = onTitleTap
@@ -209,11 +218,16 @@ public struct HuntTabShell<Content: View>: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HuntTopBar(onTitleTap: onTitleTap)
-            NavigationView {
-                content
-                    .navigationBarHidden(true)
+            HuntTopBar {
+                navigationID = UUID()
+                onTitleTap()
             }
+            NavigationStack {
+                content
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .id(navigationID)
+            .tint(ThemeManager.shared.palette.bronzeBright)
         }
     }
 }

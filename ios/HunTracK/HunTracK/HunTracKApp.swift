@@ -6,6 +6,8 @@ struct HunTracKApp: App {
     @StateObject private var sound = SoundManager.shared
     
     init() {
+        // Load persisted mute/vibration preferences before any launch feedback.
+        _ = DatabaseService.shared
         SoundManager.shared.play(.appLoaded)
     }
     
@@ -21,8 +23,10 @@ struct HunTracKApp: App {
 
 struct ContentView: View {
     @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var db = DatabaseService.shared
     @State private var selectedTab: Int = 0
     @State private var showQuickAdd: Bool = false
+    @State private var boundaryReturnTab: Int = 3
     
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -62,14 +66,25 @@ struct ContentView: View {
             .accentColor(theme.palette.bronze)
             
             // Android shows this on every bottom tab plus the Map route.
-            HuntMarkLocationButton {
-                showQuickAdd = true
+            if selectedTab != 1 {
+                HuntMarkLocationButton {
+                    showQuickAdd = true
+                }
+                .padding(.trailing, 24)
+                .padding(.bottom, 96)
             }
-            .padding(.trailing, 24)
-            .padding(.bottom, 96)
         }
         .sheet(isPresented: $showQuickAdd) {
-            HuntQuickAddMarkerSheet(isPresented: $showQuickAdd)
+            QuickAddMarkerSheet(isPresented: $showQuickAdd)
+        }
+        .onChange(of: db.pendingBoundary) { pending in
+            if pending != nil {
+                boundaryReturnTab = selectedTab
+                selectedTab = 1
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .boundaryCaptureFinished)) { _ in
+            selectedTab = boundaryReturnTab
         }
     }
     

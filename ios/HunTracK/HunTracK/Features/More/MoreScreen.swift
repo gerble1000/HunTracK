@@ -11,10 +11,10 @@ public struct MoreScreen: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("More")
-                            .font(.system(size: 32, weight: .bold))
+                            .font(.field(size: 32, weight: .bold))
                             .foregroundColor(theme.palette.cream)
                         Text("Tap any row to open")
-                            .font(.system(size: 14))
+                            .font(.field(size: 14))
                             .foregroundColor(theme.palette.mist)
                     }
                     .padding(.top, 8)
@@ -78,15 +78,15 @@ public struct MoreRow: View {
         GlassPanel(compact: true) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
-                    .font(.system(size: 24))
+                    .font(.field(size: 24))
                     .foregroundColor(theme.palette.bronze)
                     .frame(width: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.field(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
                 Spacer()

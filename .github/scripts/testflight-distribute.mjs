@@ -4,8 +4,8 @@
  *
  * `altool --upload-app` only delivers the binary to App Store Connect. External
  * testers then see nothing until the build is assigned to their beta group and
- * submitted for Beta App Review; internal groups receive every build on their
- * own and must not be assigned explicitly.
+ * submitted for Beta App Review. Internal group access must be verified too;
+ * automatic distribution is a per-group setting, not a universal guarantee.
  *
  * No third-party dependencies: the ES256 JWT is signed with node:crypto and
  * the REST calls use the built-in fetch (Node 18+).
@@ -78,7 +78,7 @@ async function request(token, path, { method = 'GET', body } = {}) {
     response = await fetch(`${API_BASE}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${typeof token === 'function' ? token() : token}`,
         'Content-Type': 'application/json',
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -203,14 +203,7 @@ async function listBetaGroups(token, appId) {
   return resolved.response.json?.data ?? [];
 }
 
-/**
- * Adds the build to one *external* beta group.
- *
- * Internal groups are rejected by App Store Connect ("Cannot add internal group
- * to a build") because they already receive every build automatically, so a
- * 422 naming an internal group is reported as auto-distributed rather than
- * treated as a failure.
- */
+/** Adds a build to an external group; internal access is verified separately. */
 async function assignBuildToGroup(token, group, buildId) {
   const path = `/v1/betaGroups/${group.id}/relationships/builds`;
   const response = await request(token, path, {
@@ -218,10 +211,33 @@ async function assignBuildToGroup(token, group, buildId) {
     body: { data: [{ type: 'builds', id: buildId }] },
   });
   if (response.ok) return 'assigned'; // 204 No Content on success
-  if (response.status === 422 && /internal group/i.test(errorDetail(response))) {
-    return 'auto-distributed';
-  }
   throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, path, response);
+}
+
+export async function groupHasBuild(token, groupId, buildId) {
+  let path = `/v1/betaGroups/${groupId}/relationships/builds?limit=200`;
+  const seen = new Set();
+  while (path && !seen.has(path)) {
+    seen.add(path);
+    const response = await request(token, path);
+    if (!response.ok) throw apiError('Verifying beta group build access', path, response);
+    if ((response.json?.data ?? []).some((build) => build.id === buildId)) return true;
+    const next = response.json?.links?.next;
+    if (!next) return false;
+    const url = new URL(next, API_BASE);
+    if (url.origin !== API_BASE) throw new Error('Unexpected App Store Connect pagination origin');
+    path = `${url.pathname}${url.search}`;
+  }
+  return false;
+}
+
+export async function verifyInternalGroup(token, group, buildId) {
+  if (await groupHasBuild(token, group.id, buildId)) return;
+  throw new Error(
+    `Internal group "${group.attributes?.name ?? group.id}" does not list build ${buildId}. ` +
+      'Add this build to the group in App Store Connect and check its automatic-distribution setting; ' +
+      'internal tester access has not been verified.',
+  );
 }
 
 async function submitForBetaAppReview(token, buildId) {
@@ -254,7 +270,10 @@ async function main() {
   const bundleId = requireEnv('BUNDLE_ID');
   const buildNumber = requireEnv('BUILD_NUMBER');
 
-  const token = createJwt({ keyId, issuerId, privateKeyPem: fs.readFileSync(keyPath, 'utf8') });
+  // Processing can take 30 minutes, longer than a single 15-minute JWT.
+  // Sign on demand so polling and subsequent distribution never use an expired token.
+  const privateKeyPem = fs.readFileSync(keyPath, 'utf8');
+  const token = () => createJwt({ keyId, issuerId, privateKeyPem });
   console.log(`App Store Connect: distributing build ${buildNumber} of ${bundleId}`);
 
   const appId = await findAppId(token, bundleId);
@@ -284,14 +303,17 @@ async function main() {
         .join(', '),
   );
 
-  // Internal groups need no action: Apple gives them every build.
   for (const group of internalGroups) {
-    console.log(`  "${group.attributes?.name ?? group.id}" is internal — receives every build automatically`);
+    await verifyInternalGroup(token, group, build.id);
+    console.log(`  "${group.attributes?.name ?? group.id}" (internal): build access verified`);
   }
 
   const outcomes = [];
   for (const group of externalGroups) {
     const outcome = await assignBuildToGroup(token, group, build.id);
+    if (!(await groupHasBuild(token, group.id, build.id))) {
+      throw new Error(`Build ${buildNumber} was not found in external group "${group.attributes?.name ?? group.id}" after assignment`);
+    }
     outcomes.push(`${group.attributes?.name ?? group.id}: ${outcome}`);
     console.log(`  "${group.attributes?.name ?? group.id}" (external): ${outcome}`);
   }
@@ -299,12 +321,12 @@ async function main() {
   annotate(
     'notice',
     'TestFlight distribution',
-    `build ${buildNumber} — internal: ${internalGroups.length} group(s) automatic` +
+    `build ${buildNumber} — internal: ${internalGroups.length} group(s) access verified` +
       (externalGroups.length ? `; external: ${outcomes.join(', ')}` : '; no external groups'),
   );
 
   if (externalGroups.length === 0) {
-    annotate('notice', 'Beta App Review', 'no external groups — internal testers receive the build automatically');
+    annotate('notice', 'Beta App Review', 'no external groups — internal group build access verified');
     return;
   }
 

@@ -79,7 +79,7 @@ public struct EmergencyScreen: View {
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("EMERGENCY")
-                .font(.system(size: 32, weight: .bold))
+                .font(.field(size: 32, weight: .bold))
                 .foregroundColor(theme.palette.danger)
 
             Text(
@@ -87,14 +87,17 @@ public struct EmergencyScreen: View {
                     ? "Editing unlocked - lock the profile when you are finished."
                     : "Public display - edit locked"
             )
-            .font(.system(size: 14))
+            .font(.field(size: 14))
             .foregroundColor(theme.palette.mist)
             
             HStack(spacing: 8) {
-                Image(systemName: "cross.case.fill")
-                    .foregroundColor(theme.palette.danger)
+                Image("gun_ice_logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 72, height: 54)
+                    .accessibilityLabel("Gun-ICE logo")
                 Text("Sponsored by Gun-ICE")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.field(size: 13, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
             }
             .padding(.top, 2)
@@ -111,7 +114,7 @@ public struct EmergencyScreen: View {
                     SectionLabel("Medical profile")
                     if !db.emergency.fullName.isEmpty {
                         Text(db.emergency.fullName)
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.field(size: 24, weight: .bold))
                             .foregroundColor(theme.palette.cream)
                     }
                     if !db.emergency.bloodType.isEmpty {
@@ -136,7 +139,7 @@ public struct EmergencyScreen: View {
                 GlassPanel {
                     SectionLabel("No profile yet")
                     Text("Add your medical details and emergency contacts so a first responder can help you quickly.")
-                        .font(.system(size: 14))
+                        .font(.field(size: 14))
                         .foregroundColor(theme.palette.mist)
                 }
             }
@@ -153,13 +156,13 @@ public struct EmergencyScreen: View {
 
             if !DatabaseService.hasPin(db.emergency.pinHash) {
                 Text("Tip: unlock and set a PIN to stop others editing this profile.")
-                    .font(.system(size: 12))
+                    .font(.field(size: 12))
                     .foregroundColor(theme.palette.mist)
             }
 
             if let statusMessage = statusMessage {
                 Text(statusMessage)
-                    .font(.system(size: 13))
+                    .font(.field(size: 13))
                     .foregroundColor(theme.palette.success)
             }
         }
@@ -169,10 +172,10 @@ public struct EmergencyScreen: View {
     private func detailRow(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: 14))
+                .font(.field(size: 14))
                 .foregroundColor(theme.palette.mist)
             Text(value)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.field(size: 15, weight: .semibold))
                 .foregroundColor(theme.palette.cream)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -187,7 +190,7 @@ public struct EmergencyScreen: View {
 
             if contacts.isEmpty {
                 Text("No contacts stored yet.")
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.mist)
             } else {
                 ForEach(contacts.enumerated().map { IndexedContact(id: $0.offset, contact: $0.element) }) { item in
@@ -200,7 +203,7 @@ public struct EmergencyScreen: View {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle")
                         Text("Add contact")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.field(size: 14, weight: .semibold))
                     }
                     .foregroundColor(theme.palette.bronzeBright)
                 }
@@ -213,14 +216,14 @@ public struct EmergencyScreen: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(contact.name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.field(size: 16, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
                 Text(contact.phone)
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.bronzeBright)
                 if !contact.relationship.isEmpty {
                     Text(contact.relationship)
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                 }
             }
@@ -229,7 +232,7 @@ public struct EmergencyScreen: View {
 
             Button(action: { call(contact.phone) }) {
                 Image(systemName: "phone.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.field(size: 16, weight: .bold))
                     .foregroundColor(theme.palette.success)
                     .padding(8)
                     .background(
@@ -240,13 +243,13 @@ public struct EmergencyScreen: View {
             if !readOnly {
                 Button(action: { openContactEditor(index: index) }) {
                     Image(systemName: "pencil")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.field(size: 15, weight: .bold))
                         .foregroundColor(theme.palette.bronze)
                         .padding(8)
                 }
                 Button(action: { deleteContact(at: index) }) {
                     Image(systemName: "trash")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.field(size: 15, weight: .bold))
                         .foregroundColor(theme.palette.danger)
                         .padding(8)
                 }
@@ -279,7 +282,7 @@ public struct EmergencyScreen: View {
                 }
                 Button(action: { lock() }) {
                     Text("Lock Profile")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                         .foregroundColor(theme.palette.bronze)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -288,7 +291,7 @@ public struct EmergencyScreen: View {
 
             if let statusMessage = statusMessage {
                 Text(statusMessage)
-                    .font(.system(size: 13))
+                    .font(.field(size: 13))
                     .foregroundColor(theme.palette.success)
             }
         }
@@ -308,7 +311,7 @@ public struct EmergencyScreen: View {
 
             Toggle(isOn: $draft.biometricEnabled) {
                 Text("Use Face ID / Touch ID")
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.cream)
             }
             .toggleStyle(SwitchToggleStyle(tint: theme.palette.bronze))
@@ -322,14 +325,14 @@ public struct EmergencyScreen: View {
                     activeSheet = .pin(.setPin)
                 }) {
                     Text(DatabaseService.hasPin(draft.pinHash) ? "Change PIN" : "Set PIN")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.field(size: 14, weight: .semibold))
                         .foregroundColor(theme.palette.bronzeBright)
                 }
 
                 if DatabaseService.hasPin(draft.pinHash) {
                     Button(action: { removePin() }) {
                         Text("Remove PIN")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.field(size: 14, weight: .semibold))
                             .foregroundColor(theme.palette.danger)
                     }
                 }
@@ -341,7 +344,7 @@ public struct EmergencyScreen: View {
     private func fieldRow(_ label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 13))
+                .font(.field(size: 13))
                 .foregroundColor(theme.palette.mist)
             TextField(label, text: text)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -356,7 +359,7 @@ public struct EmergencyScreen: View {
         ScreenBackground {
             VStack(alignment: .leading, spacing: 16) {
                 Text(pinSheetTitle(purpose))
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.field(size: 24, weight: .bold))
                     .foregroundColor(theme.palette.cream)
 
                 Text(
@@ -364,7 +367,7 @@ public struct EmergencyScreen: View {
                         ? "Enter your PIN to edit the emergency profile."
                         : "Choose a PIN of at least 4 digits. It is stored only as a hash."
                 )
-                .font(.system(size: 13))
+                .font(.field(size: 13))
                 .foregroundColor(theme.palette.mist)
 
                 SecureField("PIN", text: $pinInput)
@@ -374,7 +377,7 @@ public struct EmergencyScreen: View {
 
                 if let pinError = pinError {
                     Text(pinError)
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.danger)
                 }
 
@@ -388,7 +391,7 @@ public struct EmergencyScreen: View {
                         activeSheet = nil
                     }) {
                         Text("Cancel")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.field(size: 15, weight: .semibold))
                             .foregroundColor(theme.palette.bronze)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -414,12 +417,12 @@ public struct EmergencyScreen: View {
         ScreenBackground {
             VStack(alignment: .leading, spacing: 16) {
                 Text(contactEditorIndex == nil ? "Add contact" : "Edit contact")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.field(size: 24, weight: .bold))
                     .foregroundColor(theme.palette.cream)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Name")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                     TextField("Name", text: $contactName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -427,7 +430,7 @@ public struct EmergencyScreen: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Phone")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                     TextField("Phone", text: $contactPhone)
                         .keyboardType(.phonePad)
@@ -436,7 +439,7 @@ public struct EmergencyScreen: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Relationship")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                     TextField("e.g. Partner, GP", text: $contactRelationship)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -448,7 +451,7 @@ public struct EmergencyScreen: View {
                     }
                     Button(action: { activeSheet = nil }) {
                         Text("Cancel")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.field(size: 15, weight: .semibold))
                             .foregroundColor(theme.palette.bronze)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)

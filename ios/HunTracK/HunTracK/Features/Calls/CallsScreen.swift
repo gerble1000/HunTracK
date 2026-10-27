@@ -258,7 +258,7 @@ public struct CallsScreen: View {
                             selectedTab = tab
                         }) {
                             Text(tab.rawValue)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.field(size: 13, weight: .semibold))
                                 .foregroundColor(selectedTab == tab ? theme.palette.ink : theme.palette.cream)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
@@ -316,10 +316,10 @@ public struct CallsScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Animal calls")
-                .font(.system(size: 28, weight: .bold))
+                .font(.field(size: 28, weight: .bold))
                 .foregroundColor(theme.palette.cream)
             Text("Play built-in calls or add your own audio files and recordings.")
-                .font(.system(size: 14))
+                .font(.field(size: 14))
                 .foregroundColor(theme.palette.mist)
         }
         .padding(.top, 4)
@@ -332,15 +332,15 @@ public struct CallsScreen: View {
                     .foregroundColor(theme.palette.danger)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Audio playback warning")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.field(size: 14, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                     Text(message)
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                 }
                 Spacer()
                 Button("Dismiss") { player.clearError() }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
             }
         }
@@ -358,14 +358,14 @@ public struct CallsScreen: View {
                 GlassPanel(compact: true) {
                     HStack(spacing: 12) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 28))
+                            .font(.field(size: 28))
                             .foregroundColor(theme.palette.bronzeBright)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("+ Add custom call")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.field(size: 16, weight: .bold))
                                 .foregroundColor(theme.palette.bronzeBright)
                             Text("Upload an audio file or configure custom recordings.")
-                                .font(.system(size: 12))
+                                .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
                         }
                         Spacer()
@@ -384,15 +384,15 @@ public struct CallsScreen: View {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(userCall.name)
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .font(.field(size: 16, weight: .semibold))
                                     .foregroundColor(theme.palette.cream)
                                 if !userCall.notes.isEmpty {
                                     Text(userCall.notes)
-                                        .font(.system(size: 12))
+                                        .font(.field(size: 12))
                                         .foregroundColor(theme.palette.mist)
                                 }
                                 Text("Custom · \(userCall.category)")
-                                    .font(.system(size: 11))
+                                    .font(.field(size: 11))
                                     .foregroundColor(theme.palette.bronze)
                             }
                             Spacer()
@@ -402,7 +402,7 @@ public struct CallsScreen: View {
                                 logCustomTarget = userCall
                             }) {
                                 Image(systemName: "square.and.pencil")
-                                    .font(.system(size: 18))
+                                    .font(.field(size: 18))
                                     .foregroundColor(theme.palette.bronzeBright)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -412,7 +412,7 @@ public struct CallsScreen: View {
                                     player.toggle(callId: "custom_\(userCall.id)", remoteUrl: userCall.filePath)
                                 }) {
                                     Image(systemName: player.isCallPlaying("custom_\(userCall.id)") ? "stop.circle.fill" : "play.circle.fill")
-                                        .font(.system(size: 32))
+                                        .font(.field(size: 32))
                                         .foregroundColor(theme.palette.bronze)
                                 }
                                 .buttonStyle(PlainButtonStyle())
@@ -423,7 +423,7 @@ public struct CallsScreen: View {
                                 db.deleteUserCall(id: userCall.id)
                             }) {
                                 Image(systemName: "trash")
-                                    .font(.system(size: 16))
+                                    .font(.field(size: 16))
                                     .foregroundColor(theme.palette.danger)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -440,14 +440,14 @@ public struct CallsScreen: View {
                     .labelsHidden()
                     .toggleStyle(SwitchToggleStyle(tint: theme.palette.bronze))
                 Text("Loop")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.mist)
             }
 
             ForEach(categories, id: \.self) { category in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(category.uppercased())
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.field(size: 11, weight: .bold))
                         .foregroundColor(theme.palette.bronze)
                         .tracking(1.2)
                         .padding(.top, 4)
@@ -484,7 +484,7 @@ public struct CallsScreen: View {
     private var addCallView: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Add a custom call — configure audio URL or field recording.")
-                .font(.system(size: 13))
+                .font(.field(size: 13))
                 .foregroundColor(theme.palette.mist)
 
             GlassPanel {
@@ -495,7 +495,7 @@ public struct CallsScreen: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
 
                     Text("Species")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.field(size: 13, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
 
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -505,7 +505,7 @@ public struct CallsScreen: View {
                                     customSpeciesId = sp.id
                                 }) {
                                     Text(sp.commonName)
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.field(size: 12, weight: .medium))
                                         .foregroundColor(customSpeciesId == sp.id ? theme.palette.ink : theme.palette.cream)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
@@ -523,7 +523,7 @@ public struct CallsScreen: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
 
                     Text("Audio")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.field(size: 13, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
 
                     HStack(spacing: 10) {
@@ -532,7 +532,7 @@ public struct CallsScreen: View {
                                 recorder.isRecording ? "Stop & save recording" : "Start recording",
                                 systemImage: recorder.isRecording ? "stop.circle.fill" : "mic.fill"
                             )
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.field(size: 14, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(
@@ -547,7 +547,7 @@ public struct CallsScreen: View {
                             showAudioImporter = true
                         }) {
                             Label("Upload audio file", systemImage: "square.and.arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.field(size: 14, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
                                 .background(
@@ -559,26 +559,26 @@ public struct CallsScreen: View {
 
                     if recorder.isRecording {
                         Text("Recording… tap stop when the call is finished.")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.field(size: 12, weight: .semibold))
                             .foregroundColor(theme.palette.danger)
                     }
 
                     if !customUrl.isEmpty {
                         Text(customUrl)
-                            .font(.system(size: 11))
+                            .font(.field(size: 11))
                             .foregroundColor(theme.palette.mist)
                             .lineLimit(2)
                     }
 
                     if let error = recorder.errorMessage ?? importError {
                         Text(error)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.field(size: 12, weight: .semibold))
                             .foregroundColor(theme.palette.danger)
                     }
 
                     if let msg = saveSuccessMessage {
                         Text(msg)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.field(size: 13, weight: .semibold))
                             .foregroundColor(theme.palette.success)
                     }
 
@@ -661,7 +661,7 @@ public struct CallsScreen: View {
     private var packsView: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Real wildlife audio recordings for offline field practice.")
-                .font(.system(size: 13))
+                .font(.field(size: 13))
                 .foregroundColor(theme.palette.mist)
 
             ForEach(db.audioPacks) { pack in
@@ -670,10 +670,10 @@ public struct CallsScreen: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(pack.name)
-                                    .font(.system(size: 17, weight: .bold))
+                                    .font(.field(size: 17, weight: .bold))
                                     .foregroundColor(theme.palette.cream)
                                 Text(pack.description)
-                                    .font(.system(size: 13))
+                                    .font(.field(size: 13))
                                     .foregroundColor(theme.palette.mist)
                             }
                             Spacer()
@@ -684,12 +684,12 @@ public struct CallsScreen: View {
                         }
 
                         Text("\(pack.recordingCount) recordings · ~\(pack.sizeBytes / 1024) KB")
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
 
                         if pack.downloaded {
                             Text("Downloaded · Ready offline")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.field(size: 12, weight: .semibold))
                                 .foregroundColor(theme.palette.success)
                                 .padding(.top, 4)
                         } else {
@@ -717,7 +717,7 @@ public struct CallsScreen: View {
             if db.callJournal.isEmpty {
                 GlassPanel(compact: true) {
                     Text("No call journal entries yet. Tap the pencil icon on any call to record responses, distance, and field notes.")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 }
             }
@@ -744,32 +744,32 @@ public struct CallsScreen: View {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(callName ?? species ?? "Call logged")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
 
                     if let species = species, callName != nil {
                         Text(species)
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.bronze)
                     }
 
                     Text(CallFormat.timestamp(entry.recordedAtEpochMs))
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
 
                     if !entry.response.isEmpty {
                         Text("Response: \(entry.response)")
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.cream)
                     }
                     if let distance = entry.distanceEstimateMeters {
                         Text("Distance ~\(distance) m")
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }
                     if !entry.notes.isEmpty {
                         Text(entry.notes)
-                            .font(.system(size: 12))
+                            .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }
                 }
@@ -779,7 +779,7 @@ public struct CallsScreen: View {
                     db.deleteCallJournalEntry(id: entry.id)
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 15))
+                        .font(.field(size: 15))
                         .foregroundColor(theme.palette.danger)
                 }
             }
@@ -802,15 +802,15 @@ struct CallRow: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(call.name)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.field(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                     Text(call.description)
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                         .fixedSize(horizontal: false, vertical: true)
                     if !call.credit.isEmpty {
                         Text(call.credit)
-                            .font(.system(size: 11))
+                            .font(.field(size: 11))
                             .foregroundColor(theme.palette.bronze)
                     }
                 }
@@ -822,14 +822,14 @@ struct CallRow: View {
                     onLog()
                 }) {
                     Image(systemName: "square.and.pencil")
-                        .font(.system(size: 18))
+                        .font(.field(size: 18))
                         .foregroundColor(theme.palette.bronzeBright)
                 }
                 .buttonStyle(.plain)
 
                 Button(action: onToggle) {
                     Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 34))
+                        .font(.field(size: 34))
                         .foregroundColor(theme.palette.bronze)
                 }
                 .buttonStyle(.plain)
@@ -860,11 +860,11 @@ struct CallLogSheet: View {
                         GlassPanel {
                             SectionLabel("Call")
                             Text(call.name)
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.field(size: 18, weight: .semibold))
                                 .foregroundColor(theme.palette.cream)
                             if let species = UkFieldCatalog.speciesById(call.speciesId) {
                                 Text(species.commonName)
-                                    .font(.system(size: 13))
+                                    .font(.field(size: 13))
                                     .foregroundColor(theme.palette.bronze)
                             }
                         }
@@ -881,7 +881,7 @@ struct CallLogSheet: View {
 
                             if let message = validationMessage {
                                 Text(message)
-                                    .font(.system(size: 12))
+                                    .font(.field(size: 12))
                                     .foregroundColor(theme.palette.danger)
                             }
 
@@ -952,11 +952,11 @@ struct CustomCallLogSheet: View {
                         GlassPanel {
                             SectionLabel("Custom Call")
                             Text(call.name)
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.field(size: 18, weight: .semibold))
                                 .foregroundColor(theme.palette.cream)
                             if let species = UkFieldCatalog.speciesById(call.speciesId) {
                                 Text(species.commonName)
-                                    .font(.system(size: 13))
+                                    .font(.field(size: 13))
                                     .foregroundColor(theme.palette.bronze)
                             }
                         }

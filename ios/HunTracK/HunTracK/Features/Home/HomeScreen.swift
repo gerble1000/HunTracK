@@ -34,7 +34,7 @@ public struct HomeScreen: View {
                     quickAddButton
 
                     Text("Guidance only — verify local regulations and conditions.")
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                         .padding(.top, 4)
                 }
@@ -72,10 +72,10 @@ public struct HomeScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("HunTracK")
-                .font(.system(size: 32, weight: .bold))
+                .font(.field(size: 32, weight: .bold))
                 .foregroundColor(theme.palette.bronze)
             Text("Field dashboard · live updates")
-                .font(.system(size: 14))
+                .font(.field(size: 14))
                 .foregroundColor(theme.palette.mist)
         }
         .padding(.top, 8)
@@ -87,7 +87,7 @@ public struct HomeScreen: View {
             HStack {
                 Spacer()
                 Text("IN CASE OF EMERGENCY")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.field(size: 14, weight: .bold))
                     .foregroundColor(theme.palette.danger)
                 Spacer()
             }
@@ -105,18 +105,18 @@ public struct HomeScreen: View {
         GlassPanel {
             SectionLabel("Hunting conditions")
             Text(rating.title)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.field(size: 20, weight: .semibold))
                 .foregroundColor(theme.palette.cream)
             Text(rating.level.rawValue)
-                .font(.system(size: 28, weight: .bold))
+                .font(.field(size: 28, weight: .bold))
                 .foregroundColor(colorForLevel(rating.level))
             Text("Reassessed every minute · weather live")
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
 
             ForEach(rating.reasons, id: \.self) { reason in
                 Text("• \(reason)")
-                    .font(.system(size: 14))
+                    .font(.field(size: 14))
                     .foregroundColor(theme.palette.cream)
             }
         }
@@ -128,11 +128,11 @@ public struct HomeScreen: View {
             SectionLabel("Weather")
             if let w = weatherService.weather {
                 Text("Updated \(HomeScreen.relativeAge(w.fetchedAtEpochMs))") 
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.gold)
 
                 Text(HomeScreen.weatherCodeLabel(w.weatherCode))
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.field(size: 18, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
 
                 MetricRow("Temperature", formatTemp(w.temperatureC))
@@ -182,7 +182,7 @@ public struct HomeScreen: View {
             MetricRow("Moonset", HomeScreen.formatTime(a.moonsetEpochMs))
 
             Text("Times use 24-hour clock (local time)")
-                .font(.system(size: 12))
+                .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
         }
     }
@@ -197,19 +197,19 @@ public struct HomeScreen: View {
                 : nil
 
             Text(HomeScreen.formatCoordinates(fix.latitude, fix.longitude))
-                .font(.system(size: 18, weight: .semibold))
+                .font(.field(size: 18, weight: .semibold))
                 .foregroundColor(theme.palette.cream)
 
             if let osGrid = osGrid {
                 Text(osGrid)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.field(size: 18, weight: .bold))
                     .foregroundColor(theme.palette.bronzeBright)
                     .padding(.top, 2)
             }
 
             if location.latestFix == nil {
                 Text("Using UK fallback until satellite lock")
-                    .font(.system(size: 12))
+                    .font(.field(size: 12))
                     .foregroundColor(theme.palette.mist)
             }
 
@@ -220,7 +220,7 @@ public struct HomeScreen: View {
                 HStack(spacing: 8) {
                     Image(systemName: "doc.on.doc")
                     Text("Copy location")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -255,21 +255,21 @@ public struct HomeScreen: View {
 
                 if db.preferences.tideStationId.isEmpty {
                     Text("Select a port in Settings → UK tide times")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                 } else {
                     Text(db.preferences.tideStationName.isEmpty ? "Selected port" : db.preferences.tideStationName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.field(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
                     Text(tides.sourceLabel.isEmpty ? "Loading tide times…" : tides.sourceLabel)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.field(size: 12, weight: .medium))
                         .foregroundColor(theme.palette.mist)
 
                     let upcoming = tides.upcomingEvents(limit: 4)
 
                     if upcoming.isEmpty {
                         Text(tides.loading ? "Loading tide times…" : "No upcoming tides — pull to refresh")
-                            .font(.system(size: 13))
+                            .font(.field(size: 13))
                             .foregroundColor(theme.palette.mist)
                             .padding(.top, 8)
                     } else {
@@ -285,7 +285,7 @@ public struct HomeScreen: View {
                     }
 
                     Text(tideFooter)
-                        .font(.system(size: 12))
+                        .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                         .padding(.top, 6)
                 }
@@ -440,10 +440,10 @@ private struct HomeCopyLocationSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Copy location")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.field(size: 22, weight: .bold))
                         .foregroundColor(theme.palette.cream)
                     Text("Choose a format to copy to the clipboard")
-                        .font(.system(size: 13))
+                        .font(.field(size: 13))
                         .foregroundColor(theme.palette.mist)
                         .padding(.bottom, 4)
 
@@ -454,12 +454,12 @@ private struct HomeCopyLocationSheet: View {
                         option(title: "OS Grid", subtitle: osGrid)
                     } else {
                         Text("OS Grid unavailable outside Great Britain")
-                            .font(.system(size: 13))
+                            .font(.field(size: 13))
                             .foregroundColor(theme.palette.mist)
                     }
 
                     Button("Cancel") { dismiss() }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                         .foregroundColor(theme.palette.bronze)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -482,10 +482,10 @@ private struct HomeCopyLocationSheet: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.field(size: 15, weight: .semibold))
                         .foregroundColor(accent)
                     Text(subtitle)
-                        .font(.system(size: 14))
+                        .font(.field(size: 14))
                         .foregroundColor(theme.palette.cream)
                 }
                 Spacer()
