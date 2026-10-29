@@ -1,7 +1,12 @@
-# iOS beta 1.1.29 (40)
+# iOS beta 1.1.29 (41)
 
-Build 40 is the revision after 1.1.28 (39), which is currently the newest approved
-TestFlight build but shows zero installs, so tester feedback so far describes 1.1.27 (38).
+This revision follows 1.1.28 (39), which was approved for TestFlight but shows zero
+installs, so tester feedback so far describes 1.1.27 (38).
+
+Build 40 was archived, validated and uploaded successfully, but it never reached a group:
+the distribution script checked the internal "Testers" group once, immediately after
+processing, and failed because App Store Connect had not added the build yet. Build 41
+carries the same app code plus the script fix below.
 
 ## Changes in this build
 
@@ -29,15 +34,22 @@ TestFlight build but shows zero installs, so tester feedback so far describes 1.
 - **Boundary capture bar:** Save/Undo/Cancel reflow so the controls are no longer cramped,
   and map controls are hidden while drawing.
 
+## Release-script fix
+
+`ensureInternalGroupAccess` replaces the one-shot `verifyInternalGroup`: it assigns the
+build to an internal group explicitly (tolerating an existing relationship) and polls for
+up to five minutes before failing. Tests cover assign-then-appear, already-present,
+existing-relationship (409) and never-appears.
+
 ## Version metadata
 
-`Info.plist` and both project configurations agree on **1.1.29 (40)**. The marketing
-version was bumped so testers can tell 40 apart from 39 in TestFlight and in
+`Info.plist` and both project configurations agree on **1.1.29 (41)**. The marketing
+version was bumped so testers can tell this build apart from 39 in TestFlight and in
 Settings → About HunTracK.
 
 ## Verification in this session (Windows, no Xcode)
 
-- `node --test .github/scripts/testflight-distribute.test.mjs`: **6 passed** (mocked API).
+- `node --test .github/scripts/testflight-distribute.test.mjs`: **8 passed** (mocked API).
 - Tree-sitter Swift parse of the five edited files: **zero syntax diagnostics**. This
   checks syntax only — not Swift types, SDK availability or runtime behaviour.
 - Asset and version consistency checked with grep.

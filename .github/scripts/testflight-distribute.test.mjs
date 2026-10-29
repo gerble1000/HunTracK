@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { createJwt, groupHasBuild, verifyInternalGroup } from './testflight-distribute.mjs';
+import { createJwt, ensureInternalGroupAccess, groupHasBuild } from './testflight-distribute.mjs';
 
 async function withFetch(fetcher, action) {
   const original = globalThis.fetch;
@@ -28,18 +28,61 @@ test('finds the build on a later page and refreshes authorization for each reque
   assert.deepEqual(requests.map((r) => r.authorization), ['Bearer token-1', 'Bearer token-2']);
 });
 
-test('does not claim an internal group has a build solely because it is internal', async () => {
-  await withFetch(async () => response([]), async () => {
-    await assert.rejects(
-      verifyInternalGroup('token', { id: 'group', attributes: { name: 'Staff', isInternalGroup: true } }, 'new'),
-      /internal tester access has not been verified/,
+test('assigns then verifies an internal group that has not received the build yet', async () => {
+  const calls = [];
+  await withFetch(async (url, options) => {
+    calls.push(`${options?.method ?? 'GET'} ${url}`);
+    if (options?.method === 'POST') return new Response(null, { status: 204 });
+    // Missing on the first read, present after the assignment, like the real API.
+    return calls.filter((call) => call.startsWith('GET')).length === 1
+      ? response([])
+      : response([{ type: 'builds', id: 'new' }]);
+  }, async () => {
+    const outcome = await ensureInternalGroupAccess(
+      'token',
+      { id: 'group', attributes: { name: 'Staff', isInternalGroup: true } },
+      'new',
+      { timeoutMs: 1000, intervalMs: 5 },
     );
+    assert.equal(outcome, 'assigned');
+  });
+  assert.ok(calls.some((call) => call.startsWith('POST')), 'expected an explicit group assignment');
+});
+
+test('accepts an already-present internal build without calling the assignment endpoint', async () => {
+  const methods = [];
+  await withFetch(async (url, options) => {
+    methods.push(options?.method ?? 'GET');
+    return response([{ type: 'builds', id: 'new' }]);
+  }, async () => {
+    const outcome = await ensureInternalGroupAccess('token', { id: 'group' }, 'new', { timeoutMs: 1000, intervalMs: 5 });
+    assert.equal(outcome, 'already present');
+  });
+  assert.deepEqual(methods, ['GET']);
+});
+
+test('tolerates an existing relationship and still confirms access', async () => {
+  let reads = 0;
+  await withFetch(async (url, options) => {
+    if (options?.method === 'POST') return new Response(null, { status: 409 });
+    reads += 1;
+    return reads === 1 ? response([]) : response([{ type: 'builds', id: 'new' }]);
+  }, async () => {
+    const outcome = await ensureInternalGroupAccess('token', { id: 'group' }, 'new', { timeoutMs: 1000, intervalMs: 5 });
+    assert.equal(outcome, 'already assigned');
   });
 });
 
-test('accepts an internal group only when the build relationship confirms access', async () => {
-  await withFetch(async () => response([{ type: 'builds', id: 'new' }]), async () => {
-    await verifyInternalGroup('token', { id: 'group', attributes: { name: 'Staff' } }, 'new');
+test('fails clearly when the group still never lists the build', async () => {
+  await withFetch(async (url, options) =>
+    options?.method === 'POST' ? new Response(null, { status: 204 }) : response([]), async () => {
+    await assert.rejects(
+      ensureInternalGroupAccess('token', { id: 'group', attributes: { name: 'Staff' } }, 'new', {
+        timeoutMs: 60,
+        intervalMs: 5,
+      }),
+      /internal tester access has not been verified/,
+    );
   });
 });
 

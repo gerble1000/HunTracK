@@ -33,6 +33,8 @@ import { pathToFileURL } from 'node:url';
 const API_BASE = 'https://api.appstoreconnect.apple.com';
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
 const POLL_INTERVAL_MS = 30 * 1000;
+/// Build-to-group relationships can lag minutes behind a VALID build.
+const INTERNAL_ACCESS_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** Escapes a workflow-command payload the way GitHub requires. */
 const escapeData = (value) =>
@@ -203,14 +205,16 @@ async function listBetaGroups(token, appId) {
   return resolved.response.json?.data ?? [];
 }
 
-/** Adds a build to an external group; internal access is verified separately. */
-async function assignBuildToGroup(token, group, buildId) {
+/** Adds a build to a beta group (internal or external). */
+async function assignBuildToGroup(token, group, buildId, { tolerateConflict = false } = {}) {
   const path = `/v1/betaGroups/${group.id}/relationships/builds`;
   const response = await request(token, path, {
     method: 'POST',
     body: { data: [{ type: 'builds', id: buildId }] },
   });
   if (response.ok) return 'assigned'; // 204 No Content on success
+  // 409 means the relationship already exists, which is the desired end state.
+  if (tolerateConflict && response.status === 409) return 'already assigned';
   throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, path, response);
 }
 
@@ -231,11 +235,34 @@ export async function groupHasBuild(token, groupId, buildId) {
   return false;
 }
 
-export async function verifyInternalGroup(token, group, buildId) {
-  if (await groupHasBuild(token, group.id, buildId)) return;
+/**
+ * Guarantees an internal group lists the build.
+ *
+ * Automatic internal distribution is a per-group setting and, even when it is on,
+ * App Store Connect can take a while to add a freshly processed build. Checking
+ * once immediately after processing therefore reports a false failure (build 40
+ * did exactly that), so assign explicitly and poll before giving up.
+ */
+export async function ensureInternalGroupAccess(
+  token,
+  group,
+  buildId,
+  { timeoutMs = INTERNAL_ACCESS_TIMEOUT_MS, intervalMs = POLL_INTERVAL_MS } = {},
+) {
+  if (await groupHasBuild(token, group.id, buildId)) return 'already present';
+
+  const outcome = await assignBuildToGroup(token, group, buildId, { tolerateConflict: true });
+
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    if (await groupHasBuild(token, group.id, buildId)) return outcome;
+    if (Date.now() >= deadline) break;
+    await sleep(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
+  }
+
   throw new Error(
-    `Internal group "${group.attributes?.name ?? group.id}" does not list build ${buildId}. ` +
-      'Add this build to the group in App Store Connect and check its automatic-distribution setting; ' +
+    `Internal group "${group.attributes?.name ?? group.id}" still does not list build ${buildId} ` +
+      `after assignment and ${Math.round(timeoutMs / 1000)}s. Check the group in App Store Connect; ` +
       'internal tester access has not been verified.',
   );
 }
@@ -304,8 +331,8 @@ async function main() {
   );
 
   for (const group of internalGroups) {
-    await verifyInternalGroup(token, group, build.id);
-    console.log(`  "${group.attributes?.name ?? group.id}" (internal): build access verified`);
+    const outcome = await ensureInternalGroupAccess(token, group, build.id);
+    console.log(`  "${group.attributes?.name ?? group.id}" (internal): build access verified (${outcome})`);
   }
 
   const outcomes = [];
