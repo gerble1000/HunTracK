@@ -69,7 +69,7 @@ private enum OverlayKind {
     case pendingBoundary
     case zone(BoundaryZoneType)
     case grid(major: Bool)
-    case plume(core: Bool)
+    case plume
 }
 
 // MARK: - Snapshot used to keep updateUIView idempotent
@@ -88,6 +88,62 @@ private struct MapContentSnapshot: Equatable {
 }
 
 // MARK: - The UIKit map host
+
+/// Animated visual estimate; positions and spread use the same model as Wind & Scent.
+private final class ScentSmokeRenderer: MKOverlayRenderer {
+    let fix: GpsFix
+    let weather: WeatherSnapshot
+    let plume: Plume
+
+    init(overlay: MKOverlay, fix: GpsFix, weather: WeatherSnapshot) {
+        self.fix = fix
+        self.weather = weather
+        self.plume = ScentPlumeGeometry.forConditions(
+            speedKmh: weather.windSpeedKmh, gustKmh: weather.windGustKmh,
+            humidityPercent: weather.humidityPercent, temperatureC: weather.temperatureC
+        )
+        super.init(overlay: overlay)
+    }
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        let speed = max(0, min(60, weather.windSpeedKmh))
+        let period = 1 / (0.08 + speed * 0.006)
+        let phase = Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        let downwind = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
+        let metersPerPoint = MKMetersPerMapPointAtLatitude(fix.latitude)
+        let colors = [UIColor.systemPink.withAlphaComponent(0.45).cgColor,
+                      UIColor.systemPink.withAlphaComponent(0).cgColor] as CFArray
+        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) else { return }
+        for index in 0..<32 {
+            let age = (phase + Double(index) / 32).truncatingRemainder(dividingBy: 1)
+            let distance = 3 + age * plume.lengthM
+            let halfWidth = plume.halfWidthAt(distanceM: distance)
+            let lane = Double(index % 5 - 2) / 2.5
+            let lateral = halfWidth * (lane * 0.55 + 0.25 * sin(phase * 2 * .pi + Double(index)))
+            let along = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: distance, bearing: downwind)
+            let position = Self.destination(latitude: along.latitude, longitude: along.longitude, meters: lateral, bearing: downwind + 90)
+            let centre = point(for: MKMapPoint(position))
+            let geographicRadius = (8 + halfWidth * 0.24) / metersPerPoint
+            let radius = CGFloat(max(5 / Double(zoomScale), min(24 / Double(zoomScale), geographicRadius)))
+            let opacity = CGFloat(min(1, min(age / 0.08, (1 - age) / 0.25)))
+            context.saveGState()
+            context.setAlpha(opacity)
+            context.drawRadialGradient(gradient, startCenter: centre, startRadius: 0,
+                                       endCenter: centre, endRadius: radius, options: [])
+            context.restoreGState()
+        }
+    }
+
+    private static func destination(latitude: Double, longitude: Double, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
+        let distance = meters / 6371000
+        let direction = bearing * .pi / 180
+        let lat = latitude * .pi / 180
+        let lon = longitude * .pi / 180
+        let targetLat = asin(sin(lat) * cos(distance) + cos(lat) * sin(distance) * cos(direction))
+        let targetLon = lon + atan2(sin(direction) * sin(distance) * cos(lat), cos(distance) - sin(lat) * sin(targetLat))
+        return CLLocationCoordinate2D(latitude: targetLat * 180 / .pi, longitude: targetLon * 180 / .pi)
+    }
+}
 
 private struct MapViewHost: UIViewRepresentable {
     var centre: CLLocationCoordinate2D
@@ -171,7 +227,13 @@ private struct MapViewHost: UIViewRepresentable {
         context.coordinator.drawRecognizer = drawPan
 
         context.coordinator.applyStyle(mapView, style: mapStyle)
+        context.coordinator.startSmokeAnimation(mapView)
         return mapView
+    }
+
+    static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
+        coordinator.stopSmokeAnimation()
+        mapView.delegate = nil
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
@@ -237,7 +299,8 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     private var overlayKinds: [ObjectIdentifier: OverlayKind] = [:]
     var lastNorthUpToken = 0
     private var gridOverlays: [MKPolyline] = []
-    private var plumeOverlays: [MKPolygon] = []
+    private var plumeOverlays: [MKCircle] = []
+    private var smokeTimer: Timer?
     private var gridKey = ""
     private var lastPlumeFix: GpsFix?
     private var lastPlumeWeather: WeatherSnapshot?
@@ -245,6 +308,24 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
 
     init(parent: MapViewHost) {
         self.parent = parent
+    }
+
+    func startSmokeAnimation(_ mapView: MKMapView) {
+        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self, weak mapView] _ in
+            guard let self = self, let mapView = mapView else { return }
+            guard mapView.window != nil, UIApplication.shared.applicationState == .active else { return }
+            self.updatePlume(mapView)
+            for overlay in self.plumeOverlays {
+                mapView.renderer(for: overlay)?.setNeedsDisplay()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        smokeTimer = timer
+    }
+
+    func stopSmokeAnimation() {
+        smokeTimer?.invalidate()
+        smokeTimer = nil
     }
 
     func applyStyle(_ mapView: MKMapView, style: MapLayerStyle) {
@@ -277,7 +358,9 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         }
 
         // --- Field markers ---
-        let linkedCullIds = Set(host.culls.filter { $0.latitude != nil && $0.longitude != nil }.compactMap { $0.linkedMarkerId })
+        let linkedCullIds = host.showCulls
+            ? Set(host.culls.filter { $0.latitude != nil && $0.longitude != nil }.compactMap { $0.linkedMarkerId })
+            : Set<Int64>()
         for marker in host.markers where !linkedCullIds.contains(marker.id) {
             let annotation = HuntAnnotation(
                 coordinate: CLLocationCoordinate2D(latitude: marker.latitude, longitude: marker.longitude),
@@ -427,7 +510,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     }
 
     func updatePlume(_ mapView: MKMapView) {
-        let fresh = parent.windWeather.map { Date().timeIntervalSince1970 * 1000 - Double($0.fetchedAtEpochMs) < 1800000 } ?? false
+        let fresh = ScentPlumeGeometry.usableWeather(parent.windWeather, for: parent.windFix) != nil
         guard lastPlumeFix != parent.windFix || lastPlumeWeather != parent.windWeather || lastPlumeFresh != fresh else { return }
         lastPlumeFix = parent.windFix
         lastPlumeWeather = parent.windWeather
@@ -435,35 +518,16 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         mapView.removeOverlays(plumeOverlays)
         for plume in plumeOverlays { overlayKinds.removeValue(forKey: ObjectIdentifier(plume)) }
         plumeOverlays = []
-        guard fresh, let fix = parent.windFix, let weather = parent.windWeather,
-              DatabaseService.haversineMeters(fix.latitude, fix.longitude, weather.latitude, weather.longitude) < 15000 else { return }
+        guard fresh, let fix = parent.windFix, let weather = parent.windWeather else { return }
         let plume = ScentPlumeGeometry.forConditions(
             speedKmh: weather.windSpeedKmh, gustKmh: weather.windGustKmh,
             humidityPercent: weather.humidityPercent, temperatureC: weather.temperatureC
         )
-        let bearing = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
-        for core in [false, true] {
-            let length = plume.lengthM * (core ? 0.8 : 1)
-            let angle = plume.halfAngleDeg * (core ? 0.65 : 1)
-            var coordinates = [CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)]
-            for sample in 0...24 {
-                coordinates.append(destination(fix, meters: length, bearing: bearing - angle + 2 * angle * Double(sample) / 24))
-            }
-            let polygon = MKPolygon(coordinates: coordinates, count: coordinates.count)
-            overlayKinds[ObjectIdentifier(polygon)] = .plume(core: core)
-            plumeOverlays.append(polygon)
-            mapView.addOverlay(polygon, level: .aboveRoads)
-        }
-    }
-
-    private func destination(_ fix: GpsFix, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
-        let distance = meters / 6371000
-        let direction = bearing * .pi / 180
-        let lat = fix.latitude * .pi / 180
-        let lon = fix.longitude * .pi / 180
-        let targetLat = asin(sin(lat) * cos(distance) + cos(lat) * sin(distance) * cos(direction))
-        let targetLon = lon + atan2(sin(direction) * sin(distance) * cos(lat), cos(distance) - sin(lat) * sin(targetLat))
-        return CLLocationCoordinate2D(latitude: targetLat * 180 / .pi, longitude: targetLon * 180 / .pi)
+        let overlay = MKCircle(center: CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude),
+                               radius: plume.lengthM * 1.5 + 100)
+        overlayKinds[ObjectIdentifier(overlay)] = .plume
+        plumeOverlays.append(overlay)
+        mapView.addOverlay(overlay, level: .aboveRoads)
     }
 
     // MARK: UIGestureRecognizerDelegate
@@ -519,38 +583,70 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         guard let hunt = annotation as? HuntAnnotation else { return nil }
 
         let identifier = "hunt-\(hunt.kind.rawValue)"
-        let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
-            ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
-
-        view.annotation = annotation
-        view.canShowCallout = hunt.kind == .fieldMarker || hunt.kind == .cull
-        view.markerTintColor = hunt.tint
-        view.glyphTintColor = UIColor.white
-        view.animatesWhenAdded = false
-
-        switch hunt.kind {
-        case .fieldMarker:
+        if hunt.kind == .fieldMarker || hunt.kind == .cull {
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            view.annotation = annotation
+            view.canShowCallout = true
             let marker = parent.markers.first { $0.id == hunt.recordId }
-            view.glyphImage = markerGlyph(speciesId: marker?.speciesId, category: marker?.category ?? .otherWildlife)
-        case .cull:
-            let record = parent.culls.first { $0.id == hunt.recordId }
-            view.glyphImage = markerGlyph(speciesId: record?.speciesId, category: .cull)
-        case .homing: view.glyphImage = UIImage(systemName: "arrow.down.circle")
-        case .boundaryPoint: view.glyphImage = UIImage(systemName: "circle.fill")
+            let category: MarkerCategory = hunt.kind == .cull ? .cull : (marker?.category ?? .otherWildlife)
+            view.image = markerImage(speciesId: marker?.speciesId, category: category, tint: hunt.tint)
+            view.centerOffset = CGPoint(x: 0, y: -25)
+            view.rightCalloutAccessoryView = hunt.kind == .fieldMarker ? UIButton(type: .detailDisclosure) : nil
+            return view
         }
 
-        view.rightCalloutAccessoryView = hunt.kind == .fieldMarker ? UIButton(type: .detailDisclosure) : nil
+        let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+            ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+        view.annotation = annotation
+        view.canShowCallout = false
+        view.markerTintColor = hunt.tint
+        view.glyphTintColor = .white
+        view.glyphImage = UIImage(systemName: hunt.kind == .homing ? "arrow.down.circle" : "circle.fill")
         return view
     }
 
-    private func markerGlyph(speciesId: String?, category: MarkerCategory) -> UIImage? {
-        if let name = MarkerArtwork.photoName(speciesId: speciesId, category: category), let image = UIImage(named: name) {
-            return UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { _ in
-                UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 30, height: 30)).addClip()
-                image.draw(in: CGRect(x: 0, y: 0, width: 30, height: 30))
-            }.withRenderingMode(.alwaysOriginal)
-        }
-        return UIImage(systemName: MarkerArtwork.symbol(for: category))
+    private func markerImage(speciesId: String?, category: MarkerCategory, tint: UIColor) -> UIImage {
+        let size = CGSize(width: 50, height: 58)
+        return UIGraphicsImageRenderer(size: size).image { context in
+            let cg = context.cgContext
+            let pin = UIBezierPath()
+            pin.move(to: CGPoint(x: 14, y: 37))
+            pin.addLine(to: CGPoint(x: 25, y: 56))
+            pin.addLine(to: CGPoint(x: 36, y: 37))
+            pin.close()
+            (category == .cull ? UIColor.systemRed : tint).setFill()
+            pin.fill()
+            let circle = CGRect(x: 3, y: 2, width: 44, height: 44)
+            cg.saveGState()
+            UIBezierPath(ovalIn: circle).addClip()
+            UIColor.systemBackground.setFill()
+            cg.fill(circle)
+            if category != .cull,
+               let name = MarkerArtwork.photoName(speciesId: speciesId, category: category),
+               let image = UIImage(named: name) {
+                let scale = max(circle.width / image.size.width, circle.height / image.size.height)
+                let width = image.size.width * scale
+                let height = image.size.height * scale
+                image.draw(in: CGRect(x: circle.midX - width / 2, y: circle.midY - height / 2, width: width, height: height))
+            } else if category == .cull {
+                let skull = "☠︎" as NSString
+                let font = UIFont.systemFont(ofSize: 33, weight: .bold)
+                let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.systemRed]
+                let textSize = skull.size(withAttributes: attributes)
+                skull.draw(at: CGPoint(x: circle.midX - textSize.width / 2, y: circle.midY - textSize.height / 2),
+                           withAttributes: attributes)
+            } else if let symbol = UIImage(systemName: MarkerArtwork.symbol(for: category),
+                                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 25, weight: .bold)) {
+                symbol.withTintColor(tint, renderingMode: .alwaysOriginal)
+                    .draw(in: CGRect(x: 10, y: 9, width: 30, height: 30))
+            }
+            cg.restoreGState()
+            (category == .cull ? UIColor.systemRed : tint).setStroke()
+            let border = UIBezierPath(ovalIn: circle)
+            border.lineWidth = 3
+            border.stroke()
+        }.withRenderingMode(.alwaysOriginal)
     }
 
     func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -597,13 +693,11 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             renderer.lineWidth = major ? 1.5 : 0.75
             return renderer
 
-        case .plume(let core):
-            guard let polygon = overlay as? MKPolygon else { return MKOverlayRenderer(overlay: overlay) }
-            let renderer = MKPolygonRenderer(polygon: polygon)
-            renderer.fillColor = core ? UIColor.systemPink.withAlphaComponent(0.3) : UIColor.systemGray.withAlphaComponent(0.25)
-            renderer.strokeColor = UIColor.systemPink.withAlphaComponent(0.35)
-            renderer.lineWidth = 1
-            return renderer
+        case .plume:
+            guard let fix = parent.windFix, let weather = parent.windWeather else {
+                return MKOverlayRenderer(overlay: overlay)
+            }
+            return ScentSmokeRenderer(overlay: overlay, fix: fix, weather: weather)
 
         case .none:
             // Not one of ours (e.g. a future MKTileOverlay) — use the default renderer.
@@ -717,7 +811,11 @@ public struct MapScreen: View {
 
                 topBar
             }
-            .overlay(alignment: .trailing) { mapControls.padding(.trailing, 14) }
+            .overlay(alignment: .trailing) {
+                if capture == nil {
+                    mapControls.padding(.trailing, 14)
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomPanel }
         }
         .sheet(isPresented: $showingAddSheet) {
@@ -799,6 +897,9 @@ public struct MapScreen: View {
         .onChange(of: db.preferences.showOsGridRef) { _ in updateGridRef(centre) }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             refreshWindIfNeeded()
+        }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            if UIApplication.shared.applicationState == .active { refreshWindIfNeeded() }
         }
     }
 
@@ -957,19 +1058,20 @@ public struct MapScreen: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                HuntButton("Save boundary", icon: "checkmark") {
-                    saveBoundary()
-                }
-                .disabled(pendingPoints.count < 3)
+            HuntButton("Save boundary", icon: "checkmark") {
+                saveBoundary()
+            }
+            .disabled(pendingPoints.count < 3)
+            HStack {
                 Button("Undo point") {
                     if !pendingPoints.isEmpty { pendingPoints.removeLast() }
                 }
                 .disabled(pendingPoints.isEmpty)
+                Spacer()
                 Button("Cancel") { finishBoundaryCapture() }
-                .font(.field(size: 13, weight: .semibold))
-                .foregroundColor(theme.palette.mist)
             }
+            .font(.field(size: 13, weight: .semibold))
+            .foregroundColor(theme.palette.bronzeBright)
         }
     }
 

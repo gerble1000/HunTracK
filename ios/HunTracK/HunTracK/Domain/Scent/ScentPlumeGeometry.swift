@@ -11,6 +11,15 @@ public struct Plume {
 }
 
 public enum ScentPlumeGeometry {
+    /// Reject old or distant forecasts for a location-dependent scent estimate.
+    public static func usableWeather(_ weather: WeatherSnapshot?, for fix: GpsFix?, now: Date = Date()) -> WeatherSnapshot? {
+        guard let weather = weather, let fix = fix else { return nil }
+        let age = now.timeIntervalSince1970 * 1000 - Double(weather.fetchedAtEpochMs)
+        guard age >= 0, age < 1800000,
+              DatabaseService.haversineMeters(fix.latitude, fix.longitude, weather.latitude, weather.longitude) < 15000 else { return nil }
+        return weather
+    }
+
     public static func forConditions(
         speedKmh: Double?,
         gustKmh: Double? = nil,

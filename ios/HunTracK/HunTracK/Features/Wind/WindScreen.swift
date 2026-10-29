@@ -30,13 +30,25 @@ public struct WindScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
     @State private var selectedMarkerId: Int64?
     @State private var showGuide: Bool = false
+    @State private var lastWindRequest: Date?
     
     public init() {}
     
     private var hunterFix: GpsFix? {
-        location.latestFix ?? location.fallbackFix()
+        location.latestFix
+    }
+
+    private var scentWeather: WeatherSnapshot? {
+        ScentPlumeGeometry.usableWeather(weatherService.weather ?? db.cachedWeather, for: hunterFix)
     }
     
+    private func refreshWindIfNeeded(_ fix: GpsFix?) {
+        guard scentWeather == nil, let fix = fix, !weatherService.loading else { return }
+        if let last = lastWindRequest, Date().timeIntervalSince(last) < 60 { return }
+        lastWindRequest = Date()
+        weatherService.fetchWeather(latitude: fix.latitude, longitude: fix.longitude)
+    }
+
     private func windCharacter(speed: Double?, gust: Double?) -> WindCharacter {
         guard let s = speed else { return .steady }
         let g = gust ?? s
@@ -74,7 +86,7 @@ public struct WindScreen: View {
     }
     
     private func evaluateRisk(for marker: FieldMarker) -> (risk: ScentRisk, distanceM: Double?, bearingDeg: Double?, diffDeg: Double?) {
-        guard let w = weatherService.weather, let hunter = hunterFix else {
+        guard let w = scentWeather, let hunter = hunterFix else {
             return (.unknown, nil, nil, nil)
         }
         let downwind = Double((Int(w.windDirectionDeg) + 180) % 360)
@@ -119,7 +131,7 @@ public struct WindScreen: View {
                     // Wind dial panel
                     GlassPanel {
                         SectionLabel("Scent Dispersion Dial")
-                        if let w = weatherService.weather {
+                        if let w = scentWeather {
                             let downwind = (Int(w.windDirectionDeg) + 180) % 360
                             let fromCard = cardinalDirection(Double(w.windDirectionDeg))
                             let downCard = cardinalDirection(Double(downwind))
@@ -210,7 +222,7 @@ public struct WindScreen: View {
                             .frame(maxWidth: .infinity)
                         } else {
                             VStack(spacing: 10) {
-                                Text("Waiting for live wind data…")
+                                Text("Waiting for GPS and recent local wind data…")
                                     .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                                 Button("Refresh Weather") {
@@ -279,7 +291,7 @@ public struct WindScreen: View {
                                                 .background(theme.palette.success.opacity(0.2))
                                                 .cornerRadius(6)
                                             case .unknown:
-                                                Text("Waiting GPS")
+                                                Text("Waiting for wind or GPS")
                                                     .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.mist)
                                             }
@@ -304,10 +316,14 @@ public struct WindScreen: View {
                                                 Text("⚠️ WARNING: Your scent cone is drifting straight towards this target location. Consider circling around for an upwind approach.")
                                                     .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.danger)
-                                            } else {
-                                                Text("✓ Clear: Scent is drifting away from this target. Safe approach vector.")
+                                            } else if eval.risk == .clear {
+                                                Text("✓ Clear: The estimated scent plume is away from this target. Wind can change; verify conditions in the field.")
                                                     .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.success)
+                                            } else {
+                                                Text("Scent risk is unavailable until GPS and recent local wind data are available.")
+                                                    .font(.field(size: 12))
+                                                    .foregroundColor(theme.palette.mist)
                                             }
                                         }
                                     }
@@ -321,6 +337,14 @@ public struct WindScreen: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            location.requestPermission()
+            location.startUpdating()
+            refreshWindIfNeeded(location.latestFix)
+        }
+        .onChange(of: location.latestFix) { fix in
+            refreshWindIfNeeded(fix)
+        }
         .sheet(isPresented: $showGuide) {
             WindGuideSheet(isPresented: $showGuide)
         }

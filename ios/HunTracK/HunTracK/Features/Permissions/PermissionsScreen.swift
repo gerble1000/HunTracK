@@ -28,7 +28,7 @@ public struct PermissionsScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editorDraft) { draft in
-            PermissionEditorSheet(permission: draft) { saved in
+            PermissionEditorSheet(permission: draft, boundaries: db.boundaries) { saved in
                 if saved.id == 0 {
                     db.addPermission(saved)
                 } else {
@@ -70,7 +70,10 @@ public struct PermissionsScreen: View {
                 }
             } else {
                 ForEach(db.permissions) { permission in
-                    PermissionCard(permission: permission) {
+                    PermissionCard(
+                        permission: permission,
+                        boundaryName: db.boundaries.first { $0.id == permission.boundaryAreaId }?.name
+                    ) {
                         editorDraft = permission
                     } onDelete: {
                         db.deletePermission(id: permission.id)
@@ -126,7 +129,8 @@ public struct PermissionsScreen: View {
     }
 
     private func linkedPermissionName(for boundary: BoundaryArea) -> String? {
-        db.permissions.first { $0.boundaryAreaId == boundary.id }?.displayLabel
+        let names = db.permissions.filter { $0.boundaryAreaId == boundary.id }.map { $0.displayLabel }
+        return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     // MARK: - Boundary capture hand-off
@@ -182,6 +186,7 @@ public struct PermissionsScreen: View {
 
 private struct PermissionCard: View {
     let permission: HuntingPermission
+    let boundaryName: String?
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -220,6 +225,7 @@ private struct PermissionCard: View {
                 MetricRow("Valid to", PermissionFormatting.date(permission.validToEpochMs))
                 MetricRow("Document", permission.docType.label)
             }
+            MetricRow("Boundary", boundaryName ?? "Not linked")
 
             if !permission.notes.isEmpty {
                 Text(permission.notes)
@@ -230,7 +236,7 @@ private struct PermissionCard: View {
             Text(
                 permission.isExpired
                     ? "Permission has lapsed — do not shoot on this ground."
-                    : "Verified written permission valid on the agreed boundaries."
+                    : "Permission details are stored on this device. Confirm your written agreement and boundaries before shooting."
             )
             .font(.field(size: 12))
             .foregroundColor(permission.isExpired ? theme.palette.danger : theme.palette.success)
@@ -300,13 +306,15 @@ private struct BoundaryCard: View {
 
 private struct PermissionEditorSheet: View {
     @State private var draft: HuntingPermission
+    let boundaries: [BoundaryArea]
     let onSave: (HuntingPermission) -> Void
 
     @ObservedObject private var theme = ThemeManager.shared
     @Environment(\.dismiss) private var dismiss
 
-    init(permission: HuntingPermission, onSave: @escaping (HuntingPermission) -> Void) {
+    init(permission: HuntingPermission, boundaries: [BoundaryArea], onSave: @escaping (HuntingPermission) -> Void) {
         _draft = State(initialValue: permission)
+        self.boundaries = boundaries
         self.onSave = onSave
     }
 
@@ -338,6 +346,21 @@ private struct PermissionEditorSheet: View {
                             Text("End date is before the start date.")
                                 .font(.field(size: 12))
                                 .foregroundColor(theme.palette.danger)
+                        }
+                    }
+
+                    Section(header: Text("Linked boundary").foregroundColor(theme.palette.bronze)) {
+                        Picker("Boundary", selection: $draft.boundaryAreaId) {
+                            Text("None").tag(Int64?.none)
+                            ForEach(boundaries) { boundary in
+                                Text(boundary.name.isEmpty ? boundary.zoneType.displayName : boundary.name)
+                                    .tag(Optional(boundary.id))
+                            }
+                        }
+                        if boundaries.isEmpty {
+                            Text("Record a boundary on the map, then link it here.")
+                                .font(.field(size: 12))
+                                .foregroundColor(theme.palette.mist)
                         }
                     }
 
@@ -446,6 +469,12 @@ struct PermissionBoundarySheet: View {
                             ForEach(permissions) { permission in
                                 Text(permission.displayLabel).tag(Optional(permission.id))
                             }
+                        }
+                        if let id = linkedPermissionId,
+                           permissions.first(where: { $0.id == id })?.boundaryAreaId != nil {
+                            Text("Saving this boundary will replace the permission's existing boundary link.")
+                                .font(.field(size: 12))
+                                .foregroundColor(theme.palette.mist)
                         }
                     }
 
