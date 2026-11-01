@@ -6,6 +6,7 @@ public struct PermissionsScreen: View {
 
     /// Non-nil while the permission editor sheet is open. `id == 0` means "new".
     @State private var editorDraft: HuntingPermission?
+    @State private var linkTarget: HuntingPermission?
     @State private var showingBoundarySheet = false
     @Environment(\.dismiss) private var dismiss
     private let captureOnCurrentMap: Bool
@@ -31,10 +32,19 @@ public struct PermissionsScreen: View {
             PermissionEditorSheet(permission: draft, boundaries: db.boundaries) { saved in
                 if saved.id == 0 {
                     db.addPermission(saved)
+                    if let stored = db.permissions.last, stored.boundaryAreaId == nil {
+                        // Present after the editor sheet finishes dismissing.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                            linkTarget = stored
+                        }
+                    }
                 } else {
                     db.updatePermission(saved)
                 }
             }
+        }
+        .sheet(item: $linkTarget) { permission in
+            PermissionBoundaryLinkSheet(permission: permission)
         }
     }
 
@@ -72,12 +82,15 @@ public struct PermissionsScreen: View {
                 ForEach(db.permissions) { permission in
                     PermissionCard(
                         permission: permission,
-                        boundaryName: db.boundaries.first { $0.id == permission.boundaryAreaId }?.name
-                    ) {
-                        editorDraft = permission
-                    } onDelete: {
-                        db.deletePermission(id: permission.id)
-                    }
+                        boundary: db.boundaries.first { $0.id == permission.boundaryAreaId },
+                        onEdit: { editorDraft = permission },
+                        onLink: { linkTarget = permission },
+                        onShowMap: {
+                            db.focusMap(on: [permission.id])
+                            NotificationCenter.default.post(name: .openMapTab, object: nil)
+                        },
+                        onDelete: { db.deletePermission(id: permission.id) }
+                    )
                 }
             }
 
@@ -119,18 +132,16 @@ public struct PermissionsScreen: View {
                 ForEach(db.boundaries) { boundary in
                     BoundaryCard(
                         boundary: boundary,
-                        linkedPermissionName: linkedPermissionName(for: boundary)
-                    ) {
-                        db.deleteBoundary(id: boundary.id)
-                    }
+                        permissions: db.permissions,
+                        onShowMap: {
+                            db.focusMap(onBoundary: boundary.id)
+                            NotificationCenter.default.post(name: .openMapTab, object: nil)
+                        },
+                        onDelete: { db.deleteBoundary(id: boundary.id) }
+                    )
                 }
             }
         }
-    }
-
-    private func linkedPermissionName(for boundary: BoundaryArea) -> String? {
-        let names = db.permissions.filter { $0.boundaryAreaId == boundary.id }.map { $0.displayLabel }
-        return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     // MARK: - Boundary capture hand-off
@@ -186,8 +197,10 @@ public struct PermissionsScreen: View {
 
 private struct PermissionCard: View {
     let permission: HuntingPermission
-    let boundaryName: String?
+    let boundary: BoundaryArea?
     let onEdit: () -> Void
+    let onLink: () -> Void
+    let onShowMap: () -> Void
     let onDelete: () -> Void
 
     @ObservedObject private var theme = ThemeManager.shared
@@ -225,7 +238,22 @@ private struct PermissionCard: View {
                 MetricRow("Valid to", PermissionFormatting.date(permission.validToEpochMs))
                 MetricRow("Document", permission.docType.label)
             }
-            MetricRow("Boundary", boundaryName ?? "Not linked")
+            if let boundary = boundary {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Linked boundary")
+                        .font(.field(size: 12, weight: .semibold))
+                        .foregroundColor(theme.palette.mist)
+                    Text(boundary.name.isEmpty ? boundary.zoneType.displayName : boundary.name)
+                        .font(.field(size: 15, weight: .semibold))
+                        .foregroundColor(theme.palette.cream)
+                    Text("\(boundary.zoneType.displayName) · \(PermissionFormatting.area(boundary.areaSqMeters))")
+                        .font(.field(size: 12))
+                        .foregroundColor(Color(hex: boundary.zoneType.mapColorHex))
+                }
+                .padding(.top, 4)
+            } else {
+                MetricRow("Boundary", "Not linked")
+            }
 
             if !permission.notes.isEmpty {
                 Text(permission.notes)
@@ -243,17 +271,27 @@ private struct PermissionCard: View {
             .padding(.top, 2)
 
             HStack(spacing: 12) {
-                Button("Edit") { onEdit() }
+                Button(boundary == nil ? "Link boundary" : "Change link") { onLink() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
 
+                Button("Show on map") { onShowMap() }
+                    .font(.field(size: 14, weight: .semibold))
+                    .foregroundColor(boundary == nil ? theme.palette.mist : theme.palette.bronzeBright)
+                    .disabled(boundary == nil)
+
+                Button("Edit") { onEdit() }
+                    .font(.field(size: 14, weight: .semibold))
+                    .foregroundColor(theme.palette.bronzeBright)
+            }
+            .padding(.top, 6)
+
+            HStack {
                 Button("Delete") { onDelete() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.danger)
-
                 Spacer()
             }
-            .padding(.top, 6)
         }
     }
 }
@@ -262,10 +300,16 @@ private struct PermissionCard: View {
 
 private struct BoundaryCard: View {
     let boundary: BoundaryArea
-    let linkedPermissionName: String?
+    let permissions: [HuntingPermission]
+    let onShowMap: () -> Void
     let onDelete: () -> Void
 
     @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var db = DatabaseService.shared
+
+    private var linked: [HuntingPermission] {
+        permissions.filter { $0.boundaryAreaId == boundary.id }
+    }
 
     var body: some View {
         GlassPanel {
@@ -283,7 +327,7 @@ private struct BoundaryCard: View {
             MetricRow("Points", String(boundary.points.count))
             MetricRow("Area", PermissionFormatting.area(boundary.areaSqMeters))
             MetricRow("Perimeter", PermissionFormatting.perimeter(DatabaseService.perimeterMeters(boundary.points)))
-            MetricRow("Permission", linkedPermissionName ?? "Not linked")
+            MetricRow("Permission", linked.isEmpty ? "Not linked" : linked.map { $0.displayLabel }.joined(separator: ", "))
 
             if !boundary.notes.isEmpty {
                 Text(boundary.notes)
@@ -291,11 +335,33 @@ private struct BoundaryCard: View {
                     .foregroundColor(theme.palette.mist)
             }
 
-            HStack {
-                Button("Delete boundary") { onDelete() }
+            HStack(spacing: 12) {
+                Menu {
+                    if permissions.isEmpty {
+                        Button("Add a permission first") {}
+                    } else {
+                        ForEach(permissions) { permission in
+                            let isLinked = permission.boundaryAreaId == boundary.id
+                            Button {
+                                db.linkPermission(id: permission.id, toBoundary: isLinked ? nil : boundary.id)
+                            } label: {
+                                Text(isLinked ? "Unlink \(permission.displayLabel)" : "Link \(permission.displayLabel)")
+                            }
+                        }
+                    }
+                } label: {
+                    Text(linked.isEmpty ? "Link permission" : "Change link")
+                        .font(.field(size: 14, weight: .semibold))
+                        .foregroundColor(theme.palette.bronzeBright)
+                }
+
+                Button("Show on map") { onShowMap() }
+                    .font(.field(size: 14, weight: .semibold))
+                    .foregroundColor(theme.palette.bronzeBright)
+
+                Button("Delete") { onDelete() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.danger)
-                Spacer()
             }
             .padding(.top, 6)
         }
@@ -350,17 +416,34 @@ private struct PermissionEditorSheet: View {
                     }
 
                     Section(header: Text("Linked boundary").foregroundColor(theme.palette.bronze)) {
-                        Picker("Boundary", selection: $draft.boundaryAreaId) {
-                            Text("None").tag(Int64?.none)
-                            ForEach(boundaries) { boundary in
-                                Text(boundary.name.isEmpty ? boundary.zoneType.displayName : boundary.name)
-                                    .tag(Optional(boundary.id))
+                        Button {
+                            draft.boundaryAreaId = nil
+                        } label: {
+                            HStack {
+                                Text("None")
+                                Spacer()
+                                if draft.boundaryAreaId == nil {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
                         if boundaries.isEmpty {
-                            Text("Record a boundary on the map, then link it here.")
+                            Text("Save this permission, then link an existing area or draw one on the map.")
                                 .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
+                        }
+                        ForEach(boundaries) { boundary in
+                            Button {
+                                draft.boundaryAreaId = boundary.id
+                            } label: {
+                                HStack {
+                                    Text(boundary.name.isEmpty ? boundary.zoneType.displayName : boundary.name)
+                                    Spacer()
+                                    if draft.boundaryAreaId == boundary.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -464,15 +547,34 @@ struct PermissionBoundarySheet: View {
                     }
 
                     Section(header: Text("Link to permission").foregroundColor(theme.palette.bronze)) {
-                        Picker("Permission", selection: $linkedPermissionId) {
-                            Text("None").tag(Int64?.none)
-                            ForEach(permissions) { permission in
-                                Text(permission.displayLabel).tag(Optional(permission.id))
+                        Button {
+                            linkedPermissionId = nil
+                        } label: {
+                            HStack {
+                                Text("None")
+                                Spacer()
+                                if linkedPermissionId == nil { Image(systemName: "checkmark") }
+                            }
+                        }
+                        if permissions.isEmpty {
+                            Text("Add a written permission first, then link it here or from the permission card.")
+                                .font(.field(size: 12))
+                                .foregroundColor(theme.palette.mist)
+                        }
+                        ForEach(permissions) { permission in
+                            Button {
+                                linkedPermissionId = permission.id
+                            } label: {
+                                HStack {
+                                    Text(permission.displayLabel)
+                                    Spacer()
+                                    if linkedPermissionId == permission.id { Image(systemName: "checkmark") }
+                                }
                             }
                         }
                         if let id = linkedPermissionId,
                            permissions.first(where: { $0.id == id })?.boundaryAreaId != nil {
-                            Text("Saving this boundary will replace the permission's existing boundary link.")
+                            Text("Saving this boundary replaces that permission's current boundary link.")
                                 .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
                         }
@@ -511,6 +613,140 @@ struct PermissionBoundarySheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Link an existing permission to a boundary
+
+private struct PermissionBoundaryLinkSheet: View {
+    let permission: HuntingPermission
+
+    @ObservedObject private var db = DatabaseService.shared
+    @ObservedObject private var location = LocationManager.shared
+    @ObservedObject private var theme = ThemeManager.shared
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var boundaryName: String = ""
+    @State private var zoneType: BoundaryZoneType = .hunting
+
+    var body: some View {
+        NavigationView {
+            ScreenBackground {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Link hunting area")
+                            .font(.field(size: 26, weight: .bold))
+                            .foregroundColor(theme.palette.cream)
+                        Text("Tie \(permission.displayLabel) to a saved boundary, or create one. The link is kept on this device and shown on both the permission and the boundary.")
+                            .font(.field(size: 14))
+                            .foregroundColor(theme.palette.mist)
+
+                        Button("Skip for now") { dismiss() }
+                            .font(.field(size: 15, weight: .semibold))
+                            .foregroundColor(theme.palette.bronzeBright)
+
+                        SectionLabel("Choose existing")
+                        if db.boundaries.isEmpty {
+                            Text("No saved boundaries yet — create one below.")
+                                .font(.field(size: 13))
+                                .foregroundColor(theme.palette.mist)
+                        } else {
+                            ForEach(db.boundaries) { boundary in
+                                Button {
+                                    db.linkPermission(id: permission.id, toBoundary: boundary.id)
+                                    dismiss()
+                                } label: {
+                                    GlassPanel(compact: true) {
+                                        HStack {
+                                            Circle()
+                                                .fill(Color(hex: boundary.zoneType.mapColorHex))
+                                                .frame(width: 10, height: 10)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(boundary.name.isEmpty ? boundary.zoneType.displayName : boundary.name)
+                                                    .font(.field(size: 15, weight: .semibold))
+                                                    .foregroundColor(theme.palette.cream)
+                                                Text("\(boundary.zoneType.displayName) · \(PermissionFormatting.area(boundary.areaSqMeters))")
+                                                    .font(.field(size: 12))
+                                                    .foregroundColor(theme.palette.mist)
+                                            }
+                                            Spacer()
+                                            if permission.boundaryAreaId == boundary.id {
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(theme.palette.bronzeBright)
+                                            }
+                                        }
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+
+                        SectionLabel("Create new boundary")
+                        TextField("Boundary name", text: $boundaryName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Picker("Zone type", selection: $zoneType) {
+                            ForEach(BoundaryZoneType.allCases, id: \.self) { zone in
+                                Text(zone.displayName).tag(zone)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Button("Draw fence on map") { startCapture(.draw) }
+                            .font(.field(size: 15, weight: .semibold))
+                            .foregroundColor(theme.palette.bronzeBright)
+                        Button("Walk fence on map") { startCapture(.walk) }
+                            .font(.field(size: 15, weight: .semibold))
+                            .foregroundColor(theme.palette.bronzeBright)
+                        Button("Quick 500 m square around me") { createSquare() }
+                            .font(.field(size: 15, weight: .semibold))
+                            .foregroundColor(theme.palette.bronzeBright)
+                            .disabled(location.latestFix == nil)
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("Link boundary")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(theme.palette.mist)
+                }
+            }
+        }
+        .onAppear {
+            if boundaryName.isEmpty { boundaryName = permission.displayLabel }
+            location.requestPermission()
+            location.startUpdating()
+        }
+    }
+
+    private var resolvedName: String {
+        let trimmed = boundaryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? zoneType.displayName : trimmed
+    }
+
+    private func startCapture(_ mode: BoundaryCaptureMode) {
+        db.pendingBoundary = PendingBoundaryCreation(
+            mode: mode,
+            name: resolvedName,
+            zoneType: zoneType,
+            returnToPermissions: true,
+            permissionId: permission.id
+        )
+        dismiss()
+    }
+
+    private func createSquare() {
+        guard let fix = location.latestFix else { return }
+        let id = db.addSquareBoundary(
+            name: resolvedName,
+            zoneType: zoneType,
+            latitude: fix.latitude,
+            longitude: fix.longitude
+        )
+        db.linkPermission(id: permission.id, toBoundary: id)
+        dismiss()
     }
 }
 

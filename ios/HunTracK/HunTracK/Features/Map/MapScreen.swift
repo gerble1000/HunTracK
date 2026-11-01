@@ -67,7 +67,7 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
 private enum OverlayKind {
     case route
     case pendingBoundary
-    case zone(BoundaryZoneType)
+    case zone(BoundaryZoneType, highlighted: Bool)
     case grid(major: Bool)
     case plume
 }
@@ -85,15 +85,21 @@ private struct MapContentSnapshot: Equatable {
     var homingLatitude: Double?
     var homingLongitude: Double?
     var pendingCoordinates: [String] = []
+    var focusedBoundaryIds: [Int64] = []
 }
 
 // MARK: - The UIKit map host
 
-/// Animated visual estimate; positions and spread use the same model as Wind & Scent.
+/// Drifting pink scent smoke. Puff positions follow the same plume model as Wind & Scent;
+/// puff size stays in screen points (as Android's circle layer does) so a country-scale
+/// view does not inflate them into a solid cone.
 private final class ScentSmokeRenderer: MKOverlayRenderer {
     let fix: GpsFix
     let weather: WeatherSnapshot
     let plume: Plume
+
+    private static let pink = UIColor(red: 0.96, green: 0.32, blue: 0.62, alpha: 1)
+    private static let highlight = UIColor(red: 0.99, green: 0.78, blue: 0.88, alpha: 1)
 
     init(overlay: MKOverlay, fix: GpsFix, weather: WeatherSnapshot) {
         self.fix = fix
@@ -107,31 +113,73 @@ private final class ScentSmokeRenderer: MKOverlayRenderer {
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         let speed = max(0, min(60, weather.windSpeedKmh))
-        let period = 1 / (0.08 + speed * 0.006)
+        let gust = max(speed, weather.windGustKmh ?? speed)
+        let gusty = gust - speed >= 8
+        let period: Double = speed < 5 ? 4.2 : (speed < 16 ? 2.8 : (speed < 25 ? 1.8 : 1.1))
         let phase = Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
         let downwind = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
-        let metersPerPoint = MKMetersPerMapPointAtLatitude(fix.latitude)
-        let colors = [UIColor.systemPink.withAlphaComponent(0.45).cgColor,
-                      UIColor.systemPink.withAlphaComponent(0).cgColor] as CFArray
+        let colors = [Self.highlight.cgColor, Self.pink.withAlphaComponent(0.0).cgColor] as CFArray
         guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) else { return }
-        for index in 0..<32 {
-            let age = (phase + Double(index) / 32).truncatingRemainder(dividingBy: 1)
-            let distance = 3 + age * plume.lengthM
-            let halfWidth = plume.halfWidthAt(distanceM: distance)
-            let lane = Double(index % 5 - 2) / 2.5
-            let lateral = halfWidth * (lane * 0.55 + 0.25 * sin(phase * 2 * .pi + Double(index)))
+
+        let puffCount = gusty ? 40 : 30
+        for index in 0..<puffCount {
+            let age = (phase + Double(index) / Double(puffCount)).truncatingRemainder(dividingBy: 1)
+            let alongFraction = age
+            let distance = 6 + alongFraction * plume.lengthM
+            let halfWidth = plume.halfWidthAt(distanceM: distance) * plume.scatter
+            let lane = Double((index % 7) - 3) / 3.2
+            let wobble = sin(phase * 2 * .pi * (gusty ? 2.4 : 1.1) + Double(index) * 1.3)
+            let lateral = halfWidth * (lane * 0.85 + wobble * (gusty ? 0.45 : 0.18)) * (0.25 + 0.75 * alongFraction)
             let along = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: distance, bearing: downwind)
             let position = Self.destination(latitude: along.latitude, longitude: along.longitude, meters: lateral, bearing: downwind + 90)
             let centre = point(for: MKMapPoint(position))
-            let geographicRadius = (8 + halfWidth * 0.24) / metersPerPoint
-            let radius = CGFloat(max(5 / Double(zoomScale), min(24 / Double(zoomScale), geographicRadius)))
-            let opacity = CGFloat(min(1, min(age / 0.08, (1 - age) / 0.25)))
+            let billow = 0.55 + 0.45 * sin(.pi * alongFraction)
+            let screenRadius = (gusty ? 16.0 : 13.0) + billow * 18.0
+            let radius = CGFloat(screenRadius / Double(zoomScale))
+            let fadeIn = min(1, alongFraction / 0.08)
+            let fadeOut = min(1, (1 - alongFraction) / (0.28 + plume.dilution * 0.2))
+            let opacity = CGFloat(min(0.82, max(0.18, fadeIn * fadeOut * (0.9 - plume.dilution * 0.35))))
             context.saveGState()
             context.setAlpha(opacity)
             context.drawRadialGradient(gradient, startCenter: centre, startRadius: 0,
                                        endCenter: centre, endRadius: radius, options: [])
             context.restoreGState()
         }
+
+        // Source billow, so the smoke clearly leaves the hunter and travels downwind.
+        for index in 0..<10 {
+            let age = (phase * 1.4 + Double(index) * 0.1).truncatingRemainder(dividingBy: 1)
+            let distance = 4 + age * 28
+            let wobble = sin(phase * 6 + Double(index)) * 8 * plume.scatter
+            let along = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: distance, bearing: downwind)
+            let position = Self.destination(latitude: along.latitude, longitude: along.longitude, meters: wobble, bearing: downwind + 90)
+            let centre = point(for: MKMapPoint(position))
+            let radius = CGFloat((18 + age * 14) / Double(zoomScale))
+            context.saveGState()
+            context.setAlpha(CGFloat(0.55 * (1 - age * 0.45)))
+            context.drawRadialGradient(gradient, startCenter: centre, startRadius: 0,
+                                       endCenter: centre, endRadius: radius, options: [])
+            context.restoreGState()
+        }
+
+        let tip = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: plume.lengthM * 0.92, bearing: downwind)
+        let tipPoint = point(for: MKMapPoint(tip))
+        let back = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: plume.lengthM * 0.78, bearing: downwind)
+        let backPoint = point(for: MKMapPoint(back))
+        let left = Self.destination(latitude: tip.latitude, longitude: tip.longitude, meters: 18, bearing: downwind + 140)
+        let right = Self.destination(latitude: tip.latitude, longitude: tip.longitude, meters: 18, bearing: downwind - 140)
+        context.saveGState()
+        context.setStrokeColor(Self.pink.cgColor)
+        context.setLineWidth(4 / zoomScale)
+        context.setLineCap(.round)
+        context.move(to: backPoint)
+        context.addLine(to: tipPoint)
+        context.move(to: point(for: MKMapPoint(left)))
+        context.addLine(to: tipPoint)
+        context.move(to: point(for: MKMapPoint(right)))
+        context.addLine(to: tipPoint)
+        context.strokePath()
+        context.restoreGState()
     }
 
     private static func destination(latitude: Double, longitude: Double, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
@@ -142,6 +190,34 @@ private final class ScentSmokeRenderer: MKOverlayRenderer {
         let targetLat = asin(sin(lat) * cos(distance) + cos(lat) * sin(distance) * cos(direction))
         let targetLon = lon + atan2(sin(direction) * sin(distance) * cos(lat), cos(distance) - sin(lat) * sin(targetLat))
         return CLLocationCoordinate2D(latitude: targetLat * 180 / .pi, longitude: targetLon * 180 / .pi)
+    }
+}
+
+private enum MapZoom {
+    static let minMeters = 50.0
+    static let maxMeters = 2_000.0
+    static let steps: [Double] = [50, 100, 200, 400, 800, 1_400, 2_000]
+
+    static func clamp(_ meters: Double) -> Double {
+        min(maxMeters, max(minMeters, meters))
+    }
+
+    static func step(_ current: Double, inward: Bool) -> Double {
+        if inward {
+            return steps.last(where: { $0 < current * 0.92 }) ?? steps[0]
+        }
+        return steps.first(where: { $0 > current * 1.08 }) ?? steps[steps.count - 1]
+    }
+
+    static func label(_ meters: Double) -> String {
+        if meters >= 950 {
+            let kilometres = meters / 1000
+            if abs(kilometres - kilometres.rounded()) < 0.08 {
+                return String(format: "%.0f km", kilometres)
+            }
+            return String(format: "%.1f km", kilometres)
+        }
+        return String(format: "%.0f m", meters)
     }
 }
 
@@ -163,6 +239,7 @@ private struct MapViewHost: UIViewRepresentable {
     var northUpToken: Int
     var windFix: GpsFix?
     var windWeather: WeatherSnapshot?
+    var focusedBoundaryIds: Set<Int64>
     var bronze: UIColor
 
     /// True while a "Draw it" boundary capture is in progress: map panning is
@@ -197,8 +274,11 @@ private struct MapViewHost: UIViewRepresentable {
         mapView.isRotateEnabled = true
         mapView.isPitchEnabled = false
         mapView.pointOfInterestFilter = .excludingAll
-        // MapKit can still clamp this requested range for a map type/location.
-        mapView.setCameraZoomRange(MKMapView.CameraZoomRange(minCenterCoordinateDistance: 1, maxCenterCoordinateDistance: 2000000), animated: false)
+        // Loose camera limits; the exact 50 m–2 km view height is clamped in regionDidChange.
+        mapView.setCameraZoomRange(
+            MKMapView.CameraZoomRange(minCenterCoordinateDistance: 30, maxCenterCoordinateDistance: 12_000),
+            animated: false
+        )
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
@@ -275,7 +355,8 @@ private struct MapViewHost: UIViewRepresentable {
             showCulls: showCulls,
             homingLatitude: homingTarget?.latitude,
             homingLongitude: homingTarget?.longitude,
-            pendingCoordinates: pendingPoints.map { "\($0.orderIndex):\($0.latitude):\($0.longitude)" }
+            pendingCoordinates: pendingPoints.map { "\($0.orderIndex):\($0.latitude):\($0.longitude)" },
+            focusedBoundaryIds: focusedBoundaryIds.sorted()
         )
 
         if coordinator.lastSnapshot != snapshot {
@@ -301,6 +382,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     private var gridOverlays: [MKPolyline] = []
     private var plumeOverlays: [MKCircle] = []
     private var smokeTimer: Timer?
+    private var applyingZoomClamp = false
     private var gridKey = ""
     private var lastPlumeFix: GpsFix?
     private var lastPlumeWeather: WeatherSnapshot?
@@ -311,7 +393,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     }
 
     func startSmokeAnimation(_ mapView: MKMapView) {
-        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self, weak mapView] _ in
+        let timer = Timer(timeInterval: 0.07, repeats: true) { [weak self, weak mapView] _ in
             guard let self = self, let mapView = mapView else { return }
             guard mapView.window != nil, UIApplication.shared.applicationState == .active else { return }
             self.updatePlume(mapView)
@@ -413,7 +495,8 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
                 CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
             }
             let polygon = MKPolygon(coordinates: &coordinates, count: coordinates.count)
-            overlayKinds[ObjectIdentifier(polygon)] = .zone(boundary.zoneType)
+            let highlighted = host.focusedBoundaryIds.contains(boundary.id)
+            overlayKinds[ObjectIdentifier(polygon)] = .zone(boundary.zoneType, highlighted: highlighted)
             mapView.addOverlay(polygon)
         }
 
@@ -511,7 +594,16 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
 
     func updatePlume(_ mapView: MKMapView) {
         let fresh = ScentPlumeGeometry.usableWeather(parent.windWeather, for: parent.windFix) != nil
-        guard lastPlumeFix != parent.windFix || lastPlumeWeather != parent.windWeather || lastPlumeFresh != fresh else { return }
+        let moved: Bool
+        if let last = lastPlumeFix, let fix = parent.windFix {
+            moved = DatabaseService.haversineMeters(last.latitude, last.longitude, fix.latitude, fix.longitude) > 20
+        } else {
+            moved = (lastPlumeFix == nil) != (parent.windFix == nil)
+        }
+        let weatherChanged = lastPlumeWeather != parent.windWeather || lastPlumeFresh != fresh
+        let shouldDraw = fresh && (plumeOverlays.isEmpty || moved || weatherChanged)
+        let shouldClear = !fresh && !plumeOverlays.isEmpty
+        guard shouldDraw || shouldClear else { return }
         lastPlumeFix = parent.windFix
         lastPlumeWeather = parent.windWeather
         lastPlumeFresh = fresh
@@ -590,8 +682,12 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             view.canShowCallout = true
             let marker = parent.markers.first { $0.id == hunt.recordId }
             let category: MarkerCategory = hunt.kind == .cull ? .cull : (marker?.category ?? .otherWildlife)
-            view.image = markerImage(speciesId: marker?.speciesId, category: category, tint: hunt.tint)
-            view.centerOffset = CGPoint(x: 0, y: -25)
+            let speciesId = hunt.kind == .cull ? nil : marker?.speciesId
+            let diameter: CGFloat = (hunt.kind == .cull || category == .cull)
+                ? MarkerArtwork.cullDiameter
+                : MarkerArtwork.markerDiameter
+            view.image = MarkerArtwork.icon(category: category, speciesId: speciesId, diameter: diameter)
+            view.centerOffset = CGPoint(x: 0, y: -diameter / 2)
             view.rightCalloutAccessoryView = hunt.kind == .fieldMarker ? UIButton(type: .detailDisclosure) : nil
             return view
         }
@@ -606,49 +702,6 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         return view
     }
 
-    private func markerImage(speciesId: String?, category: MarkerCategory, tint: UIColor) -> UIImage {
-        let size = CGSize(width: 50, height: 58)
-        return UIGraphicsImageRenderer(size: size).image { context in
-            let cg = context.cgContext
-            let pin = UIBezierPath()
-            pin.move(to: CGPoint(x: 14, y: 37))
-            pin.addLine(to: CGPoint(x: 25, y: 56))
-            pin.addLine(to: CGPoint(x: 36, y: 37))
-            pin.close()
-            (category == .cull ? UIColor.systemRed : tint).setFill()
-            pin.fill()
-            let circle = CGRect(x: 3, y: 2, width: 44, height: 44)
-            cg.saveGState()
-            UIBezierPath(ovalIn: circle).addClip()
-            UIColor.systemBackground.setFill()
-            cg.fill(circle)
-            if category != .cull,
-               let name = MarkerArtwork.photoName(speciesId: speciesId, category: category),
-               let image = UIImage(named: name) {
-                let scale = max(circle.width / image.size.width, circle.height / image.size.height)
-                let width = image.size.width * scale
-                let height = image.size.height * scale
-                image.draw(in: CGRect(x: circle.midX - width / 2, y: circle.midY - height / 2, width: width, height: height))
-            } else if category == .cull {
-                let skull = "☠︎" as NSString
-                let font = UIFont.systemFont(ofSize: 33, weight: .bold)
-                let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.systemRed]
-                let textSize = skull.size(withAttributes: attributes)
-                skull.draw(at: CGPoint(x: circle.midX - textSize.width / 2, y: circle.midY - textSize.height / 2),
-                           withAttributes: attributes)
-            } else if let symbol = UIImage(systemName: MarkerArtwork.symbol(for: category),
-                                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 25, weight: .bold)) {
-                symbol.withTintColor(tint, renderingMode: .alwaysOriginal)
-                    .draw(in: CGRect(x: 10, y: 9, width: 30, height: 30))
-            }
-            cg.restoreGState()
-            (category == .cull ? UIColor.systemRed : tint).setStroke()
-            let border = UIBezierPath(ovalIn: circle)
-            border.lineWidth = 3
-            border.stroke()
-        }.withRenderingMode(.alwaysOriginal)
-    }
-
     func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
         guard let hunt = view.annotation as? HuntAnnotation, hunt.kind == .fieldMarker else { return }
         parent.onSelectMarker(hunt.recordId)
@@ -656,15 +709,16 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
 
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         switch overlayKinds[ObjectIdentifier(overlay)] {
-        case .zone(let zoneType):
+        case .zone(let zoneType, let highlighted):
             guard let polygon = overlay as? MKPolygon else {
                 return MKOverlayRenderer(overlay: overlay)
             }
             let color = mapUIColor(hex: zoneType.mapColorHex)
             let renderer = MKPolygonRenderer(polygon: polygon)
             renderer.strokeColor = color
-            renderer.lineWidth = 2
-            renderer.fillColor = color.withAlphaComponent(CGFloat(zoneType.mapFillOpacity))
+            renderer.lineWidth = highlighted ? 5 : 2.5
+            let fill = highlighted ? min(0.42, zoneType.mapFillOpacity + 0.2) : zoneType.mapFillOpacity
+            renderer.fillColor = color.withAlphaComponent(CGFloat(fill))
             return renderer
 
         case .route:
@@ -714,11 +768,23 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
 
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
         let centre = mapView.centerCoordinate
-        let span = min(2000000, max(1, mapView.region.span.latitudeDelta * 111000))
+        let height = mapView.region.span.latitudeDelta * 111_000
+        let clamped = MapZoom.clamp(height)
+        if !applyingZoomClamp, abs(height - clamped) > max(8, clamped * 0.06) {
+            applyingZoomClamp = true
+            let region = MKCoordinateRegion(
+                center: centre,
+                latitudinalMeters: clamped,
+                longitudinalMeters: clamped
+            )
+            mapView.setRegion(region, animated: false)
+            applyingZoomClamp = false
+            return
+        }
         updateGrid(mapView)
         // Hop to the next runloop so we never mutate SwiftUI state mid-update.
         DispatchQueue.main.async { [weak self] in
-            self?.parent.onRegionChanged(centre, span)
+            self?.parent.onRegionChanged(centre, clamped)
         }
     }
 }
@@ -774,9 +840,7 @@ public struct MapScreen: View {
                     centre: centre,
                     spanMeters: spanMeters,
                     regionRequestToken: regionRequestToken,
-                    markers: db.markers.filter { marker in
-                        db.preferences.showCullPinsOnMap || marker.category != .cull
-                    },
+                    markers: db.markers,
                     culls: db.culls,
                     boundaries: db.boundaries,
                     routes: db.routes,
@@ -789,6 +853,7 @@ public struct MapScreen: View {
                     northUpToken: northUpToken,
                     windFix: location.latestFix,
                     windWeather: weatherService.weather ?? db.cachedWeather,
+                    focusedBoundaryIds: Set(db.permissionMapFocus.map { $0.boundaryAreaId }),
                     bronze: UIColor(theme.palette.bronze),
                     isDrawing: capture?.mode == .draw,
                     onRegionChanged: { coordinate, visibleSpan in
@@ -808,15 +873,41 @@ public struct MapScreen: View {
                     }
                 )
                 .ignoresSafeArea()
-
-                topBar
             }
-            .overlay(alignment: .trailing) {
-                if capture == nil {
-                    mapControls.padding(.trailing, 14)
+            .overlay(alignment: .top) {
+                VStack(spacing: 6) {
+                    topBar
+                    if !db.permissionMapFocus.isEmpty {
+                        focusBanner
+                            .padding(.horizontal, 14)
+                    }
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { bottomPanel }
+            .overlay(alignment: .bottomLeading) {
+                if capture == nil {
+                    windLegend
+                        .padding(.leading, 12)
+                        .padding(.bottom, 8)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if capture == nil {
+                    mapControls
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 8)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if capture != nil {
+                    captureBar
+                        .padding(.horizontal, 12)
+                        .padding(.top, 4)
+                        .padding(.bottom, 6)
+                        .background(theme.palette.forestDeep.opacity(0.94))
+                } else {
+                    bottomPanel
+                }
+            }
         }
         .sheet(isPresented: $showingAddSheet) {
             QuickAddMarkerSheet(
@@ -893,6 +984,9 @@ public struct MapScreen: View {
         }
         .onChange(of: db.pendingBoundary) { _ in
             syncBoundaryCapture()
+        }
+        .onChange(of: db.permissionMapFocus) { focus in
+            frameBoundaries(focus.map { $0.boundaryAreaId })
         }
         .onChange(of: db.preferences.showOsGridRef) { _ in updateGridRef(centre) }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
@@ -974,10 +1068,6 @@ public struct MapScreen: View {
             }
 
             }
-
-            if capture != nil {
-                captureBar
-            }
         }
         .padding(.horizontal, 14)
         .padding(.top, 8)
@@ -1033,46 +1123,88 @@ public struct MapScreen: View {
     }
 
     private var captureBar: some View {
-        GlassPanel(compact: true) {
-            SectionLabel("Boundary capture")
-            Text(capture?.zoneType.displayName ?? "")
-                .font(.field(size: 15, weight: .semibold))
-                .foregroundColor(theme.palette.cream)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    SectionLabel("Boundary capture")
+                    Text(capture?.zoneType.displayName ?? "")
+                        .font(.field(size: 16, weight: .semibold))
+                        .foregroundColor(theme.palette.cream)
+                }
+                Spacer(minLength: 8)
+                Text(MapZoom.label(spanMeters))
+                    .font(.field(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(theme.palette.bronzeBright)
+            }
             Text(captureHelp)
                 .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Text("\(pendingPoints.count) points")
                     .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
-
+                if pendingPoints.count >= 3 {
+                    Text(areaText(BoundaryArea(name: "", zoneType: capture?.zoneType ?? .hunting, points: pendingPoints, areaSqMeters: DatabaseService.areaSqMeters(pendingPoints))))
+                        .font(.field(size: 12))
+                        .foregroundColor(theme.palette.mist)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
                 if capture?.mode == .walk {
-                    Button("Add current fix") {
-                        if let fix = location.latestFix {
-                            appendWalkPoint(fix)
-                        }
+                    Button("Add fix") {
+                        if let fix = location.latestFix { appendWalkPoint(fix) }
                     }
                     .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
                 }
+                zoomChip("plus") { zoom(inward: true) }
+                zoomChip("minus") { zoom(inward: false) }
             }
 
-            HuntButton("Save boundary", icon: "checkmark") {
-                saveBoundary()
-            }
-            .disabled(pendingPoints.count < 3)
-            HStack {
-                Button("Undo point") {
+            HuntButton("Save boundary", icon: "checkmark") { saveBoundary() }
+                .disabled(pendingPoints.count < 3)
+
+            HStack(spacing: 10) {
+                Button {
                     if !pendingPoints.isEmpty { pendingPoints.removeLast() }
+                } label: {
+                    Text("Undo point")
+                        .font(.field(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(theme.palette.charcoal)
+                        .foregroundColor(pendingPoints.isEmpty ? theme.palette.mist : theme.palette.cream)
+                        .cornerRadius(10)
                 }
                 .disabled(pendingPoints.isEmpty)
-                Spacer()
-                Button("Cancel") { finishBoundaryCapture() }
+
+                Button {
+                    finishBoundaryCapture()
+                } label: {
+                    Text("Cancel")
+                        .font(.field(size: 15, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(theme.palette.danger)
+                        .foregroundColor(theme.palette.cream)
+                        .cornerRadius(10)
+                }
             }
-            .font(.field(size: 13, weight: .semibold))
-            .foregroundColor(theme.palette.bronzeBright)
         }
+        .padding(12)
+    }
+
+    private func zoomChip(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.field(size: 16, weight: .bold))
+                .frame(width: 36, height: 36)
+                .foregroundColor(theme.palette.cream)
+                .background(theme.palette.charcoal)
+                .cornerRadius(8)
+        }
+        .accessibilityLabel(symbol == "plus" ? "Zoom in" : "Zoom out")
     }
 
     private var captureHelp: String {
@@ -1112,8 +1244,16 @@ public struct MapScreen: View {
 
     private var mapControls: some View {
         VStack(spacing: 8) {
-            mapControl("Zoom in around GPS", symbol: "plus") { zoom(by: 0.5) }
-            mapControl("Zoom out around GPS", symbol: "minus") { zoom(by: 2) }
+            Text(MapZoom.label(spanMeters))
+                .font(.field(size: 11, weight: .bold, design: .monospaced))
+                .foregroundColor(theme.palette.cream)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(theme.palette.charcoal.opacity(0.9))
+                .cornerRadius(8)
+                .accessibilityLabel("View height \(MapZoom.label(spanMeters))")
+            mapControl("Zoom in", symbol: "plus") { zoom(inward: true) }
+            mapControl("Zoom out", symbol: "minus") { zoom(inward: false) }
             mapControl("Centre on my GPS location", symbol: "figure.stand") { recenter() }
             HuntMarkLocationButton {
                 markerCoordinate = nil
@@ -1121,6 +1261,71 @@ public struct MapScreen: View {
             }
             .disabled(location.latestFix == nil || capture != nil)
         }
+    }
+
+    private var windLegend: some View {
+        let weather = scentWeather
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(red: 0.96, green: 0.32, blue: 0.62))
+                    .frame(width: 10, height: 10)
+                Text("Scent smoke")
+                    .font(.field(size: 12, weight: .bold))
+                    .foregroundColor(theme.palette.cream)
+            }
+            if let weather = weather {
+                let from = weather.windDirectionDeg
+                let downwind = (from + 180).truncatingRemainder(dividingBy: 360)
+                let unit = db.preferences.windUnit
+                Text("From \(ScentPlumeGeometry.cardinal(from)) \(Int(from))° · \(ScentPlumeGeometry.formatWindSpeed(weather.windSpeedKmh, unit: unit))")
+                    .font(.field(size: 11, weight: .semibold))
+                    .foregroundColor(theme.palette.cream)
+                let gust = weather.windGustKmh.map { "Gusts \(ScentPlumeGeometry.formatWindSpeed($0, unit: unit)) · " } ?? ""
+                let plume = ScentPlumeGeometry.forConditions(
+                    speedKmh: weather.windSpeedKmh,
+                    gustKmh: weather.windGustKmh,
+                    humidityPercent: weather.humidityPercent,
+                    temperatureC: weather.temperatureC
+                )
+                Text("\(gust)drifts \(ScentPlumeGeometry.cardinal(downwind)) · ~\(Int(plume.lengthM)) m")
+                    .font(.field(size: 11))
+                    .foregroundColor(theme.palette.mist)
+            } else {
+                Text("Waiting for GPS and recent local wind")
+                    .font(.field(size: 11))
+                    .foregroundColor(theme.palette.mist)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(8)
+        .background(theme.palette.charcoal.opacity(0.88))
+        .cornerRadius(10)
+        .frame(maxWidth: 230, alignment: .leading)
+    }
+
+    private var scentWeather: WeatherSnapshot? {
+        ScentPlumeGeometry.usableWeather(weatherService.weather ?? db.cachedWeather, for: location.latestFix)
+    }
+
+    private var focusBanner: some View {
+        let labels = db.permissionMapFocus.map { $0.label }.filter { !$0.isEmpty }
+        return HStack(spacing: 8) {
+            Image(systemName: "link")
+                .foregroundColor(theme.palette.bronzeBright)
+            Text(labels.isEmpty ? "Linked boundary" : labels.joined(separator: ", "))
+                .font(.field(size: 12, weight: .semibold))
+                .foregroundColor(theme.palette.cream)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Button("Clear") { db.clearMapFocus() }
+                .font(.field(size: 12, weight: .bold))
+                .foregroundColor(theme.palette.bronzeBright)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(theme.palette.charcoal.opacity(0.9))
+        .cornerRadius(8)
     }
 
     private func mapControl(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
@@ -1135,11 +1340,30 @@ public struct MapScreen: View {
         .accessibilityLabel(title)
     }
 
-    private func zoom(by factor: Double) {
-        guard let fix = location.latestFix else { mapMessage = "Wait for a GPS fix to zoom around your location."; return }
+    private func frameBoundaries(_ ids: [Int64]) {
+        let unique = Set(ids)
+        let points = db.boundaries.filter { unique.contains($0.id) }.flatMap { $0.points }
+        guard let first = points.first else { return }
+        var minLat = first.latitude
+        var maxLat = first.latitude
+        var minLon = first.longitude
+        var maxLon = first.longitude
+        for point in points {
+            minLat = min(minLat, point.latitude)
+            maxLat = max(maxLat, point.latitude)
+            minLon = min(minLon, point.longitude)
+            maxLon = max(maxLon, point.longitude)
+        }
         followUser = false
-        centre = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
-        spanMeters = min(2000000, max(1, spanMeters * factor))
+        centre = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let height = max(MapZoom.minMeters, (maxLat - minLat) * 111_000 * 1.8)
+        spanMeters = MapZoom.clamp(height)
+        regionRequestToken += 1
+    }
+
+    private func zoom(inward: Bool) {
+        followUser = false
+        spanMeters = MapZoom.step(spanMeters, inward: inward)
         regionRequestToken += 1
     }
 
@@ -1383,15 +1607,9 @@ public struct MapScreen: View {
             points: pendingPoints,
             areaSqMeters: DatabaseService.areaSqMeters(pendingPoints)
         )
-        db.addBoundary(boundary)
-
-        if let permissionId = capture.permissionId,
-           let stored = db.boundaries.last {
-            if let index = db.permissions.firstIndex(where: { $0.id == permissionId }) {
-                var permission = db.permissions[index]
-                permission.boundaryAreaId = stored.id
-                db.updatePermission(permission)
-            }
+        let boundaryId = db.addBoundary(boundary)
+        if let permissionId = capture.permissionId {
+            db.linkPermission(id: permissionId, toBoundary: boundaryId)
         }
 
         finishBoundaryCapture()
@@ -1719,11 +1937,7 @@ public struct QuickAddMarkerSheet: View {
                 Form {
                     Section(header: Text("Marker Details").foregroundColor(theme.palette.bronze)) {
                         TextField("Name", text: $name)
-                        Picker("Category", selection: $category) {
-                            ForEach(MarkerCategory.allCases, id: \.self) { cat in
-                                Label(cat.label, systemImage: MarkerArtwork.symbol(for: cat)).tag(cat)
-                            }
-                        }
+                        MarkerCategoryMenu(category: $category)
                         TextField("Notes (optional)", text: $notes)
                     }
 
