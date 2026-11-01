@@ -112,67 +112,60 @@ private final class ScentSmokeRenderer: MKOverlayRenderer {
     }
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
-        let speed = max(0, min(60, weather.windSpeedKmh))
-        let gust = max(speed, weather.windGustKmh ?? speed)
-        let gusty = gust - speed >= 8
-        let period: Double = speed < 5 ? 4.2 : (speed < 16 ? 2.8 : (speed < 25 ? 1.8 : 1.1))
-        let phase = Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
-        let downwind = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
-        let colors = [Self.highlight.cgColor, Self.pink.withAlphaComponent(0.0).cgColor] as CFArray
-        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) else { return }
+        let speed: Double = max(0, min(60, weather.windSpeedKmh))
+        let gust: Double = max(speed, weather.windGustKmh ?? speed)
+        let gusty: Bool = (gust - speed) >= 8
+        let period: Double = Self.driftPeriod(speedKmh: speed)
+        let elapsed: Double = Date().timeIntervalSinceReferenceDate
+        let phase: Double = elapsed.truncatingRemainder(dividingBy: period) / period
+        let downwind: Double = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
+        guard let gradient = Self.smokeGradient() else { return }
 
-        let puffCount = gusty ? 40 : 30
+        let puffCount: Int = gusty ? 40 : 30
         for index in 0..<puffCount {
-            let age = (phase + Double(index) / Double(puffCount)).truncatingRemainder(dividingBy: 1)
-            let alongFraction = age
-            let distance = 6 + alongFraction * plume.lengthM
-            let halfWidth = plume.halfWidthAt(distanceM: distance) * plume.scatter
-            let lane = Double((index % 7) - 3) / 3.2
-            let wobble = sin(phase * 2 * .pi * (gusty ? 2.4 : 1.1) + Double(index) * 1.3)
-            let lateral = halfWidth * (lane * 0.85 + wobble * (gusty ? 0.45 : 0.18)) * (0.25 + 0.75 * alongFraction)
-            let along = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: distance, bearing: downwind)
-            let position = Self.destination(latitude: along.latitude, longitude: along.longitude, meters: lateral, bearing: downwind + 90)
-            let centre = point(for: MKMapPoint(position))
-            let billow = 0.55 + 0.45 * sin(.pi * alongFraction)
-            let screenRadius = (gusty ? 16.0 : 13.0) + billow * 18.0
-            let radius = CGFloat(screenRadius / Double(zoomScale))
-            let fadeIn = min(1, alongFraction / 0.08)
-            let fadeOut = min(1, (1 - alongFraction) / (0.28 + plume.dilution * 0.2))
-            let opacity = CGFloat(min(0.82, max(0.18, fadeIn * fadeOut * (0.9 - plume.dilution * 0.35))))
-            context.saveGState()
-            context.setAlpha(opacity)
-            context.drawRadialGradient(gradient, startCenter: centre, startRadius: 0,
-                                       endCenter: centre, endRadius: radius, options: [])
-            context.restoreGState()
+            let puff = Self.travelPuff(index: index, count: puffCount, phase: phase, gusty: gusty, plume: plume)
+            drawPuff(puff, downwind: downwind, zoomScale: zoomScale, gradient: gradient, in: context)
         }
-
-        // Source billow, so the smoke clearly leaves the hunter and travels downwind.
         for index in 0..<10 {
-            let age = (phase * 1.4 + Double(index) * 0.1).truncatingRemainder(dividingBy: 1)
-            let distance = 4 + age * 28
-            let wobble = sin(phase * 6 + Double(index)) * 8 * plume.scatter
-            let along = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: distance, bearing: downwind)
-            let position = Self.destination(latitude: along.latitude, longitude: along.longitude, meters: wobble, bearing: downwind + 90)
-            let centre = point(for: MKMapPoint(position))
-            let radius = CGFloat((18 + age * 14) / Double(zoomScale))
-            context.saveGState()
-            context.setAlpha(CGFloat(0.55 * (1 - age * 0.45)))
-            context.drawRadialGradient(gradient, startCenter: centre, startRadius: 0,
-                                       endCenter: centre, endRadius: radius, options: [])
-            context.restoreGState()
+            let puff = Self.sourcePuff(index: index, phase: phase, scatter: plume.scatter)
+            drawPuff(puff, downwind: downwind, zoomScale: zoomScale, gradient: gradient, in: context)
         }
+        drawArrow(downwind: downwind, zoomScale: zoomScale, in: context)
+    }
 
-        let tip = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: plume.lengthM * 0.92, bearing: downwind)
-        let tipPoint = point(for: MKMapPoint(tip))
-        let back = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: plume.lengthM * 0.78, bearing: downwind)
-        let backPoint = point(for: MKMapPoint(back))
+    private func drawPuff(
+        _ puff: SmokePuff,
+        downwind: Double,
+        zoomScale: MKZoomScale,
+        gradient: CGGradient,
+        in context: CGContext
+    ) {
+        let along = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: puff.distance, bearing: downwind)
+        let crosswind: Double = downwind + 90
+        let position = Self.destination(latitude: along.latitude, longitude: along.longitude, meters: puff.lateral, bearing: crosswind)
+        let centre: CGPoint = point(for: MKMapPoint(position))
+        let scale: Double = Double(zoomScale)
+        let radius: CGFloat = CGFloat(puff.screenRadius / scale)
+        context.saveGState()
+        context.setAlpha(CGFloat(puff.opacity))
+        context.drawRadialGradient(gradient, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: radius, options: [])
+        context.restoreGState()
+    }
+
+    private func drawArrow(downwind: Double, zoomScale: MKZoomScale, in context: CGContext) {
+        let tipDistance: Double = plume.lengthM * 0.92
+        let backDistance: Double = plume.lengthM * 0.78
+        let tip = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: tipDistance, bearing: downwind)
+        let back = Self.destination(latitude: fix.latitude, longitude: fix.longitude, meters: backDistance, bearing: downwind)
         let left = Self.destination(latitude: tip.latitude, longitude: tip.longitude, meters: 18, bearing: downwind + 140)
         let right = Self.destination(latitude: tip.latitude, longitude: tip.longitude, meters: 18, bearing: downwind - 140)
+        let tipPoint: CGPoint = point(for: MKMapPoint(tip))
+        let width: CGFloat = 4 / zoomScale
         context.saveGState()
         context.setStrokeColor(Self.pink.cgColor)
-        context.setLineWidth(4 / zoomScale)
+        context.setLineWidth(width)
         context.setLineCap(.round)
-        context.move(to: backPoint)
+        context.move(to: point(for: MKMapPoint(back)))
         context.addLine(to: tipPoint)
         context.move(to: point(for: MKMapPoint(left)))
         context.addLine(to: tipPoint)
@@ -182,15 +175,71 @@ private final class ScentSmokeRenderer: MKOverlayRenderer {
         context.restoreGState()
     }
 
-    private static func destination(latitude: Double, longitude: Double, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
-        let distance = meters / 6371000
-        let direction = bearing * .pi / 180
-        let lat = latitude * .pi / 180
-        let lon = longitude * .pi / 180
-        let targetLat = asin(sin(lat) * cos(distance) + cos(lat) * sin(distance) * cos(direction))
-        let targetLon = lon + atan2(sin(direction) * sin(distance) * cos(lat), cos(distance) - sin(lat) * sin(targetLat))
-        return CLLocationCoordinate2D(latitude: targetLat * 180 / .pi, longitude: targetLon * 180 / .pi)
+    private static func driftPeriod(speedKmh: Double) -> Double {
+        if speedKmh < 5 { return 4.2 }
+        if speedKmh < 16 { return 2.8 }
+        if speedKmh < 25 { return 1.8 }
+        return 1.1
     }
+
+    private static func smokeGradient() -> CGGradient? {
+        let colors = [highlight.cgColor, pink.withAlphaComponent(0).cgColor] as CFArray
+        return CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])
+    }
+
+    private static func travelPuff(index: Int, count: Int, phase: Double, gusty: Bool, plume: Plume) -> SmokePuff {
+        let slot: Double = Double(index) / Double(count)
+        let age: Double = (phase + slot).truncatingRemainder(dividingBy: 1)
+        let distance: Double = 6 + (age * plume.lengthM)
+        let halfWidth: Double = plume.halfWidthAt(distanceM: distance) * plume.scatter
+        let lane: Double = Double((index % 7) - 3) / 3.2
+        let wobbleTurns: Double = gusty ? 2.4 : 1.1
+        let wobble: Double = sin((phase * 2 * .pi * wobbleTurns) + (Double(index) * 1.3))
+        let wobbleAmount: Double = gusty ? 0.45 : 0.18
+        let laneMix: Double = (lane * 0.85) + (wobble * wobbleAmount)
+        let alongMix: Double = 0.25 + (0.75 * age)
+        let lateral: Double = halfWidth * laneMix * alongMix
+        let billow: Double = 0.55 + (0.45 * sin(.pi * age))
+        let baseRadius: Double = gusty ? 16 : 13
+        let screenRadius: Double = baseRadius + (billow * 18)
+        let fadeIn: Double = min(1, age / 0.08)
+        let tail: Double = 0.28 + (plume.dilution * 0.2)
+        let fadeOut: Double = min(1, (1 - age) / tail)
+        let strength: Double = 0.9 - (plume.dilution * 0.35)
+        let opacity: Double = min(0.82, max(0.18, fadeIn * fadeOut * strength))
+        return SmokePuff(distance: distance, lateral: lateral, screenRadius: screenRadius, opacity: opacity)
+    }
+
+    private static func sourcePuff(index: Int, phase: Double, scatter: Double) -> SmokePuff {
+        let age: Double = ((phase * 1.4) + (Double(index) * 0.1)).truncatingRemainder(dividingBy: 1)
+        let distance: Double = 4 + (age * 28)
+        let wobble: Double = sin((phase * 6) + Double(index)) * 8 * scatter
+        let screenRadius: Double = 18 + (age * 14)
+        let opacity: Double = 0.55 * (1 - (age * 0.45))
+        return SmokePuff(distance: distance, lateral: wobble, screenRadius: screenRadius, opacity: opacity)
+    }
+
+    private static func destination(latitude: Double, longitude: Double, meters: Double, bearing: Double) -> CLLocationCoordinate2D {
+        let earthRadius: Double = 6_371_000
+        let angular: Double = meters / earthRadius
+        let direction: Double = bearing * .pi / 180
+        let lat1: Double = latitude * .pi / 180
+        let lon1: Double = longitude * .pi / 180
+        let latSin: Double = sin(lat1) * cos(angular)
+        let latCos: Double = cos(lat1) * sin(angular) * cos(direction)
+        let lat2: Double = asin(latSin + latCos)
+        let east: Double = sin(direction) * sin(angular) * cos(lat1)
+        let north: Double = cos(angular) - (sin(lat1) * sin(lat2))
+        let lon2: Double = lon1 + atan2(east, north)
+        return CLLocationCoordinate2D(latitude: lat2 * 180 / .pi, longitude: lon2 * 180 / .pi)
+    }
+}
+
+private struct SmokePuff {
+    let distance: Double
+    let lateral: Double
+    let screenRadius: Double
+    let opacity: Double
 }
 
 private enum MapZoom {
@@ -1264,7 +1313,7 @@ public struct MapScreen: View {
     }
 
     private var windLegend: some View {
-        let weather = scentWeather
+        let lines: (String, String)? = windLegendLines()
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Circle()
@@ -1274,21 +1323,11 @@ public struct MapScreen: View {
                     .font(.field(size: 12, weight: .bold))
                     .foregroundColor(theme.palette.cream)
             }
-            if let weather = weather {
-                let from = weather.windDirectionDeg
-                let downwind = (from + 180).truncatingRemainder(dividingBy: 360)
-                let unit = db.preferences.windUnit
-                Text("From \(ScentPlumeGeometry.cardinal(from)) \(Int(from))° · \(ScentPlumeGeometry.formatWindSpeed(weather.windSpeedKmh, unit: unit))")
+            if let lines = lines {
+                Text(lines.0)
                     .font(.field(size: 11, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
-                let gust = weather.windGustKmh.map { "Gusts \(ScentPlumeGeometry.formatWindSpeed($0, unit: unit)) · " } ?? ""
-                let plume = ScentPlumeGeometry.forConditions(
-                    speedKmh: weather.windSpeedKmh,
-                    gustKmh: weather.windGustKmh,
-                    humidityPercent: weather.humidityPercent,
-                    temperatureC: weather.temperatureC
-                )
-                Text("\(gust)drifts \(ScentPlumeGeometry.cardinal(downwind)) · ~\(Int(plume.lengthM)) m")
+                Text(lines.1)
                     .font(.field(size: 11))
                     .foregroundColor(theme.palette.mist)
             } else {
@@ -1302,6 +1341,29 @@ public struct MapScreen: View {
         .background(theme.palette.charcoal.opacity(0.88))
         .cornerRadius(10)
         .frame(maxWidth: 230, alignment: .leading)
+    }
+
+    private func windLegendLines() -> (String, String)? {
+        guard let weather = scentWeather else { return nil }
+        let from: Double = weather.windDirectionDeg
+        let downwind: Double = (from + 180).truncatingRemainder(dividingBy: 360)
+        let unit: WindUnit = db.preferences.windUnit
+        let speed: String = ScentPlumeGeometry.formatWindSpeed(weather.windSpeedKmh, unit: unit)
+        let heading: String = "From \(ScentPlumeGeometry.cardinal(from)) \(Int(from))° · \(speed)"
+        let plume: Plume = ScentPlumeGeometry.forConditions(
+            speedKmh: weather.windSpeedKmh,
+            gustKmh: weather.windGustKmh,
+            humidityPercent: weather.humidityPercent,
+            temperatureC: weather.temperatureC
+        )
+        let gustPrefix: String
+        if let gust = weather.windGustKmh {
+            gustPrefix = "Gusts \(ScentPlumeGeometry.formatWindSpeed(gust, unit: unit)) · "
+        } else {
+            gustPrefix = ""
+        }
+        let detail: String = "\(gustPrefix)drifts \(ScentPlumeGeometry.cardinal(downwind)) · ~\(Int(plume.lengthM)) m"
+        return (heading, detail)
     }
 
     private var scentWeather: WeatherSnapshot? {
