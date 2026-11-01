@@ -529,11 +529,7 @@ private struct HomeQuickAddMarkerSheet: View {
                             TextField("Name", text: $name)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
 
-                            Picker("Category", selection: $category) {
-                                ForEach(MarkerCategory.allCases, id: \.self) { value in
-                                    Text(value.label).tag(value)
-                                }
-                            }
+                            MarkerCategoryMenu(category: $category)
 
                             TextField("Notes (optional)", text: $notes)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())

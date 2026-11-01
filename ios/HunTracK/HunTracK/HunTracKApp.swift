@@ -86,6 +86,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .boundaryCaptureFinished)) { _ in
             selectedTab = boundaryReturnTab
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openMapTab)) { _ in
+            selectedTab = 1
+        }
     }
     
     private func goHome() {

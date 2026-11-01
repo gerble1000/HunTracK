@@ -144,41 +144,21 @@ public struct WindScreen: View {
                             )
                             
                             VStack(spacing: 14) {
-                                ZStack {
-                                    Circle()
-                                        .stroke(theme.palette.slate.opacity(0.6), lineWidth: 10)
-                                        .frame(width: 220, height: 220)
-                                    
-                                    // Scent cone wedge indicator
-                                    Circle()
-                                        .trim(from: 0.0, to: CGFloat(plume.halfAngleDeg * 2.0 / 360.0))
-                                        .stroke(theme.palette.bronze.opacity(0.35), style: StrokeStyle(lineWidth: 30, lineCap: .round))
-                                        .frame(width: 170, height: 170)
-                                        .rotationEffect(.degrees(Double(downwind) - plume.halfAngleDeg - 90))
-                                    
-                                    // Hunter center dot
-                                    Circle()
-                                        .fill(theme.palette.gold)
-                                        .frame(width: 14, height: 14)
-                                    
-                                    // Downwind arrow (your scent travels this way)
-                                    VStack(spacing: 0) {
-                                        Image(systemName: "arrow.down")
-                                            .font(.field(size: 38, weight: .black))
-                                            .foregroundColor(theme.palette.bronzeBright)
-                                        Spacer()
-                                    }
-                                    .frame(width: 40, height: 180)
-                                    .rotationEffect(.degrees(Double(w.windDirectionDeg)))
-                                }
+                                WindSmokeDial(
+                                    directionFromDeg: w.windDirectionDeg,
+                                    speedKmh: w.windSpeedKmh,
+                                    gustKmh: w.windGustKmh,
+                                    plume: plume
+                                )
+                                .frame(width: 240, height: 240)
                                 .padding(.vertical, 8)
                                 
-                                Text("\(String(format: "%.1f km/h", w.windSpeedKmh)) · \(character.label)")
+                                Text("\(ScentPlumeGeometry.formatWindSpeed(w.windSpeedKmh, unit: db.preferences.windUnit)) · \(character.label)")
                                     .font(.field(size: 18, weight: .bold))
                                     .foregroundColor(theme.palette.cream)
                                 
                                 if let gust = w.windGustKmh {
-                                    Text("Gusts up to \(String(format: "%.1f km/h", gust))")
+                                    Text("Gusts up to \(ScentPlumeGeometry.formatWindSpeed(gust, unit: db.preferences.windUnit))")
                                         .font(.field(size: 14))
                                         .foregroundColor(theme.palette.mist)
                                 }
@@ -405,5 +385,59 @@ public struct WindGuideSheet: View {
                 isPresented = false
             }.foregroundColor(theme.palette.bronzeBright))
         }
+    }
+}
+
+/// Pink smoke on the Wind & Scent dial — the same plume the map draws, not a solid cone.
+private struct WindSmokeDial: View {
+    let directionFromDeg: Double
+    let speedKmh: Double
+    let gustKmh: Double?
+    let plume: Plume
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.07)) { timeline in
+            Canvas { context, size in
+                let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+                let downwind = (directionFromDeg + 180).truncatingRemainder(dividingBy: 360)
+                let radians = downwind * .pi / 180
+                let dx = sin(radians)
+                let dy = -cos(radians)
+                let px = -dy
+                let py = dx
+                let gust = max(speedKmh, gustKmh ?? speedKmh)
+                let gusty = gust - speedKmh >= 8
+                let period: Double = speedKmh < 5 ? 4.2 : (speedKmh < 16 ? 2.8 : 1.6)
+                let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+                let travel = min(size.width, size.height) * 0.42
+                let pink = Color(red: 0.96, green: 0.32, blue: 0.62)
+                let count = gusty ? 28 : 22
+                for index in 0..<count {
+                    let age = (phase + Double(index) / Double(count)).truncatingRemainder(dividingBy: 1)
+                    let lane = Double((index % 5) - 2) / 2.4
+                    let wobble = sin(phase * 2 * .pi * (gusty ? 2.2 : 1) + Double(index))
+                    let along = age * 0.95
+                    let spread = (1 - along * 0.35) * plume.scatter
+                    let x = centre.x + CGFloat(dx * travel * along + px * travel * 0.28 * lane * spread + px * travel * 0.08 * wobble)
+                    let y = centre.y + CGFloat(dy * travel * along + py * travel * 0.28 * lane * spread + py * travel * 0.08 * wobble)
+                    let radius = 7 + (1 - along) * 10
+                    let alpha = 0.15 + (1 - along) * 0.55
+                    let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
+                    context.fill(Path(ellipseIn: rect), with: .color(pink.opacity(alpha)))
+                }
+                var arrow = Path()
+                let tip = CGPoint(x: centre.x + CGFloat(dx * travel * 0.72), y: centre.y + CGFloat(dy * travel * 0.72))
+                let tail = CGPoint(x: centre.x - CGFloat(dx * 18), y: centre.y - CGFloat(dy * 18))
+                arrow.move(to: tail)
+                arrow.addLine(to: tip)
+                context.stroke(arrow, with: .color(Color(red: 0.95, green: 0.78, blue: 0.45)), lineWidth: 4)
+                context.fill(Path(ellipseIn: CGRect(x: centre.x - 6, y: centre.y - 6, width: 12, height: 12)), with: .color(.white))
+            }
+            .background(
+                Circle()
+                    .stroke(Color.white.opacity(0.18), lineWidth: 8)
+            )
+        }
+        .accessibilityLabel("Pink scent smoke drifting downwind")
     }
 }

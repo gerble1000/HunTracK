@@ -155,11 +155,7 @@ public struct HuntQuickAddMarkerSheet: View {
                 Form {
                     Section(header: Text("Marker Details").foregroundColor(theme.palette.bronze)) {
                         TextField("Name", text: $name)
-                        Picker("Category", selection: $category) {
-                            ForEach(MarkerCategory.allCases, id: \.self) { cat in
-                                Text(cat.label).tag(cat)
-                            }
-                        }
+                        MarkerCategoryMenu(category: $category)
                         TextField("Notes (optional)", text: $notes)
                     }
 

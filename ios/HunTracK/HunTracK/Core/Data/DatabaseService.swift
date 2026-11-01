@@ -71,6 +71,9 @@ public class DatabaseService: ObservableObject {
     /// Published so the Map tab reacts when the wallet hands a capture over.
     @Published public var pendingBoundary: PendingBoundaryCreation?
 
+    /// Boundaries the wallet asked the map to frame. Not persisted — the link itself is.
+    @Published public var permissionMapFocus: [PermissionMapFocusItem] = []
+
     // MARK: - Keys
 
     private static let kMarkers = "hunttrack_markers_v2"
@@ -403,13 +406,65 @@ public class DatabaseService: ObservableObject {
         permissions[index] = permission
     }
 
+    /// Persists the permission ↔ boundary link. Pass `nil` to clear it.
+    /// One permission points at one boundary; several permissions may share a boundary.
+    public func linkPermission(id: Int64, toBoundary boundaryId: Int64?) {
+        guard let index = permissions.firstIndex(where: { $0.id == id }) else { return }
+        var updated = permissions
+        updated[index].boundaryAreaId = boundaryId
+        permissions = updated
+    }
+
+    public func unlinkPermissions(fromBoundary boundaryId: Int64) {
+        var updated = permissions
+        var changed = false
+        for index in updated.indices where updated[index].boundaryAreaId == boundaryId {
+            updated[index].boundaryAreaId = nil
+            changed = true
+        }
+        if changed { permissions = updated }
+    }
+
+    public func permissionsLinked(to boundaryId: Int64) -> [HuntingPermission] {
+        permissions.filter { $0.boundaryAreaId == boundaryId }
+    }
+
+    public func focusMap(on permissionIds: [Int64]) {
+        permissionMapFocus = permissionIds.compactMap { id in
+            guard let permission = permissions.first(where: { $0.id == id }),
+                  let boundaryId = permission.boundaryAreaId,
+                  boundaries.contains(where: { $0.id == boundaryId }) else { return nil }
+            return PermissionMapFocusItem(
+                permissionId: permission.id,
+                label: permission.displayLabel,
+                boundaryAreaId: boundaryId
+            )
+        }
+    }
+
+    public func focusMap(onBoundary boundaryId: Int64) {
+        let linked = permissionsLinked(to: boundaryId)
+        if linked.isEmpty {
+            let name = boundaries.first { $0.id == boundaryId }?.name ?? "Boundary"
+            permissionMapFocus = [PermissionMapFocusItem(permissionId: 0, label: name, boundaryAreaId: boundaryId)]
+        } else {
+            focusMap(on: linked.map { $0.id })
+        }
+    }
+
+    public func clearMapFocus() {
+        permissionMapFocus = []
+    }
+
     public func deletePermission(id: Int64) {
         permissions.removeAll { $0.id == id }
+        permissionMapFocus.removeAll { $0.permissionId == id }
     }
 
     // MARK: - Boundaries
 
-    public func addBoundary(_ boundary: BoundaryArea) {
+    @discardableResult
+    public func addBoundary(_ boundary: BoundaryArea) -> Int64 {
         var value = boundary
         if value.id == 0 {
             value.id = nextId(boundaries.map { $0.id })
@@ -418,6 +473,36 @@ public class DatabaseService: ObservableObject {
             value.areaSqMeters = Self.areaSqMeters(value.points)
         }
         boundaries.append(value)
+        return value.id
+    }
+
+    /// Square ground around a GPS fix, used when linking a permission without drawing.
+    @discardableResult
+    public func addSquareBoundary(
+        name: String,
+        zoneType: BoundaryZoneType,
+        latitude: Double,
+        longitude: Double,
+        sizeMeters: Double = 500
+    ) -> Int64 {
+        let half = sizeMeters / 2
+        let dLat = half / 111_000.0
+        let dLon = half / (111_000.0 * max(0.2, cos(latitude * .pi / 180)))
+        let points = [
+            BoundaryPoint(latitude: latitude - dLat, longitude: longitude - dLon, orderIndex: 0),
+            BoundaryPoint(latitude: latitude - dLat, longitude: longitude + dLon, orderIndex: 1),
+            BoundaryPoint(latitude: latitude + dLat, longitude: longitude + dLon, orderIndex: 2),
+            BoundaryPoint(latitude: latitude + dLat, longitude: longitude - dLon, orderIndex: 3)
+        ]
+        return addBoundary(
+            BoundaryArea(
+                name: name,
+                zoneType: zoneType,
+                notes: "Created from GPS",
+                points: points,
+                areaSqMeters: Self.areaSqMeters(points)
+            )
+        )
     }
 
     public func updateBoundary(_ boundary: BoundaryArea) {
@@ -430,9 +515,8 @@ public class DatabaseService: ObservableObject {
 
     public func deleteBoundary(id: Int64) {
         boundaries.removeAll { $0.id == id }
-        for index in permissions.indices where permissions[index].boundaryAreaId == id {
-            permissions[index].boundaryAreaId = nil
-        }
+        unlinkPermissions(fromBoundary: id)
+        permissionMapFocus.removeAll { $0.boundaryAreaId == id }
     }
 
     /// Shoelace area over an equirectangular projection — matches Android's BoundaryMath.
