@@ -109,7 +109,7 @@ public class DatabaseService: ObservableObject {
         // Migrate the pre-v2 blobs once so existing testers keep their data.
         if defaults.data(forKey: Self.kMarkers) == nil,
            let legacy = defaults.data(forKey: Self.kLegacyMarkers),
-           let decoded = try? decoder.decode([FieldMarker].self, from: legacy) {
+           (try? decoder.decode([FieldMarker].self, from: legacy)) != nil {
             defaults.set(legacy, forKey: Self.kMarkers)
         }
         if defaults.data(forKey: Self.kPrefs) == nil,
