@@ -3,6 +3,12 @@ name: Build, Sign & Deploy Apple iOS App (HunTracK)
 on:
   push:
     branches: [ main, master ]
+    # A commit that only changes workflow or distribution scripts must not
+    # archive and upload again. Build 43 is already on App Store Connect;
+    # re-uploading that number fails, and a script-only fix does not need a
+    # new binary. Any commit that also touches the app still archives.
+    paths-ignore:
+      - '.github/**'
   workflow_dispatch:
 
 jobs:

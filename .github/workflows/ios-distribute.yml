@@ -1,0 +1,51 @@
+name: Distribute an existing TestFlight build
+
+# Assigns a build that is already uploaded and processed. It does not
+# archive, sign, or upload a binary. ios-build.yml remains the only
+# workflow that produces an App Store build.
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'CFBundleVersion already on App Store Connect (for example 43)'
+        required: true
+        type: string
+
+jobs:
+  distribute:
+    name: Assign existing build to TestFlight groups
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Test TestFlight Distribution Checks
+        run: node --test .github/scripts/testflight-distribute.test.mjs
+
+      - name: Setup App Store Connect API Key
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}.p8
+
+      - name: Distribute existing build
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          BUNDLE_ID: uk.hunttrack.app
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          set -uo pipefail
+          fail() { echo "::error title=TestFlight distribution failed::$1"; echo "$1" >&2; exit 1; }
+          case "$BUILD_NUMBER" in
+            ''|*[!0-9]*) fail "build_number must be the digits of an already uploaded CFBundleVersion" ;;
+          esac
+          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          [ -f "$ASC_KEY_PATH" ] || fail "App Store Connect key not found at $ASC_KEY_PATH"
+          echo "Distributing existing build ${BUILD_NUMBER} of ${BUNDLE_ID}. No archive or upload."
+          node .github/scripts/testflight-distribute.mjs
+
+      - name: Clean up API key
+        if: always()
+        run: rm -f ~/.appstoreconnect/private_keys/AuthKey_*.p8

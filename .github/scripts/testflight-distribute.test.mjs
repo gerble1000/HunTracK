@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { createJwt, ensureInternalGroupAccess, groupHasBuild } from './testflight-distribute.mjs';
+import { createJwt, ensureInternalGroupAccess, groupHasBuild, internalAccessVerified } from './testflight-distribute.mjs';
 
 async function withFetch(fetcher, action) {
   const original = globalThis.fetch;
@@ -70,6 +70,70 @@ test('tolerates an existing relationship and still confirms access', async () =>
   }, async () => {
     const outcome = await ensureInternalGroupAccess('token', { id: 'group' }, 'new', { timeoutMs: 1000, intervalMs: 5 });
     assert.equal(outcome, 'already assigned');
+  });
+});
+
+function internalRejection() {
+  return new Response(JSON.stringify({
+    errors: [{
+      title: 'Cannot add internal group to a build.',
+      detail: 'Builds cannot be assigned to this internal group.',
+      code: 'ENTITY_ERROR',
+    }],
+  }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+}
+
+test('after an internal 422, a positive relationship GET is verified', async () => {
+  let gets = 0;
+  await withFetch(async (url, options) => {
+    if (options?.method === 'POST') return internalRejection();
+    gets += 1;
+    return gets === 1 ? response([]) : response([{ type: 'builds', id: 'new' }]);
+  }, async () => {
+    const outcome = await ensureInternalGroupAccess(
+      'token',
+      { id: 'group', attributes: { name: 'Testers', isInternalGroup: true } },
+      'new',
+      { timeoutMs: 1000, intervalMs: 5 },
+    );
+    assert.equal(outcome, 'verified');
+    assert.equal(internalAccessVerified(outcome), true);
+  });
+});
+
+test('after an internal 422, a negative relationship GET stays unverified', async () => {
+  const methods = [];
+  await withFetch(async (url, options) => {
+    methods.push(options?.method ?? 'GET');
+    if (options?.method === 'POST') return internalRejection();
+    return response([]);
+  }, async () => {
+    const outcome = await ensureInternalGroupAccess(
+      'token',
+      { id: 'group', attributes: { name: 'Testers', isInternalGroup: true } },
+      'new',
+      { timeoutMs: 1000, intervalMs: 5 },
+    );
+    assert.equal(outcome, 'assignment_rejected_unverified');
+    assert.equal(internalAccessVerified(outcome), false);
+  });
+  assert.deepEqual(methods, ['GET', 'POST', 'GET']);
+});
+
+test('a 422 is fail-closed unless the group is explicitly internal', async () => {
+  await withFetch(async (url, options) => {
+    if (options?.method === 'POST') return internalRejection();
+    return response([]);
+  }, async () => {
+    await assert.rejects(
+      ensureInternalGroupAccess(
+        'token',
+        { id: 'group', attributes: { name: 'Beta Testers', isInternalGroup: false } },
+        'new',
+        { timeoutMs: 200, intervalMs: 5 },
+      ),
+      /HTTP 422/,
+    );
   });
 });
 
