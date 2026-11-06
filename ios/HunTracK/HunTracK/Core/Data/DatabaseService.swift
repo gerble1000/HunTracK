@@ -413,6 +413,26 @@ public class DatabaseService: ObservableObject {
         var updated = permissions
         updated[index].boundaryAreaId = boundaryId
         permissions = updated
+        guard let boundaryId = boundaryId,
+              let boundaryIndex = boundaries.firstIndex(where: { $0.id == boundaryId }) else { return }
+        let typedLabel = updated[index].label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typedFarm = updated[index].farmName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let renameSource = typedLabel.isEmpty ? typedFarm : typedLabel
+        let renamed = BoundaryFenceStyle.nameAfterLink(
+            current: boundaries[boundaryIndex].name,
+            permissionLabel: renameSource
+        )
+        guard renamed != boundaries[boundaryIndex].name else { return }
+        var areas = boundaries
+        areas[boundaryIndex].name = renamed
+        boundaries = areas
+    }
+
+    public func setPermissionShownOnMap(id: Int64, shown: Bool) {
+        guard let index = permissions.firstIndex(where: { $0.id == id }) else { return }
+        var updated = permissions
+        updated[index].showOnMap = shown
+        permissions = updated
     }
 
     public func unlinkPermissions(fromBoundary boundaryId: Int64) {

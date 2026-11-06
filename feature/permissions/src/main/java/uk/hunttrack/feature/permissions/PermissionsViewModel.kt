@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import uk.hunttrack.core.data.phase2.BoundaryCreationSession
 import uk.hunttrack.core.data.phase2.PermissionMapViewSession
 import uk.hunttrack.core.data.phase2.PermissionsRepository
+import uk.hunttrack.core.data.prefs.PreferencesRepository
 import uk.hunttrack.core.location.LocationRepository
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryCaptureMode
@@ -36,6 +37,8 @@ data class PermissionsUiState(
     val tab: PermTab = PermTab.WALLET,
     val pendingBoundaryLink: PendingPermissionBoundaryLink? = null,
     val selectedPermissionIds: Set<Long> = emptySet(),
+    /** Permission ids whose linked boundary is hidden on the map. */
+    val hiddenPermissionIds: Set<Long> = emptySet(),
 )
 
 enum class PermTab { WALLET, BOUNDARIES }
@@ -46,6 +49,7 @@ class PermissionsViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val boundaryCreationSession: BoundaryCreationSession,
     private val permissionMapViewSession: PermissionMapViewSession,
+    private val preferencesRepository: PreferencesRepository,
 ) : ViewModel() {
 
     private val tab = MutableStateFlow(PermTab.WALLET)
@@ -53,14 +57,25 @@ class PermissionsViewModel @Inject constructor(
     private val selectedPermissionIds = MutableStateFlow<Set<Long>>(emptySet())
 
     val uiState: StateFlow<PermissionsUiState> = combine(
-        repository.observePermissions(),
-        repository.observeBoundaries(),
-        tab,
-        pendingBoundaryLink,
-        selectedPermissionIds,
-    ) { permissions, boundaries, t, pending, selected ->
-        PermissionsUiState(permissions, boundaries, t, pending, selected)
+        combine(
+            repository.observePermissions(),
+            repository.observeBoundaries(),
+            tab,
+            pendingBoundaryLink,
+            selectedPermissionIds,
+        ) { permissions, boundaries, t, pending, selected ->
+            PermissionsUiState(permissions, boundaries, t, pending, selected)
+        },
+        preferencesRepository.hiddenPermissionIdsFlow,
+    ) { state, hidden ->
+        state.copy(hiddenPermissionIds = hidden)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PermissionsUiState())
+
+    fun setPermissionShownOnMap(id: Long, shown: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setPermissionShownOnMap(id, shown)
+        }
+    }
 
     fun setTab(value: PermTab) {
         tab.value = value

@@ -204,6 +204,7 @@ private struct PermissionCard: View {
     let onDelete: () -> Void
 
     @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var db = DatabaseService.shared
 
     var body: some View {
         GlassPanel {
@@ -251,6 +252,21 @@ private struct PermissionCard: View {
                         .foregroundColor(Color(hex: boundary.zoneType.mapColorHex))
                 }
                 .padding(.top, 4)
+                Button {
+                    db.setPermissionShownOnMap(id: permission.id, shown: !permission.showOnMap)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: permission.showOnMap ? "checkmark.square.fill" : "square")
+                            .foregroundColor(theme.palette.bronzeBright)
+                        Text("Visible on map")
+                            .font(.field(size: 14, weight: .semibold))
+                            .foregroundColor(theme.palette.cream)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Visible on map")
+                .accessibilityValue(permission.showOnMap ? "Shown" : "Hidden")
             } else {
                 MetricRow("Boundary", "Not linked")
             }
@@ -275,10 +291,11 @@ private struct PermissionCard: View {
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
 
-                Button("Show on map") { onShowMap() }
+                Button("Focus on map") { onShowMap() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(boundary == nil ? theme.palette.mist : theme.palette.bronzeBright)
                     .disabled(boundary == nil)
+                    .accessibilityLabel("Focus on map")
 
                 Button("Edit") { onEdit() }
                     .font(.field(size: 14, weight: .semibold))
@@ -355,9 +372,10 @@ private struct BoundaryCard: View {
                         .foregroundColor(theme.palette.bronzeBright)
                 }
 
-                Button("Show on map") { onShowMap() }
+                Button("Focus on map") { onShowMap() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
+                    .accessibilityLabel("Focus on map")
 
                 Button("Delete") { onDelete() }
                     .font(.field(size: 14, weight: .semibold))
@@ -505,15 +523,13 @@ struct PermissionBoundarySheet: View {
     let onStart: (PendingBoundaryCreation) -> Void
     let returnToPermissions: Bool
 
-    init(permissions: [HuntingPermission], initialMode: BoundaryCaptureMode = .walk, returnToPermissions: Bool = true, onStart: @escaping (PendingBoundaryCreation) -> Void) {
+    init(permissions: [HuntingPermission], returnToPermissions: Bool = true, onStart: @escaping (PendingBoundaryCreation) -> Void) {
         self.permissions = permissions
         self.onStart = onStart
         self.returnToPermissions = returnToPermissions
-        self._mode = State(initialValue: initialMode)
     }
 
     @State private var name: String = ""
-    @State private var mode: BoundaryCaptureMode
     @State private var zoneType: BoundaryZoneType = .hunting
     @State private var linkedPermissionId: Int64?
 
@@ -532,12 +548,6 @@ struct PermissionBoundarySheet: View {
                                 Text(zone.displayName).tag(zone)
                             }
                         }
-
-                        Picker("Capture mode", selection: $mode) {
-                            ForEach(BoundaryCaptureMode.allCases, id: \.self) { capture in
-                                Text(capture.label).tag(capture)
-                            }
-                        }
                     }
 
                     Section(header: Text("What this zone means").foregroundColor(theme.palette.bronze)) {
@@ -546,7 +556,10 @@ struct PermissionBoundarySheet: View {
                             .foregroundColor(theme.palette.mist)
                     }
 
-                    Section(header: Text("Link to permission").foregroundColor(theme.palette.bronze)) {
+                    Section(header: Text("Link to a permission").foregroundColor(theme.palette.bronze)) {
+                        Text("Choose one of your saved permissions. This list is not a map layer.")
+                            .font(.field(size: 12))
+                            .foregroundColor(theme.palette.mist)
                         Button {
                             linkedPermissionId = nil
                         } label: {
@@ -557,7 +570,7 @@ struct PermissionBoundarySheet: View {
                             }
                         }
                         if permissions.isEmpty {
-                            Text("Add a written permission first, then link it here or from the permission card.")
+                            Text("No permissions saved yet. Add one in the wallet, then it will appear here.")
                                 .font(.field(size: 12))
                                 .foregroundColor(theme.palette.mist)
                         }
@@ -566,7 +579,14 @@ struct PermissionBoundarySheet: View {
                                 linkedPermissionId = permission.id
                             } label: {
                                 HStack {
-                                    Text(permission.displayLabel)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(permission.displayLabel)
+                                        if !permission.farmName.isEmpty && permission.farmName != permission.displayLabel {
+                                            Text(permission.farmName)
+                                                .font(.field(size: 12))
+                                                .foregroundColor(theme.palette.mist)
+                                        }
+                                    }
                                     Spacer()
                                     if linkedPermissionId == permission.id { Image(systemName: "checkmark") }
                                 }
@@ -581,23 +601,11 @@ struct PermissionBoundarySheet: View {
                     }
 
                     Section {
-                        Button("Start capture on Map") {
-                            onStart(
-                                PendingBoundaryCreation(
-                                    mode: mode,
-                                    name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                        ? zoneType.displayName
-                                        : name,
-                                    zoneType: zoneType,
-                                    returnToPermissions: returnToPermissions,
-                                    permissionId: linkedPermissionId
-                                )
-                            )
-                            dismiss()
-                        }
-                        .foregroundColor(theme.palette.bronze)
-
-                        Text("The Map tab records the GPS outline for a walked boundary, or lets you draw the outline by hand.")
+                        Button("Draw fence on map") { start(.draw) }
+                            .foregroundColor(theme.palette.bronze)
+                        Button("Walk fence on map") { start(.walk) }
+                            .foregroundColor(theme.palette.bronze)
+                        Text("Draw traces the fence with your finger. Walk records it from GPS.")
                             .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }
@@ -613,6 +621,20 @@ struct PermissionBoundarySheet: View {
                 }
             }
         }
+    }
+
+    private func start(_ captureMode: BoundaryCaptureMode) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        onStart(
+            PendingBoundaryCreation(
+                mode: captureMode,
+                name: trimmed.isEmpty ? zoneType.displayName : trimmed,
+                zoneType: zoneType,
+                returnToPermissions: returnToPermissions,
+                permissionId: linkedPermissionId
+            )
+        )
+        dismiss()
     }
 }
 
