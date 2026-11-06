@@ -215,9 +215,17 @@ async function assignBuildToGroup(token, group, buildId, { tolerateConflict = fa
   if (response.ok) return 'assigned'; // 204 No Content on success
   // 409 means the relationship already exists, which is the desired end state.
   if (tolerateConflict && response.status === 409) return 'already assigned';
-  // Apple rejects POST onto an internal group that already receives every build:
-  // "Cannot add internal group to a build." That is not a missing assignment.
-  if (tolerateConflict && response.status === 422 && internalAssignmentRejected(response)) return 'automatic';
+  // A 422 with this wording is only special for an explicitly internal group.
+  // It means the add was rejected. It does not prove the group can install the build.
+  // Automatic distribution (hasAccessToAllBuilds) is optional and per group.
+  if (
+    tolerateConflict &&
+    group.attributes?.isInternalGroup === true &&
+    response.status === 422 &&
+    internalAssignmentRejected(response)
+  ) {
+    return 'assignment_rejected';
+  }
   throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, path, response);
 }
 
@@ -248,13 +256,25 @@ export async function groupHasBuild(token, groupId, buildId) {
   return false;
 }
 
+/** Outcomes that were confirmed by a relationship GET containing this build. */
+const VERIFIED_INTERNAL_OUTCOMES = new Set([
+  'already present',
+  'assigned',
+  'already assigned',
+  'verified',
+]);
+
+export function internalAccessVerified(outcome) {
+  return VERIFIED_INTERNAL_OUTCOMES.has(outcome);
+}
+
 /**
- * Guarantees an internal group lists the build.
+ * Tries to put an internal group on the build, then only reports success when
+ * a relationship GET lists that build.
  *
- * Automatic internal distribution is a per-group setting and, even when it is on,
- * App Store Connect can take a while to add a freshly processed build. Checking
- * once immediately after processing therefore reports a false failure (build 40
- * did exactly that), so assign explicitly and poll before giving up.
+ * Automatic distribution is the optional per-group `hasAccessToAllBuilds`
+ * setting, not a consequence of `isInternalGroup`. A 422 that refuses the add
+ * is not evidence the group can install the build.
  */
 export async function ensureInternalGroupAccess(
   token,
@@ -265,11 +285,9 @@ export async function ensureInternalGroupAccess(
   if (await groupHasBuild(token, group.id, buildId)) return 'already present';
 
   const outcome = await assignBuildToGroup(token, group, buildId, { tolerateConflict: true });
-  if (outcome === 'automatic') {
-    if (await groupHasBuild(token, group.id, buildId)) return 'automatic';
-    // The relationship list may stay empty: internal groups receive processed
-    // builds without an explicit add, and Apple returns 422 if we try.
-    return 'automatic access';
+  if (outcome === 'assignment_rejected') {
+    if (await groupHasBuild(token, group.id, buildId)) return 'verified';
+    return 'assignment_rejected_unverified';
   }
 
   const deadline = Date.now() + timeoutMs;
@@ -349,9 +367,22 @@ async function main() {
         .join(', '),
   );
 
+  const internalResults = [];
   for (const group of internalGroups) {
+    const name = group.attributes?.name ?? group.id;
     const outcome = await ensureInternalGroupAccess(token, group, build.id);
-    console.log(`  "${group.attributes?.name ?? group.id}" (internal): build access verified (${outcome})`);
+    const verified = internalAccessVerified(outcome);
+    internalResults.push({ name, outcome, verified });
+    if (verified) {
+      console.log(`  "${name}" (internal): build access verified (${outcome})`);
+    } else {
+      const message =
+        `"${name}" (internal): assignment rejected, access NOT verified (${outcome}). ` +
+        'The build was not found on the group. This does not mean testers can install it. ' +
+        'Automatic distribution is optional per group (hasAccessToAllBuilds).';
+      console.log(`  ${message}`);
+      annotate('notice', 'Internal TestFlight assignment not verified', message);
+    }
   }
 
   const outcomes = [];
@@ -364,15 +395,28 @@ async function main() {
     console.log(`  "${group.attributes?.name ?? group.id}" (external): ${outcome}`);
   }
 
+  const unverified = internalResults.filter((result) => !result.verified);
+  const verifiedCount = internalResults.length - unverified.length;
+  const internalSummary = unverified.length
+    ? `internal not verified: ${unverified.map((result) => result.name).join(', ')}` +
+      (verifiedCount ? `; ${verifiedCount} other internal group(s) verified by relationship GET` : '')
+    : `internal: ${verifiedCount} group(s) access verified`;
+
   annotate(
     'notice',
-    'TestFlight distribution',
-    `build ${buildNumber} — internal: ${internalGroups.length} group(s) access verified` +
+    unverified.length ? 'TestFlight distribution (internal unverified)' : 'TestFlight distribution',
+    `build ${buildNumber} — ${internalSummary}` +
       (externalGroups.length ? `; external: ${outcomes.join(', ')}` : '; no external groups'),
   );
 
   if (externalGroups.length === 0) {
-    annotate('notice', 'Beta App Review', 'no external groups — internal group build access verified');
+    annotate(
+      'notice',
+      'Beta App Review',
+      unverified.length
+        ? 'no external groups — internal access was not verified'
+        : 'no external groups — internal group build access verified',
+    );
     return;
   }
 
