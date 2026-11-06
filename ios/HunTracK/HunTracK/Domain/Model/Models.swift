@@ -5,6 +5,15 @@ public enum MarkerCategoryGroup: String, Codable, CaseIterable {
     case hunting = "HUNTING"
     case navigation = "NAVIGATION"
     case tracking = "TRACKING"
+
+    public var label: String {
+        switch self {
+        case .wildlife: return "Wildlife"
+        case .hunting: return "Hunting"
+        case .navigation: return "Navigation"
+        case .tracking: return "Tracking"
+        }
+    }
 }
 
 public enum MarkerCategory: String, Codable, CaseIterable {
@@ -67,6 +76,19 @@ public enum MarkerCategory: String, Codable, CaseIterable {
         case .droppings: return "Droppings"
         case .beddingArea: return "Bedding area"
         case .lastSighting: return "Last sighting"
+        }
+    }
+
+    public var group: MarkerCategoryGroup {
+        switch self {
+        case .deer, .fox, .rabbit, .bird, .badger, .otherWildlife:
+            return .wildlife
+        case .highSeat, .hide, .cull, .feedingArea, .trailCamera, .caller, .waterSource, .saltLick, .treeStand:
+            return .hunting
+        case .parking, .gate, .fence, .boundary, .dangerArea, .shelter, .homing:
+            return .navigation
+        case .footprint, .blood, .hair, .droppings, .beddingArea, .lastSighting:
+            return .tracking
         }
     }
 }
@@ -460,6 +482,8 @@ public struct HuntingPermission: Identifiable, Codable, Equatable {
     public var docType: PermissionDocType = .note
     public var attachmentUri: String?
     public var boundaryAreaId: Int64?
+    /// Drawn on the map. Missing on older saves, which stay visible.
+    public var showOnMap: Bool = true
     
     public init(
         id: Int64 = 0,
@@ -474,7 +498,8 @@ public struct HuntingPermission: Identifiable, Codable, Equatable {
         notes: String = "",
         docType: PermissionDocType = .note,
         attachmentUri: String? = nil,
-        boundaryAreaId: Int64? = nil
+        boundaryAreaId: Int64? = nil,
+        showOnMap: Bool = true
     ) {
         self.id = id
         self.label = label
@@ -489,6 +514,48 @@ public struct HuntingPermission: Identifiable, Codable, Equatable {
         self.docType = docType
         self.attachmentUri = attachmentUri
         self.boundaryAreaId = boundaryAreaId
+        self.showOnMap = showOnMap
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label, farmName, permissionType, species, validFromEpochMs, validToEpochMs
+        case ownerName, ownerContact, notes, docType, attachmentUri, boundaryAreaId, showOnMap
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(Int64.self, forKey: .id) ?? 0
+        label = try values.decodeIfPresent(String.self, forKey: .label) ?? ""
+        farmName = try values.decode(String.self, forKey: .farmName)
+        permissionType = try values.decode(String.self, forKey: .permissionType)
+        species = try values.decode(String.self, forKey: .species)
+        validFromEpochMs = try values.decode(Int64.self, forKey: .validFromEpochMs)
+        validToEpochMs = try values.decode(Int64.self, forKey: .validToEpochMs)
+        ownerName = try values.decode(String.self, forKey: .ownerName)
+        ownerContact = try values.decode(String.self, forKey: .ownerContact)
+        notes = try values.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        docType = try values.decodeIfPresent(PermissionDocType.self, forKey: .docType) ?? .note
+        attachmentUri = try values.decodeIfPresent(String.self, forKey: .attachmentUri)
+        boundaryAreaId = try values.decodeIfPresent(Int64.self, forKey: .boundaryAreaId)
+        showOnMap = try values.decodeIfPresent(Bool.self, forKey: .showOnMap) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(label, forKey: .label)
+        try values.encode(farmName, forKey: .farmName)
+        try values.encode(permissionType, forKey: .permissionType)
+        try values.encode(species, forKey: .species)
+        try values.encode(validFromEpochMs, forKey: .validFromEpochMs)
+        try values.encode(validToEpochMs, forKey: .validToEpochMs)
+        try values.encode(ownerName, forKey: .ownerName)
+        try values.encode(ownerContact, forKey: .ownerContact)
+        try values.encode(notes, forKey: .notes)
+        try values.encode(docType, forKey: .docType)
+        try values.encodeIfPresent(attachmentUri, forKey: .attachmentUri)
+        try values.encodeIfPresent(boundaryAreaId, forKey: .boundaryAreaId)
+        try values.encode(showOnMap, forKey: .showOnMap)
     }
     
     public var displayLabel: String {
@@ -550,6 +617,25 @@ public enum BoundaryZoneType: String, Codable, CaseIterable {
         case .noGo: return 0.20
         case .safe: return 0.16
         }
+    }
+}
+
+/// Matches Android `BoundaryFenceStyle`.
+public enum BoundaryFenceStyle {
+    public static let drawColor = "#1A3A6E"
+    public static let linkedColor = "#E2B05C"
+    public static let drawWidth: Double = 1.75
+    public static let linkedWidth: Double = 2.25
+    private static let defaultNames: Set<String> = [
+        "", "Hunting area", "No-go zone", "Safe zone", "Field boundary", "Area"
+    ]
+
+    public static func nameAfterLink(current: String, permissionLabel: String) -> String {
+        let label = permissionLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if label.isEmpty { return current }
+        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || defaultNames.contains(trimmed) { return label }
+        return current
     }
 }
 

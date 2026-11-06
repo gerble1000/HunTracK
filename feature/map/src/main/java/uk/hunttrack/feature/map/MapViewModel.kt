@@ -36,6 +36,7 @@ import uk.hunttrack.domain.model.BoundaryCaptureMode
 import uk.hunttrack.domain.model.BoundaryPoint
 import uk.hunttrack.domain.model.BoundaryZoneType
 import uk.hunttrack.domain.model.PendingBoundaryCreation
+import uk.hunttrack.domain.geo.BoundaryVisibility
 import uk.hunttrack.domain.model.PermissionMapFocusItem
 import uk.hunttrack.domain.model.FieldMarker
 import uk.hunttrack.domain.model.GpsFix
@@ -168,6 +169,13 @@ class MapViewModel @Inject constructor(
         val selected: FieldMarker?,
         val showOffline: Boolean,
     )
+
+    val boundaryVisibility: StateFlow<BoundaryVisibility> = combine(
+        permissionsRepository.observePermissions(),
+        preferencesRepository.hiddenPermissionIdsFlow,
+    ) { permissions, hidden ->
+        BoundaryVisibility(permissions, hidden)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, BoundaryVisibility())
 
     val uiState: StateFlow<MapUiState> = combine(
         markerRepository.observeMarkers(),

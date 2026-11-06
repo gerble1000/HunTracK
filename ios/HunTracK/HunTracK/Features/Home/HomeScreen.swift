@@ -49,7 +49,11 @@ public struct HomeScreen: View {
             )
         }
         .sheet(isPresented: $showingQuickAdd) {
-            HomeQuickAddMarkerSheet(latitude: fix.latitude, longitude: fix.longitude)
+            MarkLocationSheet(
+                isPresented: $showingQuickAdd,
+                pinnedLatitude: fix.latitude,
+                pinnedLongitude: fix.longitude
+            )
         }
         .onAppear {
             location.requestPermission()
@@ -501,68 +505,6 @@ private struct HomeCopyLocationSheet: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(accent.opacity(0.75), lineWidth: 1)
             )
-        }
-    }
-}
-
-// MARK: - Quick add marker sheet
-
-private struct HomeQuickAddMarkerSheet: View {
-    let latitude: Double
-    let longitude: Double
-
-    @ObservedObject private var theme = ThemeManager.shared
-    @ObservedObject private var db = DatabaseService.shared
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String = ""
-    @State private var category: MarkerCategory = .highSeat
-    @State private var notes: String = ""
-
-    var body: some View {
-        NavigationView {
-            ScreenBackground {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        GlassPanel {
-                            SectionLabel("Marker details")
-
-                            TextField("Name", text: $name)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-
-                            MarkerCategoryMenu(category: $category)
-
-                            TextField("Notes (optional)", text: $notes)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                        }
-
-                        GlassPanel {
-                            SectionLabel("Location")
-                            Text(String(format: "%.5f, %.5f", latitude, longitude))
-                                .foregroundColor(theme.palette.cream)
-                            if let osGrid = OsGridRef.latLngToOsGrid(latitude: latitude, longitude: longitude) {
-                                Text(osGrid)
-                                    .foregroundColor(theme.palette.bronzeBright)
-                            }
-                        }
-
-                        HuntButton("Save marker here", icon: "mappin") {
-                            let marker = FieldMarker(
-                                category: category,
-                                name: name.isEmpty ? category.label : name,
-                                notes: notes,
-                                latitude: latitude,
-                                longitude: longitude
-                            )
-                            db.addMarker(marker)
-                            dismiss()
-                        }
-                    }
-                    .padding(16)
-                }
-            }
-            .navigationTitle("Mark location")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(leading: Button("Cancel") { dismiss() })
         }
     }
 }

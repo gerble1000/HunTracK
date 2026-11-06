@@ -108,6 +108,7 @@ fun PermissionsRoute(
         onShowPermissionOnMap = { viewModel.showPermissionsOnMap(listOf(it)) },
         onShowSelectedOnMap = viewModel::showSelectedOnMap,
         onOpenMap = onOpenMapForBoundary,
+        onSetPermissionShownOnMap = viewModel::setPermissionShownOnMap,
     )
 }
 
@@ -133,6 +134,7 @@ fun PermissionsScreen(
     onShowPermissionOnMap: (Long) -> Unit,
     onShowSelectedOnMap: () -> Unit,
     onOpenMap: () -> Unit,
+    onSetPermissionShownOnMap: (Long, Boolean) -> Unit = { _, _ -> },
 ) {
     var label by remember { mutableStateOf("") }
     var farm by remember { mutableStateOf("") }
@@ -298,6 +300,20 @@ fun PermissionsScreen(
                         if (linkedBoundary != null) {
                             Spacer(Modifier.height(8.dp))
                             LinkedBoundarySummary(boundary = linkedBoundary)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Checkbox(
+                                    checked = p.id !in state.hiddenPermissionIds,
+                                    onCheckedChange = { onSetPermissionShownOnMap(p.id, it) },
+                                )
+                                Text(
+                                    "Show on map",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = HuntColors.Cream,
+                                )
+                            }
                         } else if (p.boundaryAreaId != null) {
                             MetricRow("Boundary", "Linked area removed")
                         }

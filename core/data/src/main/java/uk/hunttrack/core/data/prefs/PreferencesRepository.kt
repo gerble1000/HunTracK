@@ -38,6 +38,8 @@ class PreferencesRepository @Inject constructor(
     private val mapTrainingEnabled = booleanPreferencesKey("map_training_enabled")
     private val windTrainingEnabled = booleanPreferencesKey("wind_training_enabled")
     private val scentPlanMarkerId = longPreferencesKey("scent_plan_marker_id")
+    /** Permission ids whose boundary should not be drawn. Absent ids stay visible. */
+    private val hiddenPermissionMapIds = stringPreferencesKey("hidden_permission_map_ids")
     private val tidesEnabled = booleanPreferencesKey("tides_enabled")
     private val tideStationId = stringPreferencesKey("tide_station_id")
     private val tideStationName = stringPreferencesKey("tide_station_name")
@@ -74,6 +76,22 @@ class PreferencesRepository @Inject constructor(
     /** Marker chosen for scent approach planning (shown as into-wind route on Map). */
     val scentPlanMarkerIdFlow: Flow<Long?> = context.dataStore.data.map { prefs ->
         prefs[scentPlanMarkerId]
+    }
+
+    val hiddenPermissionIdsFlow: Flow<Set<Long>> = context.dataStore.data.map { prefs ->
+        decodeHiddenPermissionIds(prefs[hiddenPermissionMapIds])
+    }
+
+    suspend fun setPermissionShownOnMap(id: Long, shown: Boolean) {
+        context.dataStore.edit { prefs ->
+            val current = decodeHiddenPermissionIds(prefs[hiddenPermissionMapIds]).toMutableSet()
+            if (shown) current.remove(id) else current.add(id)
+            if (current.isEmpty()) {
+                prefs.remove(hiddenPermissionMapIds)
+            } else {
+                prefs[hiddenPermissionMapIds] = current.joinToString(",")
+            }
+        }
     }
 
     suspend fun setScentPlanMarkerId(id: Long?) {
@@ -163,5 +181,10 @@ class PreferencesRepository @Inject constructor(
             it.remove(tideStationLatitude)
             it.remove(tideStationLongitude)
         }
+    }
+
+    private fun decodeHiddenPermissionIds(raw: String?): Set<Long> {
+        if (raw.isNullOrBlank()) return emptySet()
+        return raw.split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
     }
 }

@@ -242,6 +242,7 @@ fun MapRoute(
         onAppendBoundaryDrawPoint = viewModel::appendBoundaryDrawPoint,
         onFinishBoundary = viewModel::finishBoundary,
         onClearPermissionMapFocus = viewModel::clearPermissionMapFocus,
+        visibility = viewModel.boundaryVisibility.collectAsStateWithLifecycle().value,
     )
 }
 
@@ -278,6 +279,7 @@ fun MapScreen(
     onAppendBoundaryDrawPoint: (Double, Double) -> Unit = { _, _ -> },
     onFinishBoundary: () -> Unit = {},
     onClearPermissionMapFocus: () -> Unit = {},
+    visibility: uk.hunttrack.domain.geo.BoundaryVisibility = uk.hunttrack.domain.geo.BoundaryVisibility(),
 ) {
     val context = LocalContext.current
     val (mapRetryKey, bumpMapRetry) = rememberMapRetryState()
@@ -395,6 +397,7 @@ fun MapScreen(
     val onAppendBoundaryPointRef = rememberUpdatedState(onAppendBoundaryDrawPoint)
     val boundaryDraftPointsRef = rememberUpdatedState(state.draftBoundaryPoints)
     val boundariesRef = rememberUpdatedState(state.boundaries)
+    val visibilityRef = rememberUpdatedState(visibility)
     val liveBoundaryDrawCoords = remember { mutableStateOf<List<Pair<Double, Double>>>(emptyList()) }
     val gpsRef = rememberUpdatedState(state.gps)
     val windFromRef = rememberUpdatedState(state.windFromDeg)
@@ -433,6 +436,7 @@ fun MapScreen(
                     showTrack = showTrack,
                     showMarkerPath = showMarkerPath,
                     showSmoke = showSmoke,
+                    visibility = visibility,
                 )
             }
         }
@@ -465,6 +469,7 @@ fun MapScreen(
                     showMarkerPath = showMarkerPath,
                     showSmoke = false,
                     markersOnly = true,
+                    visibility = visibility,
                 )
             }
             mapCameraTick++
@@ -657,7 +662,7 @@ fun MapScreen(
             val style = map.style ?: return
             ensureSources(style, context)
             updateLiveBoundaryLine(style, coords)
-                updateBoundariesOverlay(style, boundariesRef.value, mergedDraftPoints(), emptyList())
+                updateBoundariesOverlay(style, boundariesRef.value, mergedDraftPoints(), emptyList(), visibilityRef.value)
             bringBoundaryDrawLayersToFront(style)
         }
 
@@ -736,7 +741,7 @@ fun MapScreen(
                             if (style != null) {
                                 ensureSources(style, context)
                                 val committed = boundaryDraftPointsRef.value.ifEmpty { mergedDraftPoints() }
-                                updateBoundariesOverlay(style, boundariesRef.value, committed, emptyList())
+                                updateBoundariesOverlay(style, boundariesRef.value, committed, emptyList(), visibilityRef.value)
                                 bringBoundaryDrawLayersToFront(style)
                             }
                             localStrokePoints.clear()
@@ -775,19 +780,19 @@ fun MapScreen(
         mapView.getMapAsync { map ->
             map.style?.let { style ->
                 ensureSources(style, context)
-                updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus)
+                updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
                 updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
                 bringBoundaryDrawLayersToFront(style)
             }
         }
     }
 
-    LaunchedEffect(mapReady, state.permissionMapFocus, state.boundaries) {
+    LaunchedEffect(mapReady, state.permissionMapFocus, state.boundaries, visibility) {
         if (!mapReady) return@LaunchedEffect
         mapView.getMapAsync { map ->
             map.style?.let { style ->
                 ensureSources(style, context)
-                updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus)
+                updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
                 updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
             }
         }
@@ -822,16 +827,6 @@ fun MapScreen(
             themeMode = state.prefs.themeMode,
             modifier = Modifier.fillMaxSize(),
         )
-
-        if (state.permissionMapFocus.isNotEmpty()) {
-            PermissionFocusBanner(
-                labels = state.permissionMapFocus.map { it.label },
-                onClear = onClearPermissionMapFocus,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 12.dp, start = 16.dp, end = 16.dp),
-            )
-        }
 
         MapMarkerOverlay(
             mapView = mapView,
@@ -872,6 +867,7 @@ fun MapScreen(
                                     showTrack = showTrack,
                                     showMarkerPath = showMarkerPath,
                                     showSmoke = showSmoke,
+                                    visibility = visibility,
                                 )
                                 mapReady = true
                                 mapZoomLevel = map.cameraPosition.zoom
@@ -1381,6 +1377,13 @@ fun MapScreen(
                     leadingIcon = { Icon(Icons.Default.Visibility, null) },
                 )
             }
+            if (state.permissionMapFocus.isNotEmpty()) {
+                PermissionFocusBanner(
+                    labels = state.permissionMapFocus.map { it.label },
+                    onClear = onClearPermissionMapFocus,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         // Scale bar sits directly above Sync — bottom-left
@@ -1866,7 +1869,7 @@ private fun BoundaryDrawStrokeOverlay(
                 color = FenceLineComposeColor,
                 start = points[index],
                 end = points[index + 1],
-                strokeWidth = FenceLineWidth * 2f,
+                strokeWidth = 2.5f,
                 cap = StrokeCap.Round,
             )
         }
@@ -2004,6 +2007,7 @@ private const val ScaleBarTargetPixels = 88f
 private const val ScaleBarOneMeterThreshold = 1.45
 private const val MarkerHitRadiusMeters = 55.0
 private const val FenceLineColor = "#1A3A6E"
+private const val DraftFenceLineWidth = 1.75f
 /** Saved offline pack border: thin blue line with yellow dashes. */
 private const val OfflineRegionBlue = "#2E86DE"
 private const val OfflineRegionYellow = "#FFD54F"
@@ -2331,7 +2335,7 @@ private fun ensureSources(style: Style, context: Context) {
         style.addLayer(
             LineLayer("boundary-draft-line", "boundary-draft-source").withProperties(
                 PropertyFactory.lineColor(FenceLineColor),
-                PropertyFactory.lineWidth(FenceLineWidth),
+                PropertyFactory.lineWidth(DraftFenceLineWidth),
                 PropertyFactory.lineOpacity(0.95f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round"),
@@ -2346,8 +2350,8 @@ private fun ensureSources(style: Style, context: Context) {
             LineLayer("boundary-live-glow", "boundary-live-source").withProperties(
                 PropertyFactory.visibility(Property.NONE),
                 PropertyFactory.lineColor("#FFFFFF"),
-                PropertyFactory.lineWidth(14f),
-                PropertyFactory.lineOpacity(0.55f),
+                PropertyFactory.lineWidth(3.5f),
+                PropertyFactory.lineOpacity(0.35f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round"),
             ),
@@ -2358,7 +2362,7 @@ private fun ensureSources(style: Style, context: Context) {
             LineLayer("boundary-live-line", "boundary-live-source").withProperties(
                 PropertyFactory.visibility(Property.NONE),
                 PropertyFactory.lineColor(FenceLineColor),
-                PropertyFactory.lineWidth(FenceLineWidth),
+                PropertyFactory.lineWidth(DraftFenceLineWidth),
                 PropertyFactory.lineOpacity(0.95f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round"),
@@ -2611,13 +2615,14 @@ private fun syncMapOverlays(
     showMarkerPath: Boolean,
     showSmoke: Boolean,
     markersOnly: Boolean = false,
+    visibility: uk.hunttrack.domain.geo.BoundaryVisibility = uk.hunttrack.domain.geo.BoundaryVisibility(),
 ) {
     updateMarkers(style, context, state.markers)
     updateMarkerPath(style, state.markers, showMarkerPath)
     updateGoToPin(style, state.goToTarget)
     updateOfflineRegionsOverlay(style, state.offlineRegions)
     if (markersOnly) {
-        updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus)
+        updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
         updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
         return
     }
@@ -2626,7 +2631,7 @@ private fun syncMapOverlays(
     // Wind smoke is driven by the LaunchedEffect animation loop — avoid resetting phase here.
     updateHomingOverlay(style, state.gps, state.homingTarget)
     updateScentApproach(style, state.scentApproach)
-    updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus)
+    updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
     updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
 }
 
@@ -2907,20 +2912,23 @@ private fun updateBoundariesOverlay(
     boundaries: List<uk.hunttrack.domain.model.BoundaryArea>,
     draftPoints: List<uk.hunttrack.domain.model.BoundaryPoint>,
     focusItems: List<uk.hunttrack.domain.model.PermissionMapFocusItem> = emptyList(),
+    visibility: uk.hunttrack.domain.geo.BoundaryVisibility = uk.hunttrack.domain.geo.BoundaryVisibility(),
 ) {
     val savedSource = style.getSource("boundary-source") as? GeoJsonSource
     val draftSource = style.getSource("boundary-draft-source") as? GeoJsonSource
     val focusIds = focusItems.map { it.boundaryAreaId }.toSet()
     val savedFeatures = boundaries.flatMap { area ->
-        val highlighted = focusIds.isEmpty() || area.id in focusIds
+        if (!visibility.isVisible(area.id)) return@flatMap emptyList()
+        val linked = visibility.isLinked(area.id)
+        val highlighted = focusIds.isNotEmpty() && area.id in focusIds
         boundaryMapFeatures(
             points = area.points,
-            lineColor = if (highlighted && focusIds.isNotEmpty()) FocusBoundaryLineColor else FenceLineColor,
+            lineColor = uk.hunttrack.domain.geo.BoundaryFenceStyle.lineColor(linked),
             fillColor = area.zoneType.mapColorHex(),
             fillOpacity = area.zoneType.mapFillOpacity().toDouble(),
             includeFill = false,
-            lineWidth = if (highlighted && focusIds.isNotEmpty()) 3.5f else FenceLineWidth,
-            lineOpacity = if (highlighted) 0.98 else 0.28,
+            lineWidth = if (highlighted) 3.5f else uk.hunttrack.domain.geo.BoundaryFenceStyle.lineWidth(linked),
+            lineOpacity = if (highlighted || linked) 0.98 else 0.9,
         ).toList()
     }.toTypedArray()
     savedSource?.setGeoJson(FeatureCollection.fromFeatures(savedFeatures))

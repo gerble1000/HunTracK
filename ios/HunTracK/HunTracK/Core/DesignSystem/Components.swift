@@ -31,6 +31,21 @@ public enum MarkerArtwork {
 
     private static var cache: [String: UIImage] = [:]
 
+    /// Same species-to-category mapping as Android `MarkerIconResolver.categoryForSpecies`.
+    public static func category(for species: Species) -> MarkerCategory {
+        switch species.id {
+        case "fox": return .fox
+        case "rabbit", "brown_hare": return .rabbit
+        default:
+            switch species.group {
+            case .deer: return .deer
+            case .bird, .waterfowl, .corvid: return .bird
+            case .pest: return .otherWildlife
+            case .otherQuarry: return .fox
+            }
+        }
+    }
+
     public static func icon(category: MarkerCategory, speciesId: String? = nil, diameter: CGFloat) -> UIImage {
         let glyph = resolveGlyph(category: category, speciesId: speciesId)
         let key = "\(glyph.cacheKey)-\(Int(diameter.rounded()))"

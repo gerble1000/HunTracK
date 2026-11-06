@@ -67,7 +67,7 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
 private enum OverlayKind {
     case route
     case pendingBoundary
-    case zone(BoundaryZoneType, highlighted: Bool)
+    case zone(strokeHex: String, lineWidth: CGFloat, fillHex: String, fillOpacity: Double)
     case grid(major: Bool)
     case plume
 }
@@ -86,6 +86,7 @@ private struct MapContentSnapshot: Equatable {
     var homingLongitude: Double?
     var pendingCoordinates: [String] = []
     var focusedBoundaryIds: [Int64] = []
+    var linkedBoundaryIds: [Int64] = []
 }
 
 // MARK: - The UIKit map host
@@ -289,6 +290,7 @@ private struct MapViewHost: UIViewRepresentable {
     var windFix: GpsFix?
     var windWeather: WeatherSnapshot?
     var focusedBoundaryIds: Set<Int64>
+    var linkedBoundaryIds: Set<Int64>
     var bronze: UIColor
 
     /// True while a "Draw it" boundary capture is in progress: map panning is
@@ -405,7 +407,8 @@ private struct MapViewHost: UIViewRepresentable {
             homingLatitude: homingTarget?.latitude,
             homingLongitude: homingTarget?.longitude,
             pendingCoordinates: pendingPoints.map { "\($0.orderIndex):\($0.latitude):\($0.longitude)" },
-            focusedBoundaryIds: focusedBoundaryIds.sorted()
+            focusedBoundaryIds: focusedBoundaryIds.sorted(),
+            linkedBoundaryIds: linkedBoundaryIds.sorted()
         )
 
         if coordinator.lastSnapshot != snapshot {
@@ -544,8 +547,16 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
                 CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
             }
             let polygon = MKPolygon(coordinates: &coordinates, count: coordinates.count)
+            let linked = host.linkedBoundaryIds.contains(boundary.id)
             let highlighted = host.focusedBoundaryIds.contains(boundary.id)
-            overlayKinds[ObjectIdentifier(polygon)] = .zone(boundary.zoneType, highlighted: highlighted)
+            let width = CGFloat(highlighted ? 3.5 : (linked ? BoundaryFenceStyle.linkedWidth : BoundaryFenceStyle.drawWidth))
+            let stroke = linked ? BoundaryFenceStyle.linkedColor : BoundaryFenceStyle.drawColor
+            overlayKinds[ObjectIdentifier(polygon)] = .zone(
+                strokeHex: stroke,
+                lineWidth: width,
+                fillHex: boundary.zoneType.mapColorHex,
+                fillOpacity: boundary.zoneType.mapFillOpacity
+            )
             mapView.addOverlay(polygon)
         }
 
@@ -758,16 +769,14 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
 
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
         switch overlayKinds[ObjectIdentifier(overlay)] {
-        case .zone(let zoneType, let highlighted):
+        case .zone(let strokeHex, let lineWidth, let fillHex, let fillOpacity):
             guard let polygon = overlay as? MKPolygon else {
                 return MKOverlayRenderer(overlay: overlay)
             }
-            let color = mapUIColor(hex: zoneType.mapColorHex)
             let renderer = MKPolygonRenderer(polygon: polygon)
-            renderer.strokeColor = color
-            renderer.lineWidth = highlighted ? 5 : 2.5
-            let fill = highlighted ? min(0.42, zoneType.mapFillOpacity + 0.2) : zoneType.mapFillOpacity
-            renderer.fillColor = color.withAlphaComponent(CGFloat(fill))
+            renderer.strokeColor = mapUIColor(hex: strokeHex)
+            renderer.lineWidth = lineWidth
+            renderer.fillColor = mapUIColor(hex: fillHex).withAlphaComponent(CGFloat(fillOpacity))
             return renderer
 
         case .route:
@@ -784,9 +793,8 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
                 return MKOverlayRenderer(overlay: overlay)
             }
             let renderer = MKPolylineRenderer(polyline: line)
-            renderer.strokeColor = UIColor.systemTeal
-            renderer.lineWidth = 3
-            renderer.lineDashPattern = [6, 4]
+            renderer.strokeColor = mapUIColor(hex: BoundaryFenceStyle.drawColor)
+            renderer.lineWidth = CGFloat(BoundaryFenceStyle.drawWidth)
             return renderer
 
         case .grid(let major):
@@ -891,7 +899,7 @@ public struct MapScreen: View {
                     regionRequestToken: regionRequestToken,
                     markers: db.markers,
                     culls: db.culls,
-                    boundaries: db.boundaries,
+                    boundaries: visibleBoundaries,
                     routes: db.routes,
                     trackPoints: db.trackPoints,
                     showCulls: db.preferences.showCullPinsOnMap,
@@ -903,6 +911,7 @@ public struct MapScreen: View {
                     windFix: location.latestFix,
                     windWeather: weatherService.weather ?? db.cachedWeather,
                     focusedBoundaryIds: Set(db.permissionMapFocus.map { $0.boundaryAreaId }),
+                    linkedBoundaryIds: linkedBoundaryIds,
                     bronze: UIColor(theme.palette.bronze),
                     isDrawing: capture?.mode == .draw,
                     onRegionChanged: { coordinate, visibleSpan in
@@ -932,13 +941,6 @@ public struct MapScreen: View {
                     }
                 }
             }
-            .overlay(alignment: .bottomLeading) {
-                if capture == nil {
-                    windLegend
-                        .padding(.leading, 12)
-                        .padding(.bottom, 8)
-                }
-            }
             .overlay(alignment: .bottomTrailing) {
                 if capture == nil {
                     mapControls
@@ -959,11 +961,10 @@ public struct MapScreen: View {
             }
         }
         .sheet(isPresented: $showingAddSheet) {
-            QuickAddMarkerSheet(
+            MarkLocationSheet(
                 isPresented: $showingAddSheet,
-                latitude: markerCoordinate?.latitude ?? centre.latitude,
-                longitude: markerCoordinate?.longitude ?? centre.longitude,
-                useMyFix: markerCoordinate == nil
+                pinnedLatitude: markerCoordinate?.latitude,
+                pinnedLongitude: markerCoordinate?.longitude
             )
         }
         .sheet(isPresented: $showingLayers) {
@@ -1292,12 +1293,12 @@ public struct MapScreen: View {
     }
 
     private var mapControls: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Text(MapZoom.label(spanMeters))
                 .font(.field(size: 11, weight: .bold, design: .monospaced))
                 .foregroundColor(theme.palette.cream)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
                 .background(theme.palette.charcoal.opacity(0.9))
                 .cornerRadius(8)
                 .accessibilityLabel("View height \(MapZoom.label(spanMeters))")
@@ -1312,62 +1313,16 @@ public struct MapScreen: View {
         }
     }
 
-    private var windLegend: some View {
-        let lines: (String, String)? = windLegendLines()
-        return VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color(red: 0.96, green: 0.32, blue: 0.62))
-                    .frame(width: 10, height: 10)
-                Text("Scent smoke")
-                    .font(.field(size: 12, weight: .bold))
-                    .foregroundColor(theme.palette.cream)
-            }
-            if let lines = lines {
-                Text(lines.0)
-                    .font(.field(size: 11, weight: .semibold))
-                    .foregroundColor(theme.palette.cream)
-                Text(lines.1)
-                    .font(.field(size: 11))
-                    .foregroundColor(theme.palette.mist)
-            } else {
-                Text("Waiting for GPS and recent local wind")
-                    .font(.field(size: 11))
-                    .foregroundColor(theme.palette.mist)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private var visibleBoundaries: [BoundaryArea] {
+        db.boundaries.filter { boundary in
+            let linked = db.permissions.filter { $0.boundaryAreaId == boundary.id }
+            if linked.isEmpty { return true }
+            return linked.contains { $0.showOnMap }
         }
-        .padding(8)
-        .background(theme.palette.charcoal.opacity(0.88))
-        .cornerRadius(10)
-        .frame(maxWidth: 230, alignment: .leading)
     }
 
-    private func windLegendLines() -> (String, String)? {
-        guard let weather = scentWeather else { return nil }
-        let from: Double = weather.windDirectionDeg
-        let downwind: Double = (from + 180).truncatingRemainder(dividingBy: 360)
-        let unit: WindUnit = db.preferences.windUnit
-        let speed: String = ScentPlumeGeometry.formatWindSpeed(weather.windSpeedKmh, unit: unit)
-        let heading: String = "From \(ScentPlumeGeometry.cardinal(from)) \(Int(from))° · \(speed)"
-        let plume: Plume = ScentPlumeGeometry.forConditions(
-            speedKmh: weather.windSpeedKmh,
-            gustKmh: weather.windGustKmh,
-            humidityPercent: weather.humidityPercent,
-            temperatureC: weather.temperatureC
-        )
-        let gustPrefix: String
-        if let gust = weather.windGustKmh {
-            gustPrefix = "Gusts \(ScentPlumeGeometry.formatWindSpeed(gust, unit: unit)) · "
-        } else {
-            gustPrefix = ""
-        }
-        let detail: String = "\(gustPrefix)drifts \(ScentPlumeGeometry.cardinal(downwind)) · ~\(Int(plume.lengthM)) m"
-        return (heading, detail)
-    }
-
-    private var scentWeather: WeatherSnapshot? {
-        ScentPlumeGeometry.usableWeather(weatherService.weather ?? db.cachedWeather, for: location.latestFix)
+    private var linkedBoundaryIds: Set<Int64> {
+        Set(db.permissions.compactMap { $0.boundaryAreaId })
     }
 
     private var focusBanner: some View {
@@ -1393,11 +1348,12 @@ public struct MapScreen: View {
     private func mapControl(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.field(size: 22, weight: .bold))
-                .frame(width: 48, height: 48)
+                .font(.field(size: 16, weight: .bold))
+                .frame(width: 36, height: 36)
                 .foregroundColor(theme.palette.cream)
                 .background(theme.palette.charcoal.opacity(0.9))
-                .cornerRadius(10)
+                .cornerRadius(8)
+                .frame(minWidth: 44, minHeight: 44)
         }
         .accessibilityLabel(title)
     }
@@ -1494,31 +1450,6 @@ public struct MapScreen: View {
                         Text(homingBearingText)
                             .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 8)
-        } else if !db.boundaries.isEmpty {
-            GlassPanel(compact: true) {
-                SectionLabel("Boundaries")
-                ForEach(db.boundaries) { boundary in
-                    HStack {
-                        Circle()
-                            .fill(Color(hex: boundary.zoneType.mapColorHex))
-                            .frame(width: 8, height: 8)
-                        Text(boundary.name)
-                            .font(.field(size: 13, weight: .semibold))
-                            .foregroundColor(theme.palette.cream)
-                        Spacer()
-                        Text(areaText(boundary))
-                            .font(.field(size: 11))
-                            .foregroundColor(theme.palette.mist)
-                        Button("Delete") {
-                            db.deleteBoundary(id: boundary.id)
-                        }
-                        .font(.field(size: 11, weight: .semibold))
-                        .foregroundColor(theme.palette.danger)
                     }
                 }
             }
@@ -1962,95 +1893,28 @@ private struct MarkerDetailSheet: View {
     }
 }
 
-// MARK: - Add marker sheet (kept from the original screen)
-
+/// Kept so existing call sites open the same Mark location sheet as Android.
 public struct QuickAddMarkerSheet: View {
     @Binding var isPresented: Bool
-    var latitude: Double
-    var longitude: Double
-
-    @State private var name: String = ""
-    @State private var category: MarkerCategory = .highSeat
-    @State private var notes: String = ""
-    @State private var useMyFix: Bool
-    @State private var saveOfflineArea: Bool = false
-
-    @ObservedObject private var location = LocationManager.shared
-    @ObservedObject private var db = DatabaseService.shared
-    @ObservedObject private var theme = ThemeManager.shared
+    private let pinnedLatitude: Double?
+    private let pinnedLongitude: Double?
 
     public init(isPresented: Binding<Bool>, latitude: Double = 0, longitude: Double = 0, useMyFix: Bool = true) {
-        self._isPresented = isPresented
-        self.latitude = latitude
-        self.longitude = longitude
-        self._useMyFix = State(initialValue: useMyFix)
+        _isPresented = isPresented
+        if useMyFix {
+            pinnedLatitude = nil
+            pinnedLongitude = nil
+        } else {
+            pinnedLatitude = latitude
+            pinnedLongitude = longitude
+        }
     }
-
-    private var fix: GpsFix {
-        location.latestFix ?? location.fallbackFix()
-    }
-
-    private var targetLatitude: Double { useMyFix ? fix.latitude : latitude }
-    private var targetLongitude: Double { useMyFix ? fix.longitude : longitude }
 
     public var body: some View {
-        NavigationView {
-            ScreenBackground {
-                Form {
-                    Section(header: Text("Marker Details").foregroundColor(theme.palette.bronze)) {
-                        TextField("Name", text: $name)
-                        MarkerCategoryMenu(category: $category)
-                        TextField("Notes (optional)", text: $notes)
-                    }
-
-                    Section(header: Text("Location").foregroundColor(theme.palette.bronze)) {
-                        Toggle("Use my GPS fix", isOn: $useMyFix)
-                        Text(String(format: "%.5f, %.5f", targetLatitude, targetLongitude))
-                        if let grid = OsGridRef.latLngToOsGrid(
-                            latitude: targetLatitude,
-                            longitude: targetLongitude
-                        ) {
-                            Text(grid).foregroundColor(theme.palette.bronzeBright)
-                        } else {
-                            Text("Outside GB").foregroundColor(theme.palette.mist)
-                        }
-                        if let gps = location.latestFix {
-                            MetricRow("GPS accuracy", String(format: "±%.0f m", gps.accuracyMeters))
-                        } else if useMyFix {
-                            Text("Waiting for GPS — a marker will not be saved at the fallback location.")
-                                .foregroundColor(theme.palette.gold)
-                        }
-                    }
-
-                    Section(header: Text("Offline").foregroundColor(theme.palette.bronze)) {
-                        Toggle("Also save this area's coordinates (not map tiles)", isOn: $saveOfflineArea)
-                    }
-
-                    Button("Save Marker") {
-                        db.addMarker(
-                            FieldMarker(
-                                category: category,
-                                name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? category.label
-                                    : name,
-                                notes: notes,
-                                latitude: targetLatitude,
-                                longitude: targetLongitude,
-                                elevationMeters: useMyFix ? fix.altitudeMeters : nil
-                            )
-                        )
-                        if saveOfflineArea {
-                            _ = db.createRegionAround(latitude: targetLatitude, longitude: targetLongitude)
-                        }
-                        isPresented = false
-                    }
-                    .foregroundColor(theme.palette.bronze)
-                    .disabled(useMyFix && location.latestFix == nil)
-                }
-                .scrollContentBackground(.hidden)
-            }
-            .navigationTitle("Add Field Marker")
-            .navigationBarItems(leading: Button("Cancel") { isPresented = false })
-        }
+        MarkLocationSheet(
+            isPresented: $isPresented,
+            pinnedLatitude: pinnedLatitude,
+            pinnedLongitude: pinnedLongitude
+        )
     }
 }

@@ -153,6 +153,9 @@ interface BoundaryDao {
     @Query("SELECT * FROM boundary_areas ORDER BY name ASC")
     fun observeAreas(): Flow<List<BoundaryAreaEntity>>
 
+    @Query("SELECT * FROM boundary_areas WHERE id = :id LIMIT 1")
+    suspend fun getArea(id: Long): BoundaryAreaEntity?
+
     @Query("SELECT * FROM boundary_points WHERE areaId = :areaId ORDER BY orderIndex ASC")
     suspend fun pointsFor(areaId: Long): List<BoundaryPointEntity>
 

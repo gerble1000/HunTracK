@@ -11,6 +11,7 @@ import uk.hunttrack.core.data.db.BoundaryPointEntity
 import uk.hunttrack.core.data.db.HuntingPermissionDao
 import uk.hunttrack.core.data.db.HuntingPermissionEntity
 import uk.hunttrack.domain.geo.BoundaryMath
+import uk.hunttrack.domain.geo.BoundaryFenceStyle
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryPoint
 import uk.hunttrack.domain.model.BoundaryZoneType
@@ -40,6 +41,12 @@ class PermissionsRepository @Inject constructor(
     suspend fun linkPermissionToBoundary(permissionId: Long, boundaryAreaId: Long) {
         val existing = permissionDao.getById(permissionId) ?: return
         permissionDao.upsert(existing.copy(boundaryAreaId = boundaryAreaId))
+        val area = boundaryDao.getArea(boundaryAreaId) ?: return
+        val label = existing.label.ifBlank { existing.farmName }
+        val renamed = BoundaryFenceStyle.nameAfterLink(area.name, label)
+        if (renamed != area.name) {
+            boundaryDao.upsertArea(area.copy(name = renamed))
+        }
     }
 
     suspend fun deletePermission(id: Long) = permissionDao.delete(id)
