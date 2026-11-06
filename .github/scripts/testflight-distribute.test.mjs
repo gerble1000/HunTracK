@@ -73,6 +73,32 @@ test('tolerates an existing relationship and still confirms access', async () =>
   });
 });
 
+test('treats Apple’s internal-group 422 as automatic access', async () => {
+  const methods = [];
+  await withFetch(async (url, options) => {
+    methods.push(options?.method ?? 'GET');
+    if (options?.method === 'POST') {
+      return new Response(JSON.stringify({
+        errors: [{
+          title: 'Cannot add internal group to a build.',
+          detail: 'Builds cannot be assigned to this internal group.',
+          code: 'ENTITY_ERROR',
+        }],
+      }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+    }
+    return response([]);
+  }, async () => {
+    const outcome = await ensureInternalGroupAccess(
+      'token',
+      { id: 'group', attributes: { name: 'Testers', isInternalGroup: true } },
+      'new',
+      { timeoutMs: 1000, intervalMs: 5 },
+    );
+    assert.equal(outcome, 'automatic access');
+  });
+  assert.deepEqual(methods, ['GET', 'POST', 'GET']);
+});
+
 test('fails clearly when the group still never lists the build', async () => {
   await withFetch(async (url, options) =>
     options?.method === 'POST' ? new Response(null, { status: 204 }) : response([]), async () => {

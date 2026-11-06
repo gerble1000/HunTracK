@@ -215,7 +215,20 @@ async function assignBuildToGroup(token, group, buildId, { tolerateConflict = fa
   if (response.ok) return 'assigned'; // 204 No Content on success
   // 409 means the relationship already exists, which is the desired end state.
   if (tolerateConflict && response.status === 409) return 'already assigned';
+  // Apple rejects POST onto an internal group that already receives every build:
+  // "Cannot add internal group to a build." That is not a missing assignment.
+  if (tolerateConflict && response.status === 422 && internalAssignmentRejected(response)) return 'automatic';
   throw apiError(`Assigning build to group "${group.attributes?.name ?? group.id}"`, path, response);
+}
+
+/** True when App Store Connect forbids adding a build to an internal group. */
+function internalAssignmentRejected(response) {
+  const errors = response.json?.errors ?? [];
+  const text = errors
+    .map((error) => `${error.title ?? ''} ${error.detail ?? ''} ${error.code ?? ''}`)
+    .join(' ')
+    .toLowerCase();
+  return text.includes('cannot add internal group') || text.includes('cannot be assigned to this internal group');
 }
 
 export async function groupHasBuild(token, groupId, buildId) {
@@ -252,6 +265,12 @@ export async function ensureInternalGroupAccess(
   if (await groupHasBuild(token, group.id, buildId)) return 'already present';
 
   const outcome = await assignBuildToGroup(token, group, buildId, { tolerateConflict: true });
+  if (outcome === 'automatic') {
+    if (await groupHasBuild(token, group.id, buildId)) return 'automatic';
+    // The relationship list may stay empty: internal groups receive processed
+    // builds without an explicit add, and Apple returns 422 if we try.
+    return 'automatic access';
+  }
 
   const deadline = Date.now() + timeoutMs;
   while (true) {
