@@ -47,6 +47,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -228,9 +230,9 @@ fun PermissionsScreen(
                 if (state.permissions.any { it.boundaryAreaId != null }) {
                     item {
                         GlassPanel(Modifier.fillMaxWidth()) {
-                            SectionLabel("Show on map")
+                            SectionLabel("Focus on map")
                             Text(
-                                "Select one or more permissions with linked boundaries, then open the map.",
+                                "Select one or more permissions with linked boundaries, then centre them on the map.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = HuntColors.Mist,
                             )
@@ -258,7 +260,7 @@ fun PermissionsScreen(
                                     ) {
                                         Icon(Icons.Default.Map, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
-                                        Text("Show ${state.selectedPermissionIds.size} on map")
+                                        Text("Focus ${state.selectedPermissionIds.size} on map")
                                     }
                                 }
                             }
@@ -277,6 +279,7 @@ fun PermissionsScreen(
                                 Checkbox(
                                     checked = p.id in state.selectedPermissionIds,
                                     onCheckedChange = { onTogglePermissionSelection(p.id) },
+                                    modifier = Modifier.semantics { contentDescription = "Include in map focus" },
                                 )
                             } else {
                                 Spacer(Modifier.width(12.dp))
@@ -303,13 +306,20 @@ fun PermissionsScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.semantics(mergeDescendants = true) {
+                                    contentDescription = if (p.id !in state.hiddenPermissionIds) {
+                                        "Visible on map, shown"
+                                    } else {
+                                        "Visible on map, hidden"
+                                    }
+                                },
                             ) {
                                 Checkbox(
                                     checked = p.id !in state.hiddenPermissionIds,
                                     onCheckedChange = { onSetPermissionShownOnMap(p.id, it) },
                                 )
                                 Text(
-                                    "Show on map",
+                                    "Visible on map",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = HuntColors.Cream,
                                 )
@@ -328,11 +338,13 @@ fun PermissionsScreen(
                                     onOpenMap()
                                 },
                                 enabled = canShowOnMap,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .semantics { contentDescription = "Focus on map" },
                             ) {
                                 Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Show on map")
+                                Text("Focus on map")
                             }
                             TextButton(onClick = { onDeletePermission(p.id) }) { Text("Delete") }
                         }

@@ -415,9 +415,12 @@ public class DatabaseService: ObservableObject {
         permissions = updated
         guard let boundaryId = boundaryId,
               let boundaryIndex = boundaries.firstIndex(where: { $0.id == boundaryId }) else { return }
+        let typedLabel = updated[index].label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typedFarm = updated[index].farmName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let renameSource = typedLabel.isEmpty ? typedFarm : typedLabel
         let renamed = BoundaryFenceStyle.nameAfterLink(
             current: boundaries[boundaryIndex].name,
-            permissionLabel: updated[index].displayLabel
+            permissionLabel: renameSource
         )
         guard renamed != boundaries[boundaryIndex].name else { return }
         var areas = boundaries

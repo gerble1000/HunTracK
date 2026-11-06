@@ -258,13 +258,15 @@ private struct PermissionCard: View {
                     HStack(spacing: 8) {
                         Image(systemName: permission.showOnMap ? "checkmark.square.fill" : "square")
                             .foregroundColor(theme.palette.bronzeBright)
-                        Text("Show on map")
+                        Text("Visible on map")
                             .font(.field(size: 14, weight: .semibold))
                             .foregroundColor(theme.palette.cream)
                         Spacer()
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Visible on map")
+                .accessibilityValue(permission.showOnMap ? "Shown" : "Hidden")
             } else {
                 MetricRow("Boundary", "Not linked")
             }
@@ -289,10 +291,11 @@ private struct PermissionCard: View {
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
 
-                Button("Show on map") { onShowMap() }
+                Button("Focus on map") { onShowMap() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(boundary == nil ? theme.palette.mist : theme.palette.bronzeBright)
                     .disabled(boundary == nil)
+                    .accessibilityLabel("Focus on map")
 
                 Button("Edit") { onEdit() }
                     .font(.field(size: 14, weight: .semibold))
@@ -369,9 +372,10 @@ private struct BoundaryCard: View {
                         .foregroundColor(theme.palette.bronzeBright)
                 }
 
-                Button("Show on map") { onShowMap() }
+                Button("Focus on map") { onShowMap() }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.bronzeBright)
+                    .accessibilityLabel("Focus on map")
 
                 Button("Delete") { onDelete() }
                     .font(.field(size: 14, weight: .semibold))
@@ -519,15 +523,13 @@ struct PermissionBoundarySheet: View {
     let onStart: (PendingBoundaryCreation) -> Void
     let returnToPermissions: Bool
 
-    init(permissions: [HuntingPermission], initialMode: BoundaryCaptureMode = .walk, returnToPermissions: Bool = true, onStart: @escaping (PendingBoundaryCreation) -> Void) {
+    init(permissions: [HuntingPermission], returnToPermissions: Bool = true, onStart: @escaping (PendingBoundaryCreation) -> Void) {
         self.permissions = permissions
         self.onStart = onStart
         self.returnToPermissions = returnToPermissions
-        self._mode = State(initialValue: initialMode)
     }
 
     @State private var name: String = ""
-    @State private var mode: BoundaryCaptureMode
     @State private var zoneType: BoundaryZoneType = .hunting
     @State private var linkedPermissionId: Int64?
 
@@ -603,7 +605,7 @@ struct PermissionBoundarySheet: View {
                             .foregroundColor(theme.palette.bronze)
                         Button("Walk fence on map") { start(.walk) }
                             .foregroundColor(theme.palette.bronze)
-                        Text("Suggested: \(mode.label). Draw traces the fence with your finger. Walk records it from GPS.")
+                        Text("Draw traces the fence with your finger. Walk records it from GPS.")
                             .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
                     }

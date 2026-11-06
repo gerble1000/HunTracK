@@ -864,7 +864,6 @@ public struct MapScreen: View {
     @State private var showingGridInput = false
     @State private var showingHoming = false
     @State private var showingBoundarySetup = false
-    @State private var boundaryMode: BoundaryCaptureMode = .draw
     @State private var northUpToken = 0
     @State private var markerCoordinate: CLLocationCoordinate2D?
     @State private var followUser = true
@@ -974,7 +973,7 @@ public struct MapScreen: View {
             homingSheet
         }
         .sheet(isPresented: $showingBoundarySetup) {
-            PermissionBoundarySheet(permissions: db.permissions, initialMode: boundaryMode, returnToPermissions: false) { pending in
+            PermissionBoundarySheet(permissions: db.permissions, returnToPermissions: false) { pending in
                 db.pendingBoundary = pending
             }
         }
@@ -1392,9 +1391,8 @@ public struct MapScreen: View {
         regionRequestToken += 1
     }
 
-    private func startBoundarySetup(_ mode: BoundaryCaptureMode) {
+    private func startBoundarySetup(_: BoundaryCaptureMode) {
         guard capture == nil else { mapMessage = "Save or cancel the current boundary first."; return }
-        boundaryMode = mode
         showingBoundarySetup = true
     }
 
