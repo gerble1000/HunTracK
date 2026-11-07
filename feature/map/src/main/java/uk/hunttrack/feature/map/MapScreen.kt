@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,6 +62,7 @@ import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -94,6 +96,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -807,12 +812,37 @@ fun MapScreen(
             val builder = LatLngBounds.Builder()
             points.forEach { builder.include(LatLng(it.latitude, it.longitude)) }
             runCatching {
-                map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 140))
+                // Tool chips still sit on the map. Inset the framed fence so its
+                // top edge is not tight against that row; the name itself is the
+                // band above the map, not this overlay.
+                map.animateCamera(
+                    CameraUpdateFactory.newLatLngBounds(builder.build(), BoundaryFocusPaddingPx),
+                )
             }
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    val chromeSlots = mapChromeSlots(state.permissionMapFocus.isNotEmpty())
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(HuntColors.ForestDeep),
+    ) {
+        // Own band above the Home/tool row. That row is an overlay on the map
+        // and used to paint over this name and its close control.
+        if (MapChromeSlot.BOUNDARY_NAME in chromeSlots) {
+            PermissionFocusBanner(
+                labels = state.permissionMapFocus.map { it.label },
+                onClear = onClearPermissionMapFocus,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clipToBounds(),
+        ) {
         AndroidView(
             factory = {
                 (mapView.parent as? ViewGroup)?.removeView(mapView)
@@ -1377,13 +1407,6 @@ fun MapScreen(
                     leadingIcon = { Icon(Icons.Default.Visibility, null) },
                 )
             }
-            if (state.permissionMapFocus.isNotEmpty()) {
-                PermissionFocusBanner(
-                    labels = state.permissionMapFocus.map { it.label },
-                    onClear = onClearPermissionMapFocus,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
         }
 
         // Scale bar sits directly above Sync — bottom-left
@@ -1444,6 +1467,7 @@ fun MapScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add waypoint here")
             }
+        }
         }
     }
 
@@ -3262,33 +3286,47 @@ private fun PermissionFocusBanner(
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val summary = when (labels.size) {
-        1 -> labels.first()
-        else -> "${labels.size} permissions"
+    val named = labels.map { it.trim() }.filter { it.isNotEmpty() }
+    val summary = when (named.size) {
+        0 -> "Boundary"
+        1 -> named.first()
+        else -> named.joinToString(" · ")
     }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(HuntColors.ForestDeep.copy(alpha = 0.92f))
-            .border(1.dp, HuntColors.Bronze.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .heightIn(min = 56.dp)
+            .background(HuntColors.Charcoal)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("Permission view", style = MaterialTheme.typography.labelMedium, color = HuntColors.Mist)
-            Text(summary, style = MaterialTheme.typography.titleSmall, color = HuntColors.Cream)
-            if (labels.size > 1) {
-                Text(
-                    labels.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = HuntColors.Mist,
-                    maxLines = 2,
-                )
-            }
+        Column(
+            Modifier
+                .weight(1f)
+                .semantics { contentDescription = "Boundary name $summary" },
+        ) {
+            Text("Boundary", style = MaterialTheme.typography.labelMedium, color = HuntColors.Mist)
+            Text(
+                summary,
+                style = MaterialTheme.typography.titleMedium,
+                color = HuntColors.Cream,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        TextButton(onClick = onClear) { Text("Clear") }
+        Button(
+            onClick = onClear,
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = "Close boundary view" },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HuntColors.Bronze,
+                contentColor = HuntColors.Ink,
+            ),
+        ) {
+            Text("Close")
+        }
     }
 }
 
