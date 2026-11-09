@@ -64,6 +64,7 @@ object MarkerIconResolver {
         MarkerCategory.BOUNDARY -> R.drawable.marker_ic_boundary
         MarkerCategory.DANGER_AREA -> R.drawable.marker_ic_danger
         MarkerCategory.SHELTER -> R.drawable.marker_ic_shelter
+        MarkerCategory.CAMPSITE -> R.drawable.marker_ic_campsite
         MarkerCategory.HOMING -> R.drawable.marker_ic_sighting
         MarkerCategory.CULL -> R.drawable.marker_ic_skull
         MarkerCategory.FOOTPRINT -> R.drawable.marker_ic_footprint

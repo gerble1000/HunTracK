@@ -34,6 +34,7 @@ enum class MarkerCategory(
     BOUNDARY(MarkerCategoryGroup.NAVIGATION, "Boundary"),
     DANGER_AREA(MarkerCategoryGroup.NAVIGATION, "Danger area"),
     SHELTER(MarkerCategoryGroup.NAVIGATION, "Shelter"),
+    CAMPSITE(MarkerCategoryGroup.NAVIGATION, "Campsite"),
     /** Downed prey / retrieve point — guide walker back with arrival alert. */
     HOMING(MarkerCategoryGroup.NAVIGATION, "Homing"),
     FOOTPRINT(MarkerCategoryGroup.TRACKING, "Footprint"),

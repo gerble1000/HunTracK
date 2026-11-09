@@ -38,6 +38,7 @@ public enum MarkerCategory: String, Codable, CaseIterable {
     case boundary = "BOUNDARY"
     case dangerArea = "DANGER_AREA"
     case shelter = "SHELTER"
+    case campsite = "CAMPSITE"
     case homing = "HOMING"
     case footprint = "FOOTPRINT"
     case blood = "BLOOD"
@@ -69,6 +70,7 @@ public enum MarkerCategory: String, Codable, CaseIterable {
         case .boundary: return "Boundary"
         case .dangerArea: return "Danger area"
         case .shelter: return "Shelter"
+        case .campsite: return "Campsite"
         case .homing: return "Homing"
         case .footprint: return "Footprint"
         case .blood: return "Blood"
@@ -85,7 +87,7 @@ public enum MarkerCategory: String, Codable, CaseIterable {
             return .wildlife
         case .highSeat, .hide, .cull, .feedingArea, .trailCamera, .caller, .waterSource, .saltLick, .treeStand:
             return .hunting
-        case .parking, .gate, .fence, .boundary, .dangerArea, .shelter, .homing:
+        case .parking, .gate, .fence, .boundary, .dangerArea, .shelter, .campsite, .homing:
             return .navigation
         case .footprint, .blood, .hair, .droppings, .beddingArea, .lastSighting:
             return .tracking
