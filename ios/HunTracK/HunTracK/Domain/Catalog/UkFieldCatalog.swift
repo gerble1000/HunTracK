@@ -94,7 +94,7 @@ public enum UkFieldCatalog {
             youngTraits: "Spotted calves in first months; stay close to hind.",
             tracks: "Large heart-shaped slots; hind usually smaller than stag.",
             droppings: "Cylindrical pellets, sometimes clumped when soft feed available.",
-            seasonsNote: "Sex and nation specific open seasons apply."
+            seasonsNote: "Sex- and nation-specific open seasons apply."
         ),
         Species(
             id: "roe_deer",
@@ -126,7 +126,7 @@ public enum UkFieldCatalog {
             youngTraits: "Spotted fawns; stay with doe groups.",
             tracks: "Medium slots, slightly pointed.",
             droppings: "Medium pellets, often in clusters.",
-            seasonsNote: "Check local byelaws on park escapes."
+            seasonsNote: "Check local byelaws where deer have escaped from parks."
         ),
         Species(
             id: "sika_deer",
@@ -158,7 +158,7 @@ public enum UkFieldCatalog {
             youngTraits: "Tiny fawns hidden in cover.",
             tracks: "Very small slots; often in thick undergrowth.",
             droppings: "Small pellets.",
-            seasonsNote: "No statutory close season E&W; still apply best welfare practice."
+            seasonsNote: "No statutory close season in England and Wales. Still apply best welfare practice."
         ),
         Species(
             id: "chinese_water_deer",
@@ -190,7 +190,7 @@ public enum UkFieldCatalog {
             youngTraits: "Cubs grey-brown then redden.",
             tracks: "Dog-like but more oval; claw marks often clear.",
             droppings: "Twisted scats with fur/bone; often on prominences.",
-            seasonsNote: "Not deer legislation \u{2014} follow firearms/pest control law & landowner permission."
+            seasonsNote: "Not deer legislation. Follow firearms and pest-control law, and the landowner's permission."
         ),
         Species(
             id: "rabbit",
@@ -270,7 +270,7 @@ public enum UkFieldCatalog {
             youngTraits: "Ducklings yellow-brown striped.",
             tracks: "Webbed footprints.",
             droppings: "Greenish elongated.",
-            seasonsNote: "Inland wildfowl typically 1 Sep \u{2013} 31 Jan (foreshore may differ \u{2014} verify)."
+            seasonsNote: "Inland wildfowl are typically open from 1 Sep to 31 Jan. Foreshore dates may differ. Verify."
         ),
         Species(
             id: "teal",
@@ -286,7 +286,7 @@ public enum UkFieldCatalog {
             youngTraits: "Ducklings small, dark.",
             tracks: "Small webbed prints.",
             droppings: "Small elongated.",
-            seasonsNote: "Duck: 1 Sep \u{2013} 31 Jan (varies foreshore vs inland)."
+            seasonsNote: "Duck: 1 Sep \u{2013} 31 Jan. Foreshore and inland dates can differ."
         ),
         Species(
             id: "wigeon",
@@ -750,7 +750,7 @@ public enum UkFieldCatalog {
                     sexLabel: "Either",
                     openFromMonthDay: "01-09",
                     openToMonthDay: "31-01",
-                    notes: "Waterfowl: dates can vary foreshore vs inland \u{2014} verify for your region."
+                    notes: "Waterfowl dates can differ between the foreshore and inland. Verify them for your region."
                 ))
             }
             for id in geese {
@@ -807,7 +807,7 @@ public enum UkFieldCatalog {
             }
         }
         
-        list.append(LegalSeason(speciesId: "fox", nation: .england, sexLabel: "n/a", openFromMonthDay: "\u{2014}", openToMonthDay: "\u{2014}", notes: "Not under Deer Act \u{2014} permission & firearms law apply."))
+        list.append(LegalSeason(speciesId: "fox", nation: .england, sexLabel: "n/a", openFromMonthDay: "\u{2014}", openToMonthDay: "\u{2014}", notes: "Not under the Deer Act. Permission and firearms law apply."))
         list.append(LegalSeason(speciesId: "rabbit", nation: .england, sexLabel: "n/a", openFromMonthDay: "\u{2014}", openToMonthDay: "\u{2014}", notes: "Pest / sporting under permission."))
         
         return list
@@ -1077,7 +1077,7 @@ public enum UkFieldCatalog {
         gooseSpeciesIds.contains(speciesId)
     }
     
-    public static let gooseMoreInformation = "Geese (Canada, Greylag, Pink-footed, European White-fronted): 1 Sep \u{2013} 31 Jan\n\nOpen season dates can vary slightly by foreshore vs inland in England and Wales. Always verify current law with GOV.UK or your regional authority before shooting.\n\nCanada and greylag occur UK-wide as feral or naturalised birds. Pink-footed geese winter in large skeins, especially Scotland and north-west England. European white-fronted geese use local winter sites such as the Severn Estuary and parts of Wales."
+    public static let gooseMoreInformation = "Geese (Canada, Greylag, Pink-footed, European White-fronted): 1 Sep \u{2013} 31 Jan\n\nOpen season dates can differ slightly between the foreshore and inland in England and Wales. Always verify current law with GOV.UK or your regional authority before shooting.\n\nCanada and greylag occur UK-wide as feral or naturalised birds. Pink-footed geese winter in large skeins, especially Scotland and north-west England. European white-fronted geese use local winter sites such as the Severn Estuary and parts of Wales."
 }
 
 

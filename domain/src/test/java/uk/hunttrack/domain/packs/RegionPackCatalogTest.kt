@@ -15,12 +15,23 @@ class RegionPackCatalogTest {
         RegionPackCatalog.seasonPacks.filter { it.countryCode != "GB" }.forEach { pack ->
             val keys = pack.species.map { it.speciesKey }.toSet()
             assertTrue("${pack.id} missing slots", keys.containsAll(directoryKeys))
-            pack.species.forEach { row ->
-                assertNull("${pack.id} ${row.speciesKey} stored a date", row.openFromMonthDay)
+            pack.species.filter { it.quality == PackDataQuality.PLACEHOLDER }.forEach { row ->
+                assertNull("${pack.id} ${row.speciesKey} placeholder stored a date", row.openFromMonthDay)
                 assertNull(row.openToMonthDay)
                 assertEquals(SpeciesLegalStatus.UNVERIFIED, row.legalStatus)
             }
+            pack.species.filter { it.legalStatus == SpeciesLegalStatus.OPEN_SEASON }.forEach { row ->
+                assertTrue(row.openFromMonthDay?.matches(Regex("""\d{2}-\d{2}""")) == true)
+                assertTrue(row.openToMonthDay?.matches(Regex("""\d{2}-\d{2}""")) == true)
+                assertEquals(PackDataQuality.REFERENCE, row.quality)
+            }
         }
+        val redStag = RegionPackCatalog.pack("ie-seasons")!!.species.single {
+            it.speciesKey == "red_deer" && it.sexLabel == "Male"
+        }
+        assertEquals("01-08", redStag.openFromMonthDay)
+        assertEquals("30-04", redStag.openToMonthDay)
+        assertTrue(redStag.notes.contains("Kerry"))
     }
 
     @Test
@@ -39,10 +50,13 @@ class RegionPackCatalogTest {
     @Test
     fun rulesAreStructuredAndOnlyCitedAnswersAreUsed() {
         RegionPackCatalog.seasonPacks.forEach { pack ->
-            assertEquals(3, pack.rules.map { it.id }.toSet().size)
-            assertTrue(pack.rules.any { it.id == RegionPackCatalog.RULE_SUPPRESSOR })
-            assertTrue(pack.rules.any { it.id == RegionPackCatalog.RULE_NIGHT })
-            assertTrue(pack.rules.any { it.id == RegionPackCatalog.RULE_ORANGE })
+            val ruleIds = pack.rules.map { it.id }.toSet()
+            assertEquals(pack.rules.size, ruleIds.size)
+            assertTrue(ruleIds.containsAll(listOf(
+                RegionPackCatalog.RULE_SUPPRESSOR,
+                RegionPackCatalog.RULE_NIGHT,
+                RegionPackCatalog.RULE_ORANGE,
+            )))
         }
         val uk = RegionPackCatalog.pack(RegionPackCatalog.UK_SEASON_PACK_ID)!!
         val suppressor = uk.rules.single { it.id == RegionPackCatalog.RULE_SUPPRESSOR }
@@ -55,8 +69,17 @@ class RegionPackCatalogTest {
         val vest = france.rules.single { it.id == RegionPackCatalog.RULE_ORANGE }
         assertEquals(RuleAnswer.CONDITIONAL, vest.answer)
         assertTrue(vest.sourceUrl.contains("legifrance.gouv.fr"))
+        val frenchModerator = france.rules.single { it.id == RegionPackCatalog.RULE_SUPPRESSOR }
+        assertEquals(RuleAnswer.CONDITIONAL, frenchModerator.answer)
+        assertTrue(frenchModerator.notes.contains("R. 312-45-2"))
+        assertTrue(frenchModerator.notes.contains("not a weapon"))
         val ireland = RegionPackCatalog.pack("ie-seasons")!!
-        assertTrue(ireland.rules.all { it.answer == RuleAnswer.UNVERIFIED && it.lastVerified == null })
+        assertEquals(RuleAnswer.CONDITIONAL, ireland.rules.single { it.id == RegionPackCatalog.RULE_SUPPRESSOR }.answer)
+        assertEquals(RuleAnswer.UNVERIFIED, ireland.rules.single { it.id == RegionPackCatalog.RULE_ORANGE }.answer)
+        val germany = RegionPackCatalog.pack("de-seasons")!!
+        assertEquals(RuleAnswer.CONDITIONAL, germany.rules.single { it.id == RegionPackCatalog.RULE_NIGHT }.answer)
+        assertEquals(RuleAnswer.UNVERIFIED, germany.rules.single { it.id == RegionPackCatalog.RULE_ORANGE }.answer)
+        assertTrue(RegionPackCatalog.pack("pl-seasons")!!.rules.all { it.answer == RuleAnswer.UNVERIFIED })
     }
 
     @Test

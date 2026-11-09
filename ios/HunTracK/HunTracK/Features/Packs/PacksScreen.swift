@@ -49,7 +49,7 @@ public final class PackPurchaseStore: ObservableObject {
             return
         }
         guard let product = products[pack.productId] else {
-            message = "Store product \(pack.productId) is not live. Create a £1.00 non-consumable in App Store Connect. Nothing was charged."
+            message = "Store product ID \(pack.productId) is not live. Create a £1.00 non-consumable in App Store Connect. Nothing was charged."
             return
         }
         do {
@@ -148,7 +148,7 @@ public struct PacksScreen: View {
             Text(pack.disclaimer)
                 .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
-            Text("Product \(pack.productId) · \(store.priceLabel(pack))")
+            Text("Product ID \(pack.productId) · \(store.priceLabel(pack))")
                 .font(.field(size: 12, weight: .semibold))
                 .foregroundColor(theme.palette.bronzeBright)
             if !open {

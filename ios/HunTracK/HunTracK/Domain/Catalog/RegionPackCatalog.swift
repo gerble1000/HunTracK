@@ -144,7 +144,9 @@ public struct PackSpeciesSeason: Codable, Identifiable {
 
     public var statusLabel: String {
         switch legalStatus {
-        case .openSeason: return precision == .approximate ? "Approximate open season" : "Open season in the reference"
+        case .openSeason:
+            if quality == .catalog { return "Open season in the UK catalog" }
+            return precision == .approximate ? "Approximate open season" : "Open season in the cited source"
         case .closedNoSeason: return "No open season"
         case .yearRound: return "Year-round in the reference"
         case .notStated: return "Season not stated"

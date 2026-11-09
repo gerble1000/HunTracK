@@ -73,6 +73,18 @@ object RegionPackCatalog {
         ident("geese", "Geese", ""),
         ident("snipe", "Snipe", "Gallinago gallinago"),
         ident("woodpigeon", "Woodpigeon", "Columba palumbus"),
+        ident("red_grouse", "Red grouse", "Lagopus lagopus scotica"),
+        ident("teal", "Teal", "Anas crecca"),
+        ident("gadwall", "Gadwall", "Mareca strepera"),
+        ident("wigeon", "Wigeon", "Mareca penelope"),
+        ident("shoveler", "Shoveler", "Spatula clypeata"),
+        ident("tufted_duck", "Tufted duck", "Aythya fuligula"),
+        ident("golden_plover", "Golden plover", "Pluvialis apricaria"),
+        ident("jack_snipe", "Jack snipe", "Lymnocryptes minimus"),
+        ident("ruddy_duck", "Ruddy duck", "Oxyura jamaicensis"),
+        ident("canada_goose", "Canada goose", "Branta canadensis"),
+        ident("greylag_goose", "Greylag goose", "Anser anser"),
+        ident("hare", "Hare", "Lepus"),
     )
 
     private val directoryByKey = speciesDirectory.associateBy { it.speciesKey }
@@ -158,7 +170,7 @@ object RegionPackCatalog {
             title = "UK seasons",
             summary = "Full UK quarry table already shipped in HunTracK, badger cited as protected, " +
                 "and empty slots for other European species with no season. Indicative — verify before you go out. " +
-                "Included with the app. The store product id is ready for when a £1.00 product is created.",
+                "Included with the app. The store product ID is ready for when a £1.00 product is created.",
             sourceTitle = "HunTracK UK field catalog; Deer Act 1991; Protection of Badgers Act 1992",
             sourceUrl = "https://www.legislation.gov.uk/ukpga/1991/54/schedule/1",
             disclaimer = UkFieldCatalog.legalDisclaimer,
@@ -175,6 +187,8 @@ object RegionPackCatalog {
     fun rulesFor(countryCode: String): List<HuntingRule> = when (countryCode) {
         "GB" -> ukRules()
         "FR" -> franceRules()
+        "IE" -> irelandRules()
+        "DE" -> germanyRules()
         else -> unverifiedRules(countryCode)
     }
 
@@ -185,23 +199,70 @@ object RegionPackCatalog {
         title = "Ireland seasons",
         sourceTitle = "NPWS Open Seasons Order",
         sourceUrl = "https://www.npws.ie/legislation/irish-law/open-seasons-order",
-        summary = "Field reference transcribed from the NPWS Open Seasons Order summary. " +
-            "Other species are placeholders with no dates.",
+        summary = "Mammal and bird open seasons copied from the NPWS Open Seasons Order page, " +
+            "read on 9 November 2026. Deer hunters also need a deer hunting licence. " +
+            "Species not in those tables have no season stored.",
     ) {
-        dated("red_deer", "Male", "01-08", "30-04", "Excludes Kerry. Field reference, not a substitute for the Order.")
-        dated("red_deer", "Female / antlerless", "01-11", "31-03", "Field reference, not a substitute for the Order.")
-        dated("fallow_deer", "Male", "01-08", "30-04", "Field reference, not a substitute for the Order.")
-        dated("fallow_deer", "Female / antlerless", "01-11", "31-03", "Field reference, not a substitute for the Order.")
-        dated("sika_deer", "Male", "01-08", "30-04", "Field reference, not a substitute for the Order.")
-        dated("sika_deer", "Female / antlerless", "01-11", "31-03", "Field reference, not a substitute for the Order.")
-        closed("roe_deer", "No open season in the field reference.")
-        closed("wild_boar", "No open season in the field reference.")
-        dated("pheasant", "Cock", "01-11", "31-01", "Field reference, not a substitute for the Order.")
-        dated("woodcock", "Either", "01-11", "31-01", "Field reference, not a substitute for the Order.")
-        dated("red_legged_partridge", "Either", "01-11", "31-01", "Field reference, not a substitute for the Order.")
-        dated("ducks", "Either", "01-09", "31-01", "Grouped as ducks in the field reference. Confirm each species in the Order.")
-        dated("snipe", "Either", "01-09", "31-01", "Field reference, not a substitute for the Order.")
-        place("badger", "mouflon", "chamois", "red_fox", "brown_hare", "rabbit", "woodpigeon", "moose")
+        val npws = "Copied from the NPWS Open Seasons Order page read on 9 November 2026. " +
+            "Shooting with firearms. Wildlife (Wild Mammals) (Open Seasons) (Amendment) Order 2024 (S.I. No. 66 of 2024) " +
+            "is the mammal order named on that page."
+        cited("fallow_deer", "Male", "01-08", "30-04", "$npws Throughout the State.")
+        cited("fallow_deer", "Female / antlerless", "01-11", "31-03", "$npws Throughout the State.")
+        cited("sika_deer", "Male", "01-08", "30-04", "$npws Throughout the State.")
+        cited("sika_deer", "Female / antlerless", "01-11", "31-03", "$npws Throughout the State.")
+        cited("red_deer", "Male", "01-08", "30-04", "$npws Throughout the State except County Kerry.")
+        cited("red_deer", "Female / antlerless", "01-11", "31-03", "$npws Throughout the State except County Kerry.")
+        cited("muntjac", "Either", "01-09", "31-08", "$npws Throughout the State.")
+        cited(
+            "hare",
+            "Either",
+            "26-09",
+            "28-02",
+            "$npws Also coursing at regulated matches, and hunting with packs of beagles and harriers. " +
+                "Excludes the townlands of North East Slob, North West Slob, Big Island, Beggerin Island and The Raven, County Wexford.",
+        )
+        val birds = "Copied from the NPWS wild-bird open-season table read on 9 November 2026. " +
+            "Wildlife (Wild Birds) (Open Seasons) (Amendment) Order 2023 (S.I. No. 421 of 2023)."
+        cited("red_grouse", "Either", "01-09", "30-09", "$birds Throughout the State.")
+        listOf("mallard", "teal", "gadwall", "wigeon", "shoveler", "tufted_duck", "golden_plover", "snipe", "jack_snipe").forEach { key ->
+            cited(key, "Either", "01-09", "31-01", "$birds Throughout the State. Grouped together on the NPWS table.")
+        }
+        cited("red_legged_partridge", "Either", "01-11", "31-01", "$birds Throughout the State.")
+        cited("pheasant", "Cock", "01-11", "31-01", "$birds Throughout the State. Grouped with woodcock on the NPWS table.")
+        cited("woodcock", "Either", "01-11", "31-01", "$birds Throughout the State. Grouped with cock pheasant on the NPWS table.")
+        cited("woodpigeon", "Either", "01-11", "31-01", "$birds Throughout the State.")
+        cited("canada_goose", "Either", "01-09", "15-10", "$birds First window: throughout the State.")
+        cited(
+            "canada_goose",
+            "Either",
+            "16-10",
+            "31-01",
+            "$birds Second window: counties of Cavan (excluding the townlands of Eonish Island, Rinn and Deramfield) " +
+                "and Leitrim (excluding the River Shannon).",
+        )
+        cited("greylag_goose", "Either", "01-09", "15-10", "$birds First window: throughout the State.")
+        cited(
+            "greylag_goose",
+            "Either",
+            "16-10",
+            "31-01",
+            "$birds Second window: Lady's Island, County Wexford, and Gearagh East and Gearagh West, County Cork.",
+        )
+        cited(
+            "ruddy_duck",
+            "Either",
+            "01-09",
+            "31-01",
+            "$birds The places cell on the fetched page was cut off after \"Throughout the Stat\". Confirm the places column on the NPWS page.",
+        )
+        notListed(
+            "roe_deer",
+            "Not listed in the mammal or bird tables on the NPWS Open Seasons Order page read on 9 November 2026. No open season is stored.",
+        )
+        notListed(
+            "wild_boar",
+            "Not listed in the mammal or bird tables on the NPWS Open Seasons Order page read on 9 November 2026. No open season is stored.",
+        )
     }
 
     private fun francePack(): SeasonPack = european(
@@ -423,25 +484,45 @@ object RegionPackCatalog {
         HuntingRule(
             id = RULE_SUPPRESSOR,
             title = "Sound moderator / silencer",
-            answer = RuleAnswer.UNVERIFIED,
-            notes = "A Legifrance copy of the 1 August 1986 hunting-methods order, shown as in force on 3 September 2008, " +
-                "still prohibits a silencer on a firearm. A 2 January 2018 order (NOR TREL1736224A) is reported to have " +
-                "deleted that line. Those texts were not reconciled, so this pack does not say silencers are allowed or banned.",
-            sourceTitle = "Arrêté du 1er août 1986 (Legifrance copy dated 3 September 2008)",
-            sourceUrl = "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000862758/2008-09-03",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Two official texts, both read on 9 November 2026, cover different parts of this. " +
+                "Classification: décret n° 2018-542 of 29 June 2018 rewrote article R. 311-1 of the Code de la sécurité intérieure. " +
+                "Section IV says a sound moderator is not a weapon when it is an add-on part that does not change how the firearm works. " +
+                "Acquisition: the same decree added article R. 312-45-2. Nobody may acquire a sound moderator without showing " +
+                "one of the titles in article R. 312-53 (a validated French or foreign hunting permit, a delegated shooting-federation licence, " +
+                "or a collector card) and the detention title for the matching firearm. " +
+                "Use while hunting: the consolidated arrêté of 1 August 1986, in force on 9 November 2026, article 2, " +
+                "no longer lists a ban on a device that quiets the shot. That line is in older copies of article 2, including the text " +
+                "shown as in force on 3 September 2008, and it is not in the current article 2. " +
+                "This is not a statement that every firearm authority or département allows a moderator. Check the current code article " +
+                "and the firearm's own papers before buying or fitting one.",
+            sourceTitle = "Décret n° 2018-542 (Code de la sécurité intérieure R. 311-1 and R. 312-45-2); arrêté of 1 August 1986, article 2",
+            sourceUrl = "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000037129603",
             lastVerified = "2026-11-09",
         ),
         HuntingRule(
             id = RULE_NIGHT,
             title = "Night hunting",
             answer = RuleAnswer.CONDITIONAL,
-            notes = "National hunters' federation summary, not the code article: hunting is by day, from one hour before " +
-                "sunrise until one hour after sunset at the département chef-lieu, and a prefect may be stricter. " +
-                "Waterfowl flight can extend two hours either side. Night wildfowling from fixed hides registered with " +
-                "the prefect is described as limited to departments where that hunting is traditional. Confirm the Code " +
-                "de l'environnement.",
-            sourceTitle = "Fédération Nationale des Chasseurs — réglementation",
-            sourceUrl = "https://www.chasseurdefrance.com/pratiquer/reglementation/",
+            notes = "Arrêté of 1 August 1986, in force on 9 November 2026: article 2 bans lights and mirrors used to make capture or killing easier. " +
+                "Article 11 bis bans searching for or pursuing game with lights, except counts and captures authorised for science or restocking. " +
+                "The national hunters' federation, which is not the statute, describes daytime as from one hour before sunrise until one hour after sunset, " +
+                "with waterfowl flight times and registered night hides as exceptions. Those clock times are not copied here as a code article. " +
+                "Confirm the Code de l'environnement before relying on them.",
+            sourceTitle = "Arrêté du 1er août 1986, articles 2 and 11 bis",
+            sourceUrl = "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000862758",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = "ungulate_shot",
+            title = "How named hoofed quarry may be shot",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Arrêté of 1 August 1986, article 4, in force on 9 November 2026, names red deer, fallow deer, mouflon, " +
+                "chamois or isard, roe deer and wild boar. They may be shot only with a bullet, or with a hunting bow under the bow-hunting rules. " +
+                "A prefect may allow roe deer to be shot with shot on part of a department. Buckshot for wild boar in a driven hunt needs a ministerial order. " +
+                "This article does not set the open season. Département dates are not stored in this pack.",
+            sourceTitle = "Arrêté du 1er août 1986, article 4",
+            sourceUrl = "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000862758",
             lastVerified = "2026-11-09",
         ),
         HuntingRule(
@@ -454,6 +535,81 @@ object RegionPackCatalog {
                 "or an orange hat on its own, is covered.",
             sourceTitle = "Arrêté du 5 octobre 2020, article 1",
             sourceUrl = "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000042423887",
+            lastVerified = "2026-11-09",
+        ),
+    )
+
+    private fun irelandRules(): List<HuntingRule> = listOf(
+        HuntingRule(
+            id = RULE_SUPPRESSOR,
+            title = "Sound moderator / silencer",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Firearms and Offensive Weapons Act 1990, section 7, as enacted: possession, sale or transfer of a silencer " +
+                "is an offence unless a superintendent of the Garda Síochána for the district where the person lives authorises it in writing. " +
+                "The superintendent must be satisfied that the person holds a firearm certificate for a firearm the silencer can fit, " +
+                "that the possession will not endanger public safety or the peace, and that the person has a special need sufficient to justify the authorisation. " +
+                "Conditions may be attached. The authorisation may last no longer than one year and may be revoked. " +
+                "This is the enacted section. Later amendments were not re-read for this pack.",
+            sourceTitle = "Firearms and Offensive Weapons Act 1990, section 7",
+            sourceUrl = "https://www.irishstatutebook.ie/eli/1990/act/12/section/7/enacted/en/html",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_NIGHT,
+            title = "Night hunting",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Wildlife Act 1976, section 37, as enacted: subject to section 42, a person shall not hunt a woodcock between sunset and sunrise, " +
+                "or any other protected wild bird other than a wild duck or wild goose, or any protected wild animal, " +
+                "from one hour after sunset until one hour before sunrise. " +
+                "Subsection (2) excepts hunting under stated ministerial licences. " +
+                "This is the enacted section. Later amendments were not re-read for this pack.",
+            sourceTitle = "Wildlife Act 1976, section 37",
+            sourceUrl = "https://www.irishstatutebook.ie/eli/1976/act/39/section/37/enacted/en/index.html",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_ORANGE,
+            title = "Blaze orange / high-vis clothing",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "No Irish statute requiring blaze-orange hats or vests for hunting was confirmed for this pack.",
+            sourceTitle = "NPWS Open Seasons Order (no clothing rule found on the page)",
+            sourceUrl = "https://www.npws.ie/legislation/irish-law/open-seasons-order",
+            lastVerified = "2026-11-09",
+        ),
+    )
+
+    private fun germanyRules(): List<HuntingRule> = listOf(
+        HuntingRule(
+            id = RULE_SUPPRESSOR,
+            title = "Sound moderator / silencer",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Weapons Act (Waffengesetz) section 13(9), on gesetze-im-internet.de: the earlier paragraphs of that section apply to sound moderators as well. " +
+                "Sound moderators covered by that sentence may be used only with long guns that are permitted for hunting, with centre-fire ammunition, " +
+                "and only for hunting and hunting practice. The licensing paragraphs were not copied in full here.",
+            sourceTitle = "Waffengesetz § 13",
+            sourceUrl = "https://www.gesetze-im-internet.de/waffg_2002/__13.html",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_NIGHT,
+            title = "Night hunting",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Federal Hunting Act (Bundesjagdgesetz) section 19(1) number 4: it is forbidden to kill cloven-hoofed game, except wild boar, " +
+                "and feathered game at night. Night runs from one and a half hours after sunset until one and a half hours before sunrise. " +
+                "The ban does not cover gulls, woodcock, capercaillie, black grouse or rackelhahn. " +
+                "The Länder can change hunting times under section 22. Species dates are not stored in this pack.",
+            sourceTitle = "Bundesjagdgesetz § 19",
+            sourceUrl = "https://www.gesetze-im-internet.de/bjagdg/__19.html",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_ORANGE,
+            title = "Blaze orange / high-vis clothing",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "Sections 19 and 22 of the Federal Hunting Act, read on 9 November 2026, do not mention blaze-orange hats or vests. " +
+                "That is not proof that a Land has no clothing rule.",
+            sourceTitle = "Bundesjagdgesetz §§ 19 and 22",
+            sourceUrl = "https://www.gesetze-im-internet.de/bjagdg/__22.html",
             lastVerified = "2026-11-09",
         ),
     )
@@ -555,6 +711,23 @@ private class PackRows(
 
     fun unstated(key: String, notes: String, sex: String = "Either") {
         fieldNote(key, sex, "Unverified field note, not a legal season. $notes")
+    }
+
+    fun cited(key: String, sex: String, from: String, to: String, notes: String) {
+        add(key, sex, SpeciesLegalStatus.OPEN_SEASON, SeasonPrecision.DATED, from, to, notes, PackDataQuality.REFERENCE)
+    }
+
+    fun notListed(key: String, notes: String) {
+        add(
+            key,
+            "Either",
+            SpeciesLegalStatus.NOT_STATED,
+            SeasonPrecision.UNSPECIFIED,
+            null,
+            null,
+            notes,
+            PackDataQuality.REFERENCE,
+        )
     }
 
     private fun fieldNote(key: String, sex: String, notes: String) {
@@ -807,10 +980,10 @@ data class PackSpeciesSeason(
     }
 
     fun statusLabel(): String = when (legalStatus) {
-        SpeciesLegalStatus.OPEN_SEASON -> if (precision == SeasonPrecision.APPROXIMATE) {
-            "Approximate open season"
-        } else {
-            "Open season in the reference"
+        SpeciesLegalStatus.OPEN_SEASON -> when {
+            quality == PackDataQuality.CATALOG -> "Open season in the UK catalog"
+            precision == SeasonPrecision.APPROXIMATE -> "Approximate open season"
+            else -> "Open season in the cited source"
         }
         SpeciesLegalStatus.CLOSED_NO_SEASON -> "No open season"
         SpeciesLegalStatus.YEAR_ROUND -> "Year-round in the reference"

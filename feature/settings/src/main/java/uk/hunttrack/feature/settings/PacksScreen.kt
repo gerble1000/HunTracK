@@ -154,7 +154,7 @@ fun PacksScreen(
                     Text(selected.summary, color = HuntColors.Mist, style = MaterialTheme.typography.bodySmall)
                     Text(selected.disclaimer, color = HuntColors.Mist, style = MaterialTheme.typography.bodySmall)
                     Text(
-                        "Product ${selected.productId} · ${price(selected)}",
+                        "Product ID ${selected.productId} · ${price(selected)}",
                         color = HuntColors.BronzeBright,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 6.dp),

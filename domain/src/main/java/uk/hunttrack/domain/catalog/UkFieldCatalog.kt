@@ -33,7 +33,7 @@ object UkFieldCatalog {
             youngTraits = "Spotted calves in first months; stay close to hind.",
             tracks = "Large heart-shaped slots; hind usually smaller than stag.",
             droppings = "Cylindrical pellets, sometimes clumped when soft feed available.",
-            seasonsNote = "Sex and nation specific open seasons apply.",
+            seasonsNote = "Sex- and nation-specific open seasons apply.",
         ),
         Species(
             id = "roe_deer",
@@ -65,7 +65,7 @@ object UkFieldCatalog {
             youngTraits = "Spotted fawns; stay with doe groups.",
             tracks = "Medium slots, slightly pointed.",
             droppings = "Medium pellets, often in clusters.",
-            seasonsNote = "Check local byelaws on park escapes.",
+            seasonsNote = "Check local byelaws where deer have escaped from parks.",
         ),
         Species(
             id = "sika_deer",
@@ -97,7 +97,7 @@ object UkFieldCatalog {
             youngTraits = "Tiny fawns hidden in cover.",
             tracks = "Very small slots; often in thick undergrowth.",
             droppings = "Small pellets.",
-            seasonsNote = "No statutory close season E&W; still apply best welfare practice.",
+            seasonsNote = "No statutory close season in England and Wales. Still apply best welfare practice.",
         ),
         Species(
             id = "chinese_water_deer",
@@ -129,7 +129,7 @@ object UkFieldCatalog {
             youngTraits = "Cubs grey-brown then redden.",
             tracks = "Dog-like but more oval; claw marks often clear.",
             droppings = "Twisted scats with fur/bone; often on prominences.",
-            seasonsNote = "Not deer legislation — follow firearms/pest control law & landowner permission.",
+            seasonsNote = "Not deer legislation. Follow firearms and pest-control law, and the landowner's permission.",
         ),
         Species(
             id = "rabbit",
@@ -209,7 +209,7 @@ object UkFieldCatalog {
             youngTraits = "Ducklings yellow-brown striped.",
             tracks = "Webbed footprints.",
             droppings = "Greenish elongated.",
-            seasonsNote = "Inland wildfowl typically 1 Sep – 31 Jan (foreshore may differ — verify).",
+            seasonsNote = "Inland wildfowl are typically open from 1 Sep to 31 Jan. Foreshore dates may differ. Verify.",
         ),
         Species(
             id = "teal",
@@ -225,7 +225,7 @@ object UkFieldCatalog {
             youngTraits = "Ducklings small, dark.",
             tracks = "Small webbed prints.",
             droppings = "Small elongated.",
-            seasonsNote = "Duck: 1 Sep – 31 Jan (varies foreshore vs inland).",
+            seasonsNote = "Duck: 1 Sep – 31 Jan. Foreshore and inland dates can differ.",
         ),
         Species(
             id = "wigeon",
@@ -675,7 +675,7 @@ object UkFieldCatalog {
                 add(
                     LegalSeason(
                         id, n, "Either", "01-09", "31-01",
-                        "Waterfowl: dates can vary foreshore vs inland — verify for your region.",
+                        "Waterfowl dates can differ between the foreshore and inland. Verify them for your region.",
                     ),
                 )
             }
@@ -725,7 +725,7 @@ object UkFieldCatalog {
             }
         }
 
-        add(LegalSeason("fox", UkNation.ENGLAND, "n/a", "—", "—", "Not under Deer Act — permission & firearms law apply."))
+        add(LegalSeason("fox", UkNation.ENGLAND, "n/a", "—", "—", "Not under the Deer Act. Permission and firearms law apply."))
         add(LegalSeason("rabbit", UkNation.ENGLAND, "n/a", "—", "—", "Pest / sporting under permission."))
     }
 

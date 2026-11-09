@@ -100,7 +100,7 @@ class PackBilling @Inject constructor(
         val product = details[pack.productId]
         if (!client.isReady || product == null) {
             _state.value = _state.value.copy(
-                message = "Store product ${pack.productId} is not live. " +
+                message = "Store product ID ${pack.productId} is not live. " +
                     "Create a £1.00 non-consumable in Play Console. Nothing was charged.",
             )
             return
