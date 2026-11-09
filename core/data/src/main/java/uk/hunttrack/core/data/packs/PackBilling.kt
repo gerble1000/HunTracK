@@ -53,6 +53,7 @@ class PackBilling @Inject constructor(
         .enablePendingPurchases(
             PendingPurchasesParams.newBuilder().enableOneTimeProducts().build(),
         )
+        .enableAutoServiceReconnection()
         .build()
 
     private val _state = MutableStateFlow(readState(billingReady = false, message = null))
@@ -148,10 +149,10 @@ class PackBilling @Inject constructor(
                 .build()
         }
         val params = QueryProductDetailsParams.newBuilder().setProductList(products).build()
-        client.queryProductDetailsAsync(params) { result, queried ->
+        client.queryProductDetailsAsync(params) { result, queryResult ->
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 details.clear()
-                queried.forEach { details[it.productId] = it }
+                queryResult.productDetailsList.forEach { details[it.productId] = it }
             }
             queryOwned(announce = false)
         }
