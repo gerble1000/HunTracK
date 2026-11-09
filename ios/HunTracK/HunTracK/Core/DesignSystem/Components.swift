@@ -58,7 +58,7 @@ public enum MarkerArtwork {
     private enum Glyph {
         case deer, fox, rabbit, bird, badger, other, hare, duck, goose, crow, rat, pest, snipe, woodcock
         case highSeat, hide, skull, feed, camera, caller, water, salt, treeStand
-        case parking, gate, fence, boundary, danger, shelter, flag, footprint, blood, hair
+        case parking, gate, fence, boundary, danger, shelter, campsite, flag, footprint, blood, hair
         case droppings, bedding, sighting
 
         var cacheKey: String { String(describing: self) }
@@ -114,6 +114,7 @@ public enum MarkerArtwork {
         case .boundary: return .boundary
         case .dangerArea: return .danger
         case .shelter: return .shelter
+        case .campsite: return .campsite
         case .homing: return .flag
         case .footprint: return .footprint
         case .blood: return .blood
@@ -181,7 +182,7 @@ public enum MarkerArtwork {
         case .crow: drawBird(in: rect, color: color, longBill: false)
         case .rat, .pest, .other: drawOther(in: rect, color: color)
         case .highSeat, .treeStand: drawHighSeat(in: rect, color: color)
-        case .hide, .shelter: drawTent(in: rect, color: color)
+        case .hide, .shelter, .campsite: drawTent(in: rect, color: color)
         case .skull: drawSkull(in: rect, color: color)
         case .feed, .salt: drawLeaf(in: rect, color: glyph == .salt ? UIColor(red: 0.75, green: 0.62, blue: 0.2, alpha: 1) : color)
         case .camera: drawCamera(in: rect, color: color)

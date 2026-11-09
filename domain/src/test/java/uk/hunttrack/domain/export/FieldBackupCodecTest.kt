@@ -30,6 +30,34 @@ class FieldBackupCodecTest {
     )
 
     @Test
+    fun campsiteMarkerRoundTripsInTheBackup() {
+        val backup = FieldBackupCodec.build(
+            exportedAtEpochMs = 1,
+            permissions = emptyList(),
+            boundaries = emptyList(),
+            markers = listOf(
+                FieldMarker(
+                    id = 4,
+                    category = MarkerCategory.CAMPSITE,
+                    name = "Camp",
+                    latitude = 51.2,
+                    longitude = -0.1,
+                    createdAtEpochMs = 5,
+                ),
+            ),
+            routes = emptyList(),
+            trackPoints = emptyList(),
+            medical = null,
+            includeMedical = false,
+        )
+        val json = FieldBackupCodec.encode(backup)
+        assertTrue(json.contains("CAMPSITE"))
+        val decoded = FieldBackupCodec.materialize(FieldBackupCodec.decode(json), applyMedical = false)
+        assertEquals(MarkerCategory.CAMPSITE, decoded.markers.single().category)
+        assertEquals("Camp", decoded.markers.single().name)
+    }
+
+    @Test
     fun exportOmitsMedicalPinAndLocalFiles() {
         val json = FieldBackupCodec.encode(sample(includeMedical = false))
         assertFalse(json.contains("deadbeef"))
