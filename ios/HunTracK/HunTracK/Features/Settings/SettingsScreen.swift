@@ -94,7 +94,15 @@ public struct SettingsScreen: View {
                         Text("Clear weather cache")
                             .foregroundColor(theme.palette.bronzeBright)
                     }
-                    Text("Saved map areas are managed from Map → Layers. iOS basemap tiles require an internet connection.")
+                    NavigationLink(destination: YourDataScreen()) {
+                        Text("Export or import your data")
+                            .foregroundColor(theme.palette.bronzeBright)
+                    }
+                    NavigationLink(destination: PacksScreen()) {
+                        Text("Country packs")
+                            .foregroundColor(theme.palette.bronzeBright)
+                    }
+                    Text("Named map areas are in Packs. iOS saves the outline; Apple Maps does not bulk-download tiles.")
                         .font(.field(size: 12))
                         .foregroundColor(theme.palette.mist)
                 }

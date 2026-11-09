@@ -29,6 +29,8 @@ fun MoreScreen(
     onOpenEmergency: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenCulls: () -> Unit = {},
+    onOpenPacks: () -> Unit = {},
+    onOpenYourData: () -> Unit = {},
     onOpenComingSoon: (String) -> Unit,
 ) {
     ScreenBackground(Modifier.fillMaxSize()) {
@@ -50,6 +52,12 @@ fun MoreScreen(
             item {
                 SectionLabel("Field knowledge")
                 MoreItem("Species", "UK quarry ID & legal seasons", hint = "Browse species ›", onClick = onOpenSpecies)
+                MoreItem(
+                    "Packs",
+                    "Country seasons, rules and map areas",
+                    hint = "Open packs ›",
+                    onClick = onOpenPacks,
+                )
                 MoreItem("Calls", "Library, recorder & journal", hint = "Open calls ›", onClick = onOpenCalls)
             }
             item {
@@ -74,6 +82,12 @@ fun MoreScreen(
             }
             item {
                 SectionLabel("App")
+                MoreItem(
+                    "Your data",
+                    "Export or import permissions, boundaries and markers",
+                    hint = "Open your data ›",
+                    onClick = onOpenYourData,
+                )
                 MoreItem("Settings", "Units, theme, sound, maps", hint = "Open settings ›", onClick = onOpenSettings)
                 MoreItem(
                     "About",
