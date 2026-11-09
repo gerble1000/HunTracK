@@ -168,7 +168,7 @@ public class DatabaseService: ObservableObject {
 
     // MARK: - Identity
 
-    private func nextId(_ existing: [Int64]) -> Int64 {
+    func nextId(_ existing: [Int64]) -> Int64 {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let highest = existing.max() ?? 0
         return max(now, highest + 1)

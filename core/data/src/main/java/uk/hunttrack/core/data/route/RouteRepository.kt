@@ -55,6 +55,31 @@ class RouteRepository @Inject constructor(
 
     suspend fun getTrackPoints(routeId: Long): List<TrackPoint> =
         dao.getTrackPoints(routeId).map { it.toDomain() }
+
+    /** Inserts a finished track from a backup. The stored id is new. */
+    suspend fun importRoute(route: Route, points: List<TrackPoint>): Long {
+        val id = dao.insertRoute(
+            RouteEntity(
+                name = route.name,
+                startedAtEpochMs = route.startedAtEpochMs,
+                endedAtEpochMs = route.endedAtEpochMs,
+                distanceMeters = route.distanceMeters,
+            ),
+        )
+        points.sortedBy { it.recordedAtEpochMs }.forEach { point ->
+            dao.insertTrackPoint(
+                TrackPointEntity(
+                    routeId = id,
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                    elevationMeters = point.elevationMeters,
+                    speedMps = point.speedMps,
+                    recordedAtEpochMs = point.recordedAtEpochMs,
+                ),
+            )
+        }
+        return id
+    }
 }
 
 private fun RouteEntity.toDomain() = Route(id, name, startedAtEpochMs, endedAtEpochMs, distanceMeters)

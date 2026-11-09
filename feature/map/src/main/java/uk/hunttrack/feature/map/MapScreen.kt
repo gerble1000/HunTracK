@@ -1633,7 +1633,7 @@ fun MapScreen(
                 Text(
                     "Download ~15 sq mile field packs for rural use — Streets and Outdoor/Topo " +
                         "work fully offline from the downloaded pack. Satellite needs a connection " +
-                        "(imagery can't be stored offline). Save as many packs as you need.",
+                        "(imagery can't be stored offline). Named country areas are under More → Packs.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = HuntColors.Mist,
                 )

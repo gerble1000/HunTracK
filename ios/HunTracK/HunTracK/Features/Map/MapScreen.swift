@@ -1786,7 +1786,7 @@ private struct MapLayersSheet: View {
     private var offlinePanel: some View {
         GlassPanel {
             SectionLabel("Saved areas & offline use")
-            Text("Markers, tracks and boundaries are stored on this device. Saving an area only saves its coordinates; it does not download basemap tiles. iOS maps need an internet connection and cached tiles are not guaranteed offline.")
+            Text("Markers, tracks and boundaries are stored on this device. Saving an area only saves its coordinates; it does not download basemap tiles. Named country areas are under More → Packs. iOS stores the area outline. Apple Maps does not let HunTracK bulk-download tiles the way Android saves an OpenFreeMap pack.")
                 .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
 

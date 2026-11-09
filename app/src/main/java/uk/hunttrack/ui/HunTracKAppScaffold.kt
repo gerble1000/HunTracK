@@ -105,6 +105,8 @@ sealed class Dest(val route: String, val label: String, val icon: ImageVector? =
     data object Emergency : Dest("emergency", "Emergency")
     data object Calendar : Dest("calendar", "Calendar")
     data object Culls : Dest("culls", "Cull log")
+    data object Packs : Dest("packs", "Packs")
+    data object YourData : Dest("your-data", "Your data")
     data object ComingSoon : Dest("coming/{feature}", "Soon")
 }
 
@@ -382,6 +384,8 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
                     onOpenEmergency = { navController.navigate(Dest.Emergency.route) },
                     onOpenCalendar = { navController.navigate(Dest.Calendar.route) },
                     onOpenCulls = { navController.navigate(Dest.Culls.route) },
+                    onOpenPacks = { navController.navigate(Dest.Packs.route) },
+                    onOpenYourData = { navController.navigate(Dest.YourData.route) },
                     onOpenComingSoon = { feature ->
                         navController.navigate("coming/$feature")
                     },
@@ -398,7 +402,11 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
                 )
             }
             composable(Dest.Settings.route) {
-                SettingsRoute(onOpenAbout = { navController.navigate(Dest.About.route) })
+                SettingsRoute(
+                    onOpenAbout = { navController.navigate(Dest.About.route) },
+                    onOpenPacks = { navController.navigate(Dest.Packs.route) },
+                    onOpenYourData = { navController.navigate(Dest.YourData.route) },
+                )
             }
             composable(Dest.About.route) {
                 AboutScreen()
@@ -419,6 +427,8 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
             composable(Dest.Emergency.route) { EmergencyRoute() }
             composable(Dest.Calendar.route) { CalendarRoute() }
             composable(Dest.Culls.route) { CullRoute() }
+            composable(Dest.Packs.route) { uk.hunttrack.feature.settings.PacksRoute() }
+            composable(Dest.YourData.route) { uk.hunttrack.feature.settings.YourDataRoute() }
             composable("coming/{feature}") { entry ->
                 ComingSoonScreen(entry.arguments?.getString("feature") ?: "Feature")
             }

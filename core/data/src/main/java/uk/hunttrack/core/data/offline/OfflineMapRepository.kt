@@ -27,6 +27,7 @@ import uk.hunttrack.core.data.db.OfflineMapDao
 import uk.hunttrack.core.data.db.OfflineMapRegionEntity
 import uk.hunttrack.domain.model.OfflineMapRegion
 import uk.hunttrack.domain.model.OfflineMapStatus
+import uk.hunttrack.domain.packs.MapPackBounds
 
 /**
  * Real offline map packs backed by MapLibre [OfflineManager].
@@ -59,7 +60,7 @@ class OfflineMapRepository @Inject constructor(
         centerLat: Double,
         centerLng: Double,
         sizeSqMiles: Double = 15.0,
-    ): Long = withContext(Dispatchers.Main.immediate) {
+    ): Long {
         val sideKm = sqrt(sizeSqMiles * SqMilesToSqKm)
         val halfDegLat = (sideKm / 2.0) / 111.0
         val halfDegLng = (sideKm / 2.0) / (111.0 * cos(centerLat * PI / 180.0))
@@ -67,8 +68,22 @@ class OfflineMapRepository @Inject constructor(
         val south = centerLat - halfDegLat
         val east = centerLng + halfDegLng
         val west = centerLng - halfDegLng
-
         val name = "Offline area ${dao.count() + 1}"
+        return createNamedRegion(name, north, south, east, west)
+    }
+
+    /**
+     * Downloads one small OpenFreeMap area. Rejects country-sized boxes.
+     * Personal offline use of OpenFreeMap Liberty only — not a bulk extract.
+     */
+    suspend fun createNamedRegion(
+        name: String,
+        north: Double,
+        south: Double,
+        east: Double,
+        west: Double,
+    ): Long = withContext(Dispatchers.Main.immediate) {
+        MapPackBounds(north, south, east, west).requirePersonalScale()
         val definition = OfflineTilePyramidRegionDefinition(
             styleURL = MapLibreStyleSupport.OPEN_FREEMAP_LIBERTY_URL,
             bounds = LatLngBounds.from(north, east, south, west),

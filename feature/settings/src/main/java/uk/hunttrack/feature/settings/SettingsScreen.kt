@@ -44,6 +44,8 @@ fun SettingsRoute(
     viewModel: SettingsViewModel = hiltViewModel(),
     tidesViewModel: TidesViewModel = hiltViewModel(),
     onOpenAbout: () -> Unit = {},
+    onOpenPacks: () -> Unit = {},
+    onOpenYourData: () -> Unit = {},
 ) {
     val prefs by viewModel.prefs.collectAsStateWithLifecycle()
     val tidesState by tidesViewModel.uiState.collectAsStateWithLifecycle()
@@ -71,6 +73,8 @@ fun SettingsRoute(
         onShowMapGuide = { showMapGuide = true },
         onShowWindGuide = { showWindGuide = true },
         onOpenAbout = onOpenAbout,
+        onOpenPacks = onOpenPacks,
+        onOpenYourData = onOpenYourData,
         onTidesEnabled = tidesViewModel::setTidesEnabled,
         onOpenTideMap = {
             tidesViewModel.loadStationsForMap()
@@ -131,6 +135,8 @@ fun SettingsScreen(
     onShowMapGuide: () -> Unit = {},
     onShowWindGuide: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
+    onOpenPacks: () -> Unit = {},
+    onOpenYourData: () -> Unit = {},
     onTidesEnabled: (Boolean) -> Unit = {},
     onOpenTideMap: () -> Unit = {},
     onTideNearest: () -> Unit = {},
@@ -300,7 +306,12 @@ fun SettingsScreen(
                 GlassPanel(Modifier.fillMaxWidth()) {
                     SectionLabel("Storage")
                     TextButton(onClick = onClearCache) { Text("Clear weather cache") }
-                    Text("Offline map packs are managed from the Map screen.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = onOpenYourData) { Text("Export or import your data") }
+                    TextButton(onClick = onOpenPacks) { Text("Country packs") }
+                    Text(
+                        "Named map areas are in Packs. The map screen still downloads a pack around you.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
             item {

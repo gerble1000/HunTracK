@@ -34,5 +34,6 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.maplibre.sdk)
     implementation(libs.hilt.android)
+    implementation(libs.androidx.billing)
     ksp(libs.hilt.compiler)
 }

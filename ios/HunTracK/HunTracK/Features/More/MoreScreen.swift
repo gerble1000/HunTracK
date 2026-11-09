@@ -31,6 +31,9 @@ public struct MoreScreen: View {
                     NavigationLink(destination: SpeciesScreen()) {
                         MoreRow(title: "Species", subtitle: "UK quarry ID & legal seasons", icon: "leaf")
                     }
+                    NavigationLink(destination: PacksScreen()) {
+                        MoreRow(title: "Packs", subtitle: "Country seasons, rules and map areas", icon: "square.and.arrow.down")
+                    }
                     NavigationLink(destination: CallsScreen()) {
                         MoreRow(title: "Calls", subtitle: "Library, recorder & journal", icon: "speaker.wave.3")
                     }
@@ -55,6 +58,9 @@ public struct MoreScreen: View {
                     }
                     
                     SectionLabel("App")
+                    NavigationLink(destination: YourDataScreen()) {
+                        MoreRow(title: "Your data", subtitle: "Export or import permissions, boundaries and markers", icon: "square.and.arrow.up")
+                    }
                     NavigationLink(destination: SettingsScreen()) {
                         MoreRow(title: "Settings", subtitle: "Units, theme, sound, maps", icon: "gearshape")
                     }

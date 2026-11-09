@@ -41,6 +41,11 @@
 		A20000032D00000100000001 /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000032D00000100000001 /* CalendarScreen.swift */; };
 		A20000042D00000100000001 /* CullScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000042D00000100000001 /* CullScreen.swift */; };
 		A20000052D00000100000001 /* TidesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000052D00000100000001 /* TidesScreen.swift */; };
+		A30000012D00000100000001 /* region-packs.json in Resources */ = {isa = PBXBuildFile; fileRef = B30000012D00000100000001 /* region-packs.json */; };
+		A30000022D00000100000001 /* FieldBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000022D00000100000001 /* FieldBackup.swift */; };
+		A30000032D00000100000001 /* RegionPackCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000032D00000100000001 /* RegionPackCatalog.swift */; };
+		A30000042D00000100000001 /* PacksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000042D00000100000001 /* PacksScreen.swift */; };
+		A30000052D00000100000001 /* YourDataScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000052D00000100000001 /* YourDataScreen.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -80,6 +85,11 @@
 		B20000032D00000100000001 /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calendar/CalendarScreen.swift; sourceTree = "<group>"; };
 		B20000042D00000100000001 /* CullScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Culls/CullScreen.swift; sourceTree = "<group>"; };
 		B20000052D00000100000001 /* TidesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Tides/TidesScreen.swift; sourceTree = "<group>"; };
+		B30000012D00000100000001 /* region-packs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = region-packs.json; sourceTree = "<group>"; };
+		B30000022D00000100000001 /* FieldBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/FieldBackup.swift; sourceTree = "<group>"; };
+		B30000032D00000100000001 /* RegionPackCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Catalog/RegionPackCatalog.swift; sourceTree = "<group>"; };
+		B30000042D00000100000001 /* PacksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Packs/PacksScreen.swift; sourceTree = "<group>"; };
+		B30000052D00000100000001 /* YourDataScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/YourDataScreen.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -143,6 +153,10 @@
 				B20000032D00000100000001 /* CalendarScreen.swift */,
 				B20000042D00000100000001 /* CullScreen.swift */,
 				B20000052D00000100000001 /* TidesScreen.swift */,
+				B30000022D00000100000001 /* FieldBackup.swift */,
+				B30000032D00000100000001 /* RegionPackCatalog.swift */,
+				B30000042D00000100000001 /* PacksScreen.swift */,
+				B30000052D00000100000001 /* YourDataScreen.swift */,
 				D10000032D00000100000001 /* Resources */,
 			);
 			path = HunTracK;
@@ -155,6 +169,7 @@
 				B10000032D00000100000001 /* sfx_bird_chirp.mp3 */,
 				B10000042D00000100000001 /* sfx_bird_trill.mp3 */,
 				B10000052D00000100000001 /* sfx_stag_roar.mp3 */,
+				B30000012D00000100000001 /* region-packs.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -221,6 +236,7 @@
 				A10000032D00000100000001 /* sfx_bird_chirp.mp3 in Resources */,
 				A10000042D00000100000001 /* sfx_bird_trill.mp3 in Resources */,
 				A10000052D00000100000001 /* sfx_stag_roar.mp3 in Resources */,
+				A30000012D00000100000001 /* region-packs.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -261,6 +277,10 @@
 				A20000032D00000100000001 /* CalendarScreen.swift in Sources */,
 				A20000042D00000100000001 /* CullScreen.swift in Sources */,
 				A20000052D00000100000001 /* TidesScreen.swift in Sources */,
+				A30000022D00000100000001 /* FieldBackup.swift in Sources */,
+				A30000032D00000100000001 /* RegionPackCatalog.swift in Sources */,
+				A30000042D00000100000001 /* PacksScreen.swift in Sources */,
+				A30000052D00000100000001 /* YourDataScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
