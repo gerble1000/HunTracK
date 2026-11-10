@@ -10,9 +10,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -812,17 +820,27 @@ private fun ZoneEditorSheet(
     var notes by remember(draft) { mutableStateOf(draft.notes) }
     var kind by remember(draft) { mutableStateOf(draft.kind) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The map screen hides the navigation bar, so reported insets can be 0 while
+    // the home gesture still eats taps. Keep the draw button above that band.
+    val gestureBottom = WindowInsets.navigationBars
+        .union(WindowInsets.systemGestures)
+        .union(WindowInsets.ime)
+        .only(WindowInsetsSides.Bottom)
+        .asPaddingValues()
+        .calculateBottomPadding()
+        .coerceAtLeast(48.dp)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = HuntColors.ForestDeep,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
+                .padding(top = 4.dp, bottom = gestureBottom + 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(

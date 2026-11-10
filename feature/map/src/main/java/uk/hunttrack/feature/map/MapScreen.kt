@@ -46,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -69,6 +70,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -325,6 +327,7 @@ fun MapScreen(
     var showMarkerPath by remember { mutableStateOf(false) }
     var showScale by remember { mutableStateOf(true) }
     var showOverlaysSheet by remember { mutableStateOf(false) }
+    var showDrawTips by remember { mutableStateOf(true) }
     /** When true, map rotates with compass (track-up). */
     var trackUp by remember { mutableStateOf(false) }
     var goToInput by remember { mutableStateOf("") }
@@ -364,6 +367,10 @@ fun MapScreen(
             MapOverlaySection.OFFLINE -> onToggleOffline(false)
             MapOverlaySection.MARKER -> onSelectMarker(null)
         }
+    }
+
+    LaunchedEffect(state.boundaryMode) {
+        if (state.boundaryMode == BoundaryRecordMode.OFF) showDrawTips = true
     }
 
     val showHomingPanel = MapOverlaySection.HOMING in sectionStack
@@ -1126,87 +1133,80 @@ fun MapScreen(
                     }
                 }
             }
-            if (state.boundaryMode != BoundaryRecordMode.OFF) {
-                GlassPanel(Modifier.fillMaxWidth()) {
-                    state.pendingZoneCapture?.let { pending ->
-                        Text(
-                            if (pending.zoneId == null) "Draw zone" else "Redraw zone",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = HuntColors.BronzeBright,
-                        )
-                        Text(
-                            pending.name.ifBlank { pending.kind.displayName() },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = HuntColors.Cream,
-                        )
-                        Text(
-                            pending.kind.displayName(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Mist,
-                        )
-                    } ?: state.pendingBoundaryCreation?.let { pending ->
-                        Text(
-                            pending.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = HuntColors.BronzeBright,
-                        )
-                        Text(
-                            pending.zoneType.displayName(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Mist,
-                        )
-                    } ?: Text(
-                        when (state.boundaryMode) {
-                            BoundaryRecordMode.WALKING -> "Walking boundary"
-                            BoundaryRecordMode.DRAWING -> "Draw boundary"
-                            else -> "Boundary"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = HuntColors.BronzeBright,
-                    )
-                    Text(
-                        when {
-                            state.pendingZoneCapture != null &&
-                                state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
-                                "Pinch and zoom until the boundary fits, then tap Start drawing. The zone can extend past the boundary edge."
-                            state.pendingZoneCapture != null ->
-                                "Drag your finger around the zone. It is not clipped to the boundary. Tap Pan map to move, then draw again."
-                            state.boundaryMode == BoundaryRecordMode.WALKING ->
-                                "Walk the fence line — GPS adds points automatically. Tap Save fence when done."
-                            state.boundaryMode == BoundaryRecordMode.DRAWING &&
-                                state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
-                                "Pinch and zoom until your whole shoot or area fits on screen, then tap Start drawing."
-                            state.boundaryMode == BoundaryRecordMode.DRAWING ->
-                                "Drag your finger around the boundary. Tap Pan map to move the view, then draw again."
-                            else -> ""
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = HuntColors.Cream,
-                    )
-                    Text(
-                        "${state.draftBoundaryPoints.size} points recorded",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = HuntColors.Mist,
-                    )
+            if (state.boundaryMode != BoundaryRecordMode.OFF && showDrawTips) {
+                val zonePending = state.pendingZoneCapture
+                val boundaryPending = state.pendingBoundaryCreation
+                val title = when {
+                    zonePending != null -> if (zonePending.zoneId == null) "Draw zone" else "Redraw zone"
+                    boundaryPending != null -> boundaryPending.name
+                    state.boundaryMode == BoundaryRecordMode.WALKING -> "Walking boundary"
+                    else -> "Draw boundary"
+                }
+                val detail = when {
+                    zonePending != null -> {
+                        val name = zonePending.name.ifBlank { zonePending.kind.displayName() }
+                        if (zonePending.name.isBlank()) name else "$name · ${zonePending.kind.displayName()}"
+                    }
+                    boundaryPending != null -> boundaryPending.zoneType.displayName()
+                    else -> null
+                }
+                val instruction = when {
+                    zonePending != null && state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
+                        "Pinch and zoom until the boundary fits, then tap Start drawing. The zone can extend past the boundary edge."
+                    zonePending != null ->
+                        "Drag your finger around the zone. It is not clipped to the boundary. Tap Pan map to move, then draw again."
+                    state.boundaryMode == BoundaryRecordMode.WALKING ->
+                        "Walk the fence line — GPS adds points automatically. Tap Save fence when done."
+                    state.boundaryMode == BoundaryRecordMode.DRAWING &&
+                        state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
+                        "Pinch and zoom until your whole shoot or area fits on screen, then tap Start drawing."
+                    state.boundaryMode == BoundaryRecordMode.DRAWING ->
+                        "Drag your finger around the boundary. Tap Pan map to move the view, then draw again."
+                    else -> ""
+                }
+                val stats = buildList {
+                    add("${state.draftBoundaryPoints.size} points")
                     if (state.draftBoundaryPoints.size >= 2) {
-                        val perimeter = BoundaryMath.perimeterMeters(
-                            state.draftBoundaryPoints,
-                            closeLoop = state.draftBoundaryPoints.size >= 3,
-                        )
-                        Text(
-                            "Perimeter: ${formatBoundaryPerimeter(perimeter)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Cream,
+                        add(
+                            formatBoundaryPerimeter(
+                                BoundaryMath.perimeterMeters(
+                                    state.draftBoundaryPoints,
+                                    closeLoop = state.draftBoundaryPoints.size >= 3,
+                                ),
+                            ),
                         )
                     }
                     if (state.draftBoundaryPoints.size >= 3) {
-                        val area = BoundaryMath.areaSqMeters(state.draftBoundaryPoints)
-                        Text(
-                            "Area: ${formatBoundaryArea(area)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Cream,
-                        )
+                        add(formatBoundaryArea(BoundaryMath.areaSqMeters(state.draftBoundaryPoints)))
                     }
+                }.joinToString(" · ")
+                GlassPanel(Modifier.fillMaxWidth(), compact = true) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = HuntColors.BronzeBright,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = { showDrawTips = false },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Close drawing tips",
+                                tint = HuntColors.Cream,
+                            )
+                        }
+                    }
+                    if (!detail.isNullOrBlank()) {
+                        Text(detail, style = MaterialTheme.typography.bodySmall, color = HuntColors.Cream)
+                    }
+                    Text(instruction, style = MaterialTheme.typography.bodySmall, color = HuntColors.Mist)
+                    Text(stats, style = MaterialTheme.typography.labelMedium, color = HuntColors.Cream)
                 }
             }
             state.boundaries.asSequence()
@@ -1447,6 +1447,15 @@ fun MapScreen(
                         leadingIcon = { Icon(Icons.Default.Edit, null) },
                     )
                 } else {
+                    if (!showDrawTips) {
+                        MapToolAssistChip(
+                            onClick = { showDrawTips = true },
+                            label = { Text("Show tips") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.HelpOutline, contentDescription = "Show drawing tips")
+                            },
+                        )
+                    }
                     if (state.boundaryMode == BoundaryRecordMode.DRAWING &&
                         state.boundaryDrawPhase == BoundaryDrawPhase.PREP
                     ) {
