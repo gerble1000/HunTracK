@@ -132,6 +132,12 @@ fun WindScreen(
                             w.temperatureC,
                         )
                         val downwindDeg = ((w.windDirectionDeg + 180) % 360).toInt()
+                        val standoffM = ScentPlumeGeometry.approachStandoffM(
+                            w.windSpeedKmh,
+                            w.windGustKmh,
+                            w.humidityPercent,
+                            w.temperatureC,
+                        ).toInt()
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -229,7 +235,7 @@ fun WindScreen(
                             Text(
                                 "Your scent travels downwind towards $downwindDeg°. " +
                                     "Approach quarry from downwind (into the face of the wind) and keep a " +
-                                    "minimum standoff of ${plume.approachStandoffM.toInt()} m. " +
+                                    "minimum standoff of $standoffM m. " +
                                     "The same plume is drawn as smoke on the map.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = HuntColors.Mist,
