@@ -36,4 +36,7 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.androidx.billing)
     ksp(libs.hilt.compiler)
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.xerial:sqlite-jdbc:3.45.3.0")
 }

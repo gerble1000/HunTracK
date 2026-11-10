@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Handler
@@ -170,6 +171,7 @@ import uk.hunttrack.domain.model.GpsFix
 import uk.hunttrack.domain.model.MapLayerStyle
 import uk.hunttrack.domain.model.MarkerCategory
 import uk.hunttrack.domain.model.displayName
+import uk.hunttrack.domain.model.hatchPattern
 import uk.hunttrack.domain.model.mapColorHex
 import uk.hunttrack.domain.model.mapFillOpacity
 import uk.hunttrack.domain.scent.ScentPlumeGeometry
@@ -197,6 +199,7 @@ fun MapRoute(
     onBoundaryCompletedFromPermissions: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val selectedZoneId by viewModel.selectedZoneId.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -204,6 +207,7 @@ fun MapRoute(
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.activatePendingBoundaryCreation()
                 viewModel.activatePermissionMapView()
+                viewModel.activatePendingZoneCapture()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -247,6 +251,8 @@ fun MapRoute(
         onAppendBoundaryDrawPoint = viewModel::appendBoundaryDrawPoint,
         onFinishBoundary = viewModel::finishBoundary,
         onClearPermissionMapFocus = viewModel::clearPermissionMapFocus,
+        selectedZoneId = selectedZoneId,
+        onSelectZone = viewModel::selectZone,
         visibility = viewModel.boundaryVisibility.collectAsStateWithLifecycle().value,
     )
 }
@@ -284,6 +290,8 @@ fun MapScreen(
     onAppendBoundaryDrawPoint: (Double, Double) -> Unit = { _, _ -> },
     onFinishBoundary: () -> Unit = {},
     onClearPermissionMapFocus: () -> Unit = {},
+    selectedZoneId: Long? = null,
+    onSelectZone: (Long?) -> Unit = {},
     visibility: uk.hunttrack.domain.geo.BoundaryVisibility = uk.hunttrack.domain.geo.BoundaryVisibility(),
 ) {
     val context = LocalContext.current
@@ -402,6 +410,7 @@ fun MapScreen(
     val onAppendBoundaryPointRef = rememberUpdatedState(onAppendBoundaryDrawPoint)
     val boundaryDraftPointsRef = rememberUpdatedState(state.draftBoundaryPoints)
     val boundariesRef = rememberUpdatedState(state.boundaries)
+    val onSelectZoneRef = rememberUpdatedState(onSelectZone)
     val visibilityRef = rememberUpdatedState(visibility)
     val liveBoundaryDrawCoords = remember { mutableStateOf<List<Pair<Double, Double>>>(emptyList()) }
     val gpsRef = rememberUpdatedState(state.gps)
@@ -957,6 +966,7 @@ fun MapScreen(
                         }
                         if (chosen != null) {
                             onSelectRef.value(chosen)
+                            onSelectZoneRef.value(null)
                             return@addOnMapClickListener true
                         }
                         val nearest = markersRef.value.minByOrNull {
@@ -979,6 +989,24 @@ fun MapScreen(
                             onSelectRef.value(null)
                             return@addOnMapClickListener false
                         }
+                        // Geometry hit test, so a faint hatch still selects the zone it belongs to.
+                        val zoneHit = boundariesRef.value
+                            .asSequence()
+                            .filter { visibilityRef.value.isVisible(it.id) }
+                            .flatMap { it.zones.asSequence() }
+                            .lastOrNull { zone ->
+                                uk.hunttrack.domain.geo.BoundaryMath.contains(
+                                    zone.points,
+                                    latLng.latitude,
+                                    latLng.longitude,
+                                )
+                            }
+                        if (zoneHit != null) {
+                            onSelectZoneRef.value(zoneHit.id)
+                            onSelectRef.value(null)
+                            return@addOnMapClickListener true
+                        }
+                        onSelectZoneRef.value(null)
                         if (markAnywhereEnabledRef.value) {
                             // One-touch mark anywhere: open the Mark location form pinned to this spot
                             onMarkAnywhereAtRef.value(latLng.latitude, latLng.longitude)
@@ -1079,7 +1107,23 @@ fun MapScreen(
             }
             if (state.boundaryMode != BoundaryRecordMode.OFF) {
                 GlassPanel(Modifier.fillMaxWidth()) {
-                    state.pendingBoundaryCreation?.let { pending ->
+                    state.pendingZoneCapture?.let { pending ->
+                        Text(
+                            if (pending.zoneId == null) "Draw zone" else "Redraw zone",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = HuntColors.BronzeBright,
+                        )
+                        Text(
+                            pending.name.ifBlank { pending.kind.displayName() },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = HuntColors.Cream,
+                        )
+                        Text(
+                            pending.kind.displayName(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = HuntColors.Mist,
+                        )
+                    } ?: state.pendingBoundaryCreation?.let { pending ->
                         Text(
                             pending.name,
                             style = MaterialTheme.typography.titleMedium,
@@ -1101,6 +1145,11 @@ fun MapScreen(
                     )
                     Text(
                         when {
+                            state.pendingZoneCapture != null &&
+                                state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
+                                "Pinch and zoom until the boundary fits, then tap Start drawing. The zone can extend past the boundary edge."
+                            state.pendingZoneCapture != null ->
+                                "Drag your finger around the zone. It is not clipped to the boundary. Tap Pan map to move, then draw again."
                             state.boundaryMode == BoundaryRecordMode.WALKING ->
                                 "Walk the fence line — GPS adds points automatically. Tap Save fence when done."
                             state.boundaryMode == BoundaryRecordMode.DRAWING &&
@@ -1139,6 +1188,32 @@ fun MapScreen(
                     }
                 }
             }
+            state.boundaries.asSequence()
+                .flatMap { it.zones }
+                .firstOrNull { it.id == selectedZoneId }
+                ?.let { zone ->
+                    GlassPanel(
+                        Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "Selected zone ${zone.kind.displayName()} ${zone.label()}" },
+                    ) {
+                        Text("Zone", style = MaterialTheme.typography.labelMedium, color = HuntColors.Mist)
+                        Text(
+                            zone.kind.displayName(),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = HuntColors.Cream,
+                        )
+                        Text(
+                            zone.label(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = HuntColors.BronzeBright,
+                        )
+                        if (zone.notes.isNotBlank()) {
+                            Text(zone.notes, style = MaterialTheme.typography.bodySmall, color = HuntColors.Mist)
+                        }
+                        TextButton(onClick = { onSelectZone(null) }) { Text("Close") }
+                    }
+                }
             state.scentApproach?.let { plan ->
                 GlassPanel(Modifier.fillMaxWidth()) {
                     Text(
@@ -1376,7 +1451,9 @@ fun MapScreen(
                             BoundaryRecordMode.DRAWING -> state.draftBoundaryPoints.size >= 3
                             else -> false
                         },
-                        label = { Text("Save fence") },
+                        label = {
+                            Text(if (state.pendingZoneCapture != null) "Save zone" else "Save fence")
+                        },
                         leadingIcon = { Icon(Icons.Default.Save, null) },
                     )
                     MapToolAssistChip(
@@ -2344,6 +2421,65 @@ private fun ensureSources(style: Style, context: Context) {
             ),
         ),
     )
+    if (style.getImage("zone-hatch-danger") == null) {
+        style.addImage("zone-hatch-danger", zoneHatchBitmap(0xE6E23B3B.toInt(), rising = false))
+    }
+    if (style.getImage("zone-hatch-sold") == null) {
+        style.addImage("zone-hatch-sold", zoneHatchBitmap(0xE6C47B2B.toInt(), rising = true))
+    }
+    if (style.getSource("zone-source") == null) {
+        style.addSource(GeoJsonSource("zone-source", FeatureCollection.fromFeatures(emptyArray())))
+    }
+    if (style.getLayer("zone-fill") == null && style.getSource("zone-source") != null) {
+        val fill = FillLayer("zone-fill", "zone-source").withProperties(
+            PropertyFactory.fillColor(Expression.get("fill")),
+            PropertyFactory.fillOpacity(
+                Expression.coalesce(Expression.get("fillOpacity"), Expression.literal(0.3)),
+            ),
+        )
+        fill.setFilter(Expression.has("fill"))
+        addLayerBelowBoundaryLine(style, fill)
+    }
+    if (style.getLayer("zone-hatch") == null && style.getSource("zone-source") != null) {
+        val hatch = FillLayer("zone-hatch", "zone-source").withProperties(
+            PropertyFactory.fillPattern(Expression.get("pattern")),
+            PropertyFactory.fillOpacity(0.9f),
+        )
+        hatch.setFilter(Expression.has("pattern"))
+        addLayerBelowBoundaryLine(style, hatch)
+    }
+    if (style.getLayer("zone-line") == null && style.getSource("zone-source") != null) {
+        val line = LineLayer("zone-line", "zone-source").withProperties(
+            PropertyFactory.lineColor(Expression.get("line")),
+            PropertyFactory.lineWidth(2.6f),
+            PropertyFactory.lineOpacity(0.95f),
+        )
+        line.setFilter(Expression.eq(Expression.get("kind"), Expression.literal("DANGER")))
+        addLayerBelowBoundaryLine(style, line)
+    }
+    if (style.getLayer("zone-line-sold") == null && style.getSource("zone-source") != null) {
+        val line = LineLayer("zone-line-sold", "zone-source").withProperties(
+            PropertyFactory.lineColor(Expression.get("line")),
+            PropertyFactory.lineWidth(2.6f),
+            PropertyFactory.lineOpacity(0.95f),
+            PropertyFactory.lineDasharray(arrayOf(1.4f, 1.1f)),
+        )
+        line.setFilter(Expression.eq(Expression.get("kind"), Expression.literal("SOLD")))
+        addLayerBelowBoundaryLine(style, line)
+    }
+    if (style.getLayer("zone-label") == null && style.getSource("zone-source") != null) {
+        val label = SymbolLayer("zone-label", "zone-source").withProperties(
+            PropertyFactory.textField(Expression.get("label")),
+            PropertyFactory.textSize(13f),
+            PropertyFactory.textColor("#F5EED8"),
+            PropertyFactory.textHaloColor("#1A0A0A"),
+            PropertyFactory.textHaloWidth(1.4f),
+            PropertyFactory.textAllowOverlap(true),
+            PropertyFactory.textIgnorePlacement(true),
+        )
+        label.setFilter(Expression.has("label"))
+        addLayerBelowBoundaryLine(style, label)
+    }
     if (style.getSource("boundary-draft-source") == null) {
         style.addSource(GeoJsonSource("boundary-draft-source", FeatureCollection.fromFeatures(emptyArray())))
     }
@@ -2977,6 +3113,74 @@ private fun updateBoundariesOverlay(
         style.getLayer("boundary-draft-line")?.setProperties(PropertyFactory.visibility(Property.NONE))
         style.getLayer("boundary-draft-fill")?.setProperties(PropertyFactory.visibility(Property.NONE))
     }
+    updateZonesOverlay(style, boundaries, visibility)
+}
+
+private fun addLayerBelowBoundaryLine(style: Style, layer: org.maplibre.android.style.layers.Layer) {
+    if (style.getLayer("boundary-line") != null) {
+        style.addLayerBelow(layer, "boundary-line")
+    } else {
+        style.addLayer(layer)
+    }
+}
+
+/** Diagonal hatch tile so a zone reads as a marked patch, not a second boundary. */
+private fun zoneHatchBitmap(argb: Int, rising: Boolean): Bitmap {
+    val size = 32
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = argb
+        strokeWidth = 3f
+        style = Paint.Style.STROKE
+    }
+    var offset = -size.toFloat()
+    while (offset < size * 2) {
+        if (rising) {
+            canvas.drawLine(offset, size.toFloat(), offset + size, 0f, paint)
+        } else {
+            canvas.drawLine(offset, 0f, offset + size, size.toFloat(), paint)
+        }
+        offset += 8f
+    }
+    return bitmap
+}
+
+private fun updateZonesOverlay(
+    style: Style,
+    boundaries: List<uk.hunttrack.domain.model.BoundaryArea>,
+    visibility: uk.hunttrack.domain.geo.BoundaryVisibility,
+) {
+    val source = style.getSource("zone-source") as? GeoJsonSource ?: return
+    val features = boundaries.flatMap { area ->
+        if (!visibility.isVisible(area.id)) return@flatMap emptyList()
+        area.zones.flatMap { zone ->
+            val sorted = zone.points.sortedBy { it.orderIndex }
+            if (sorted.size < 3) return@flatMap emptyList()
+            val ring = sorted.map { Point.fromLngLat(it.longitude, it.latitude) }.let { it + it.first() }
+            val polygon = Feature.fromGeometry(Polygon.fromLngLats(listOf(ring))).also { feature ->
+                feature.addStringProperty("fill", zone.kind.mapColorHex())
+                feature.addNumberProperty("fillOpacity", zone.kind.mapFillOpacity().toDouble())
+                feature.addStringProperty("pattern", zone.kind.hatchPattern())
+                feature.addNumberProperty("zoneId", zone.id)
+                feature.addStringProperty("kind", zone.kind.name)
+                feature.addStringProperty("name", zone.label())
+            }
+            val outline = Feature.fromGeometry(LineString.fromLngLats(ring)).also { feature ->
+                feature.addStringProperty("line", zone.kind.mapColorHex())
+                feature.addStringProperty("kind", zone.kind.name)
+                feature.addNumberProperty("zoneId", zone.id)
+            }
+            val centroid = BoundaryMath.centroid(zone.points)
+            val label = centroid?.let { (lat, lng) ->
+                Feature.fromGeometry(Point.fromLngLat(lng, lat)).also { feature ->
+                    feature.addStringProperty("label", zone.label())
+                }
+            }
+            listOfNotNull(polygon, outline, label)
+        }
+    }
+    source.setGeoJson(FeatureCollection.fromFeatures(features.toTypedArray()))
 }
 
 /** LineString for the visible outline; optional Polygon for fill (LineLayer ignores polygons). */

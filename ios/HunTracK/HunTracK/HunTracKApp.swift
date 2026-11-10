@@ -83,6 +83,12 @@ struct ContentView: View {
                 selectedTab = 1
             }
         }
+        .onChange(of: db.pendingZone) { pending in
+            if pending != nil {
+                boundaryReturnTab = selectedTab
+                selectedTab = 1
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .boundaryCaptureFinished)) { _ in
             selectedTab = boundaryReturnTab
         }

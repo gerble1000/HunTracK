@@ -6,12 +6,15 @@ import kotlinx.serialization.Serializable
  * Portable HunTracK field backup.
  *
  * Version 1 carries permissions, boundaries, markers and recorded tracks.
+ * Version 2 adds boundary zones (danger / sold overlays). A version 1 file
+ * imports with an empty zone list. Zones do not alter the parent boundary geometry.
  * Medical profile fields are present only when the user explicitly includes them.
  * PIN hashes, biometric flags, and on-device file URIs are never written.
  */
 object FieldBackupFormat {
     const val FORMAT = "hunttrack-field-backup"
-    const val VERSION = 1
+    const val VERSION = 2
+    const val MIN_VERSION = 1
     const val JSON_NAME = "hunttrack-backup.json"
     const val GPX_NAME = "hunttrack-markers-tracks.gpx"
     const val KML_NAME = "hunttrack-boundaries.kml"
@@ -65,6 +68,17 @@ data class BackupBoundary(
     val zoneType: String = "HUNTING",
     val notes: String = "",
     val areaSqMeters: Double = 0.0,
+    val points: List<BackupPoint> = emptyList(),
+    /** Empty on version 1 backups. */
+    val zones: List<BackupZone> = emptyList(),
+)
+
+@Serializable
+data class BackupZone(
+    val id: Long = 0,
+    val name: String = "",
+    val kind: String = "DANGER",
+    val notes: String = "",
     val points: List<BackupPoint> = emptyList(),
 )
 

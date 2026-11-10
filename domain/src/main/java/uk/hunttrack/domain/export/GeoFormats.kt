@@ -34,6 +34,24 @@ object GeoFormats {
             append("    </trkseg>\n")
             append("  </trk>\n")
         }
+        backup.boundaries.forEach { area ->
+            area.zones.forEach { zone ->
+                val ordered = zone.points.sortedBy { it.orderIndex }
+                if (ordered.size < 2) return@forEach
+                val closed = if (ordered.size >= 3) ordered + ordered.first() else ordered
+                val title = zone.name.ifBlank { zone.kind }
+                append("  <trk>\n")
+                append("    <name>${xml("Zone: $title (${zone.kind})")}</name>\n")
+                append("    <desc>${xml("${area.name}. ${zone.notes}")}</desc>\n")
+                append("    <type>${xml(zone.kind)}</type>\n")
+                append("    <trkseg>\n")
+                closed.forEach { point ->
+                    append("      <trkpt lat=\"${coord(point.latitude)}\" lon=\"${coord(point.longitude)}\"></trkpt>\n")
+                }
+                append("    </trkseg>\n")
+                append("  </trk>\n")
+            }
+        }
         append("</gpx>\n")
     }
 
@@ -60,6 +78,23 @@ object GeoFormats {
                 append("</coordinates></LineString>\n")
             }
             append("    </Placemark>\n")
+        }
+        append("  </Folder>\n")
+        append("  <Folder><name>Zones</name>\n")
+        backup.boundaries.forEach { area ->
+            area.zones.forEach { zone ->
+                val ordered = zone.points.sortedBy { it.orderIndex }
+                if (ordered.size < 3) return@forEach
+                val ring = ordered + ordered.first()
+                val title = zone.name.ifBlank { zone.kind }
+                append("    <Placemark>\n")
+                append("      <name>${xml(title)}</name>\n")
+                append("      <description>${xml("${zone.kind}. ${area.name}. ${zone.notes}")}</description>\n")
+                append("      <Polygon><outerBoundaryIs><LinearRing><coordinates>")
+                append(ring.joinToString(" ") { "${coord(it.longitude)},${coord(it.latitude)},0" })
+                append("</coordinates></LinearRing></outerBoundaryIs></Polygon>\n")
+                append("    </Placemark>\n")
+            }
         }
         append("  </Folder>\n")
         append("  <Folder><name>Markers</name>\n")
@@ -101,6 +136,24 @@ object GeoFormats {
                         "name" to jsonString(area.name),
                         "zoneType" to jsonString(area.zoneType),
                         "notes" to jsonString(area.notes),
+                    ),
+                )
+            }
+            area.zones.forEach { zone ->
+                val zonePoints = zone.points.sortedBy { it.orderIndex }
+                if (zonePoints.size < 3) return@forEach
+                val zoneRing = (zonePoints + zonePoints.first()).joinToString(",") {
+                    "[${coord(it.longitude)},${coord(it.latitude)}]"
+                }
+                features += feature(
+                    geometry = """{"type":"Polygon","coordinates":[[$zoneRing]]}""",
+                    properties = mapOf(
+                        "kind" to jsonString("zone"),
+                        "zoneKind" to jsonString(zone.kind),
+                        "name" to jsonString(zone.name),
+                        "notes" to jsonString(zone.notes),
+                        "boundaryId" to jsonString(area.id.toString()),
+                        "boundaryName" to jsonString(area.name),
                     ),
                 )
             }

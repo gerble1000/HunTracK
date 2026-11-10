@@ -173,6 +173,30 @@ interface BoundaryDao {
 
     @Query("DELETE FROM boundary_areas WHERE id = :id")
     suspend fun deleteArea(id: Long)
+
+    @Query("SELECT * FROM boundary_zones ORDER BY boundaryId ASC, id ASC")
+    fun observeZones(): Flow<List<BoundaryZoneEntity>>
+
+    @Query("SELECT * FROM boundary_zones WHERE boundaryId = :boundaryId ORDER BY id ASC")
+    suspend fun zonesFor(boundaryId: Long): List<BoundaryZoneEntity>
+
+    @Query("SELECT * FROM boundary_zone_points ORDER BY zoneId ASC, orderIndex ASC")
+    fun observeZonePoints(): Flow<List<BoundaryZonePointEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertZone(entity: BoundaryZoneEntity): Long
+
+    @Insert
+    suspend fun insertZonePoints(points: List<BoundaryZonePointEntity>)
+
+    @Query("DELETE FROM boundary_zone_points WHERE zoneId = :zoneId")
+    suspend fun deleteZonePoints(zoneId: Long)
+
+    @Query("DELETE FROM boundary_zones WHERE id = :id")
+    suspend fun deleteZone(id: Long)
+
+    @Query("DELETE FROM boundary_zones WHERE boundaryId = :boundaryId")
+    suspend fun deleteZonesForBoundary(boundaryId: Long)
 }
 
 @Dao

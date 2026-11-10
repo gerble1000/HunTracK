@@ -675,6 +675,117 @@ public struct PendingBoundaryCreation: Codable, Equatable {
     }
 }
 
+/// A zone drawn on one boundary. It does not change the boundary outline or area,
+/// and it is not clipped when it extends past the edge.
+public enum BoundaryZoneKind: String, Codable, CaseIterable {
+    case danger = "DANGER"
+    case sold = "SOLD"
+
+    public var displayName: String {
+        switch self {
+        case .danger: return "Danger / No-go"
+        case .sold: return "Sold / removed land"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .danger: return "Do not enter — a hazard or no-go patch inside this ground."
+        case .sold: return "This parcel has been sold or taken out of the permission."
+        }
+    }
+
+    public var mapColorHex: String {
+        switch self {
+        case .danger: return "#E23B3B"
+        case .sold: return "#C47B2B"
+        }
+    }
+
+    public var mapFillOpacity: Double {
+        switch self {
+        case .danger: return 0.34
+        case .sold: return 0.30
+        }
+    }
+}
+
+public struct BoundaryZone: Identifiable, Codable, Equatable {
+    public var id: Int64 = 0
+    public var boundaryId: Int64 = 0
+    public var name: String = ""
+    public var kind: BoundaryZoneKind
+    public var notes: String = ""
+    public var points: [BoundaryPoint] = []
+
+    public init(
+        id: Int64 = 0,
+        boundaryId: Int64 = 0,
+        name: String = "",
+        kind: BoundaryZoneKind,
+        notes: String = "",
+        points: [BoundaryPoint] = []
+    ) {
+        self.id = id
+        self.boundaryId = boundaryId
+        self.name = name
+        self.kind = kind
+        self.notes = notes
+        self.points = points
+    }
+
+    public var label: String { name.isEmpty ? kind.displayName : name }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, boundaryId, name, kind, notes, points
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(Int64.self, forKey: .id) ?? 0
+        boundaryId = try values.decodeIfPresent(Int64.self, forKey: .boundaryId) ?? 0
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        kind = try values.decodeIfPresent(BoundaryZoneKind.self, forKey: .kind) ?? .danger
+        notes = try values.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        points = try values.decodeIfPresent([BoundaryPoint].self, forKey: .points) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(boundaryId, forKey: .boundaryId)
+        try container.encode(name, forKey: .name)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(points, forKey: .points)
+    }
+}
+
+public struct PendingZoneCapture: Equatable {
+    public var boundaryId: Int64
+    public var zoneId: Int64?
+    public var name: String
+    public var kind: BoundaryZoneKind
+    public var notes: String
+    public var returnToPermissions: Bool
+
+    public init(
+        boundaryId: Int64,
+        zoneId: Int64? = nil,
+        name: String = "",
+        kind: BoundaryZoneKind,
+        notes: String = "",
+        returnToPermissions: Bool = true
+    ) {
+        self.boundaryId = boundaryId
+        self.zoneId = zoneId
+        self.name = name
+        self.kind = kind
+        self.notes = notes
+        self.returnToPermissions = returnToPermissions
+    }
+}
+
 public struct BoundaryPoint: Codable, Equatable {
     public var latitude: Double
     public var longitude: Double
@@ -694,6 +805,8 @@ public struct BoundaryArea: Identifiable, Codable, Equatable {
     public var notes: String = ""
     public var points: [BoundaryPoint] = []
     public var areaSqMeters: Double = 0.0
+    /// Overlays. Missing on older saved boundaries, which load with an empty list.
+    public var zones: [BoundaryZone] = []
     
     public init(
         id: Int64 = 0,
@@ -701,7 +814,8 @@ public struct BoundaryArea: Identifiable, Codable, Equatable {
         zoneType: BoundaryZoneType,
         notes: String = "",
         points: [BoundaryPoint] = [],
-        areaSqMeters: Double = 0.0
+        areaSqMeters: Double = 0.0,
+        zones: [BoundaryZone] = []
     ) {
         self.id = id
         self.name = name
@@ -709,6 +823,33 @@ public struct BoundaryArea: Identifiable, Codable, Equatable {
         self.notes = notes
         self.points = points
         self.areaSqMeters = areaSqMeters
+        self.zones = zones
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, zoneType, notes, points, areaSqMeters, zones
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(Int64.self, forKey: .id) ?? 0
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        zoneType = try values.decodeIfPresent(BoundaryZoneType.self, forKey: .zoneType) ?? .hunting
+        notes = try values.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        points = try values.decodeIfPresent([BoundaryPoint].self, forKey: .points) ?? []
+        areaSqMeters = try values.decodeIfPresent(Double.self, forKey: .areaSqMeters) ?? 0
+        zones = try values.decodeIfPresent([BoundaryZone].self, forKey: .zones) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(zoneType, forKey: .zoneType)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(points, forKey: .points)
+        try container.encode(areaSqMeters, forKey: .areaSqMeters)
+        try container.encode(zones, forKey: .zones)
     }
 }
 

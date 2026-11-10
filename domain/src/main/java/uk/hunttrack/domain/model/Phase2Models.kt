@@ -137,6 +137,61 @@ fun BoundaryZoneType.mapFillOpacity(): Float = when (this) {
     BoundaryZoneType.HUNTING -> 0.14f
 }
 
+/**
+ * A zone drawn on top of one boundary. The boundary outline, area and permission
+ * geometry stay as they are — a zone does not cut a hole and is not clipped to the edge.
+ */
+enum class BoundaryZoneKind { DANGER, SOLD }
+
+fun BoundaryZoneKind.displayName(): String = when (this) {
+    BoundaryZoneKind.DANGER -> "Danger / No-go"
+    BoundaryZoneKind.SOLD -> "Sold / removed land"
+}
+
+fun BoundaryZoneKind.summary(): String = when (this) {
+    BoundaryZoneKind.DANGER -> "Do not enter — a hazard or no-go patch inside this ground."
+    BoundaryZoneKind.SOLD -> "This parcel has been sold or taken out of the permission."
+}
+
+/** Map fill colour. Danger is red; sold land is a distinct amber. */
+fun BoundaryZoneKind.mapColorHex(): String = when (this) {
+    BoundaryZoneKind.DANGER -> "#E23B3B"
+    BoundaryZoneKind.SOLD -> "#C47B2B"
+}
+
+fun BoundaryZoneKind.mapFillOpacity(): Float = when (this) {
+    BoundaryZoneKind.DANGER -> 0.34f
+    BoundaryZoneKind.SOLD -> 0.30f
+}
+
+/** Hatch tile registered on the map style. */
+fun BoundaryZoneKind.hatchPattern(): String = when (this) {
+    BoundaryZoneKind.DANGER -> "zone-hatch-danger"
+    BoundaryZoneKind.SOLD -> "zone-hatch-sold"
+}
+
+data class BoundaryZone(
+    val id: Long = 0,
+    val boundaryId: Long = 0,
+    val name: String = "",
+    val kind: BoundaryZoneKind,
+    val notes: String = "",
+    val points: List<BoundaryPoint> = emptyList(),
+) {
+    fun label(): String = name.ifBlank { kind.displayName() }
+}
+
+/** Draw session for a zone that belongs to an existing boundary. */
+data class PendingZoneCapture(
+    val boundaryId: Long,
+    /** Set when redrawing an existing zone; null creates a new one. */
+    val zoneId: Long? = null,
+    val name: String = "",
+    val kind: BoundaryZoneKind,
+    val notes: String = "",
+    val returnToPermissions: Boolean = true,
+)
+
 enum class BoundaryCaptureMode { WALK, DRAW }
 
 /** Pending boundary started from Permissions — completed on the map. */
@@ -156,6 +211,8 @@ data class BoundaryArea(
     val notes: String = "",
     val points: List<BoundaryPoint> = emptyList(),
     val areaSqMeters: Double = 0.0,
+    /** Overlays on this boundary. They do not change [points] or [areaSqMeters]. */
+    val zones: List<BoundaryZone> = emptyList(),
 )
 
 data class BoundaryPoint(

@@ -14,14 +14,18 @@ import kotlinx.coroutines.launch
 import uk.hunttrack.core.data.phase2.BoundaryCreationSession
 import uk.hunttrack.core.data.phase2.PermissionMapViewSession
 import uk.hunttrack.core.data.phase2.PermissionsRepository
+import uk.hunttrack.core.data.phase2.ZoneCaptureSession
 import uk.hunttrack.core.data.prefs.PreferencesRepository
 import uk.hunttrack.core.location.LocationRepository
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryCaptureMode
 import uk.hunttrack.domain.model.BoundaryPoint
+import uk.hunttrack.domain.model.BoundaryZone
+import uk.hunttrack.domain.model.BoundaryZoneKind
 import uk.hunttrack.domain.model.BoundaryZoneType
 import uk.hunttrack.domain.model.HuntingPermission
 import uk.hunttrack.domain.model.PendingBoundaryCreation
+import uk.hunttrack.domain.model.PendingZoneCapture
 import uk.hunttrack.domain.model.PermissionDocType
 import uk.hunttrack.domain.model.PermissionMapFocusItem
 import uk.hunttrack.domain.model.displayLabel
@@ -48,6 +52,7 @@ class PermissionsViewModel @Inject constructor(
     private val repository: PermissionsRepository,
     private val locationRepository: LocationRepository,
     private val boundaryCreationSession: BoundaryCreationSession,
+    private val zoneCaptureSession: ZoneCaptureSession,
     private val permissionMapViewSession: PermissionMapViewSession,
     private val preferencesRepository: PreferencesRepository,
 ) : ViewModel() {
@@ -242,5 +247,31 @@ class PermissionsViewModel @Inject constructor(
 
     fun deleteBoundary(id: Long) {
         viewModelScope.launch { repository.deleteBoundary(id) }
+    }
+
+    fun startZoneOnMap(
+        boundaryId: Long,
+        zoneId: Long?,
+        name: String,
+        notes: String,
+        kind: BoundaryZoneKind,
+    ) {
+        zoneCaptureSession.setPending(
+            PendingZoneCapture(
+                boundaryId = boundaryId,
+                zoneId = zoneId,
+                name = name.trim(),
+                kind = kind,
+                notes = notes.trim(),
+            ),
+        )
+    }
+
+    fun saveZoneDetails(zone: BoundaryZone) {
+        viewModelScope.launch { repository.saveZone(zone) }
+    }
+
+    fun deleteZone(id: Long) {
+        viewModelScope.launch { repository.deleteZone(id) }
     }
 }

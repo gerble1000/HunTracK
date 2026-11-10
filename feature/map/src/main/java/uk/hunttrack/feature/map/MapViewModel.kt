@@ -24,6 +24,7 @@ import uk.hunttrack.core.data.offline.OfflineMapRepository
 import uk.hunttrack.core.data.phase2.BoundaryCreationSession
 import uk.hunttrack.core.data.phase2.PermissionMapViewSession
 import uk.hunttrack.core.data.phase2.PermissionsRepository
+import uk.hunttrack.core.data.phase2.ZoneCaptureSession
 import uk.hunttrack.core.data.prefs.PreferencesRepository
 import uk.hunttrack.core.data.route.RouteRepository
 import uk.hunttrack.core.data.weather.WeatherRepository
@@ -34,8 +35,11 @@ import uk.hunttrack.core.location.LocationRepository
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryCaptureMode
 import uk.hunttrack.domain.model.BoundaryPoint
+import uk.hunttrack.domain.model.BoundaryZone
 import uk.hunttrack.domain.model.BoundaryZoneType
 import uk.hunttrack.domain.model.PendingBoundaryCreation
+import uk.hunttrack.domain.model.PendingZoneCapture
+import uk.hunttrack.domain.model.displayName
 import uk.hunttrack.domain.geo.BoundaryVisibility
 import uk.hunttrack.domain.model.PermissionMapFocusItem
 import uk.hunttrack.domain.model.FieldMarker
@@ -103,6 +107,8 @@ data class MapUiState(
     val boundaryMode: BoundaryRecordMode = BoundaryRecordMode.OFF,
     val boundaryDrawPhase: BoundaryDrawPhase = BoundaryDrawPhase.PREP,
     val pendingBoundaryCreation: PendingBoundaryCreation? = null,
+    /** Set while drawing a zone onto an existing boundary. */
+    val pendingZoneCapture: PendingZoneCapture? = null,
     val draftBoundaryPoints: List<BoundaryPoint> = emptyList(),
     /** Wallet permissions highlighted on the map (from Permissions tab). */
     val permissionMapFocus: List<PermissionMapFocusItem> = emptyList(),
@@ -124,6 +130,7 @@ class MapViewModel @Inject constructor(
     private val permissionsRepository: PermissionsRepository,
     private val permissionMapViewSession: PermissionMapViewSession,
     private val boundaryCreationSession: BoundaryCreationSession,
+    private val zoneCaptureSession: ZoneCaptureSession,
     private val locationRepository: LocationRepository,
     private val offlineMapRepository: OfflineMapRepository,
     private val routeRepository: RouteRepository,
@@ -153,6 +160,8 @@ class MapViewModel @Inject constructor(
     private val boundaryDrawPhaseState = MutableStateFlow(BoundaryDrawPhase.PREP)
     private val draftBoundaryState = MutableStateFlow<List<BoundaryPoint>>(emptyList())
     private val pendingCreationState = MutableStateFlow<PendingBoundaryCreation?>(null)
+    private val zoneCaptureState = MutableStateFlow<PendingZoneCapture?>(null)
+    private val selectedZoneIdState = MutableStateFlow<Long?>(null)
     private val permissionFocusState = MutableStateFlow<List<PermissionMapFocusItem>>(emptyList())
     private val goToTargetState = MutableStateFlow<GoToOsGridTarget?>(null)
     private val goToErrorState = MutableStateFlow<String?>(null)
@@ -169,6 +178,8 @@ class MapViewModel @Inject constructor(
         val selected: FieldMarker?,
         val showOffline: Boolean,
     )
+
+    val selectedZoneId: StateFlow<Long?> = selectedZoneIdState
 
     val boundaryVisibility: StateFlow<BoundaryVisibility> = combine(
         permissionsRepository.observePermissions(),
@@ -211,9 +222,11 @@ class MapViewModel @Inject constructor(
             ) { planId, boundaries, mode, drawPhase, draft ->
                 listOf(planId, boundaries, mode, drawPhase, draft)
             },
-            pendingCreationState,
-        ) { boundaryCore, pending ->
-            boundaryCore + pending
+            combine(pendingCreationState, zoneCaptureState) { pending, zone ->
+                pending to zone
+            },
+        ) { boundaryCore, pendingAndZone ->
+            boundaryCore + pendingAndZone
         },
     ) { leftExtras, boundaryExtras ->
         leftExtras to boundaryExtras
@@ -241,7 +254,9 @@ class MapViewModel @Inject constructor(
         val boundaryMode = boundaryExtras[2] as BoundaryRecordMode
         val boundaryDrawPhase = boundaryExtras[3] as BoundaryDrawPhase
         val draftBoundary = boundaryExtras[4] as List<BoundaryPoint>
-        val pendingBoundary = boundaryExtras[5] as PendingBoundaryCreation?
+        val pendingAndZone = boundaryExtras[5] as Pair<*, *>
+        val pendingBoundary = pendingAndZone.first as PendingBoundaryCreation?
+        val zoneCapture = pendingAndZone.second as PendingZoneCapture?
         val homing = activeHoming
             ?: markers.filter { it.category == MarkerCategory.HOMING }.maxByOrNull { it.createdAtEpochMs }
         val distance = if (gps != null && homing != null) {
@@ -321,6 +336,7 @@ class MapViewModel @Inject constructor(
             boundaryMode = boundaryMode,
             boundaryDrawPhase = boundaryDrawPhase,
             pendingBoundaryCreation = pendingBoundary,
+            pendingZoneCapture = zoneCapture,
             draftBoundaryPoints = draftBoundary,
             permissionMapFocus = permissionFocus,
             goToTarget = goToTarget,
@@ -613,7 +629,31 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch { preferencesRepository.setScentPlanMarkerId(null) }
     }
 
+    fun selectZone(zoneId: Long?) {
+        selectedZoneIdState.value = zoneId
+    }
+
+    fun activatePendingZoneCapture() {
+        val pending = zoneCaptureSession.getPending() ?: return
+        if (boundaryModeState.value != BoundaryRecordMode.OFF && zoneCaptureState.value != null) return
+        zoneCaptureState.value = pending
+        pendingCreationState.value = null
+        boundaryCreationSession.clear()
+        boundaryModeState.value = BoundaryRecordMode.DRAWING
+        boundaryDrawPhaseState.value = BoundaryDrawPhase.PREP
+        draftBoundaryState.value = emptyList()
+        val parent = boundariesState.value.firstOrNull { it.id == pending.boundaryId }
+        permissionFocusState.value = listOf(
+            PermissionMapFocusItem(
+                permissionId = 0,
+                label = parent?.name?.ifBlank { pending.kind.displayName() } ?: pending.kind.displayName(),
+                boundaryAreaId = pending.boundaryId,
+            ),
+        )
+    }
+
     fun activatePendingBoundaryCreation() {
+        if (zoneCaptureSession.getPending() != null || zoneCaptureState.value != null) return
         val pending = boundaryCreationSession.getPending() ?: return
         if (boundaryModeState.value != BoundaryRecordMode.OFF) return
         pendingCreationState.value = pending
@@ -624,6 +664,7 @@ class MapViewModel @Inject constructor(
     }
 
     fun activatePermissionMapView() {
+        if (zoneCaptureState.value != null) return
         permissionFocusState.value = permissionMapViewSession.getFocus().orEmpty()
     }
 
@@ -670,7 +711,9 @@ class MapViewModel @Inject constructor(
         boundaryDrawPhaseState.value = BoundaryDrawPhase.PREP
         draftBoundaryState.value = emptyList()
         pendingCreationState.value = null
+        zoneCaptureState.value = null
         boundaryCreationSession.clear()
+        zoneCaptureSession.clear()
     }
 
     fun appendBoundaryDrawPoint(latitude: Double, longitude: Double) {
@@ -688,6 +731,30 @@ class MapViewModel @Inject constructor(
     fun finishBoundary(name: String = "Field boundary") {
         viewModelScope.launch {
             val points = draftBoundaryState.value
+            val zoneCapture = zoneCaptureState.value
+            if (zoneCapture != null) {
+                if (points.size < 3) {
+                    cancelBoundaryDraft()
+                    return@launch
+                }
+                permissionsRepository.saveZone(
+                    BoundaryZone(
+                        id = zoneCapture.zoneId ?: 0,
+                        boundaryId = zoneCapture.boundaryId,
+                        name = zoneCapture.name,
+                        kind = zoneCapture.kind,
+                        notes = zoneCapture.notes,
+                        points = points,
+                    ),
+                )
+                val returnToPermissions = zoneCapture.returnToPermissions
+                cancelBoundaryDraft()
+                soundManager.play(HuntSound.SUCCESS)
+                if (returnToPermissions) {
+                    _returnToPermissionsAfterBoundary.tryEmit(Unit)
+                }
+                return@launch
+            }
             if (points.size < 2) {
                 cancelBoundaryDraft()
                 return@launch

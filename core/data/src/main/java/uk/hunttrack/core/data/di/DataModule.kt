@@ -16,6 +16,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import uk.hunttrack.core.data.db.AudioPackDao
 import uk.hunttrack.core.data.db.BoundaryDao
+import uk.hunttrack.core.data.db.MIGRATION_8_9
 import uk.hunttrack.core.data.db.CallJournalDao
 import uk.hunttrack.core.data.db.CalendarDayDao
 import uk.hunttrack.core.data.db.CullDao
@@ -46,6 +47,7 @@ object DataModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HunTracKDatabase =
         Room.databaseBuilder(context, HunTracKDatabase::class.java, "hunttrack.db")
+            .addMigrations(MIGRATION_8_9)
             .fallbackToDestructiveMigration()
             .build()
 

@@ -8,12 +8,16 @@ import kotlinx.coroutines.flow.map
 import uk.hunttrack.core.data.db.BoundaryAreaEntity
 import uk.hunttrack.core.data.db.BoundaryDao
 import uk.hunttrack.core.data.db.BoundaryPointEntity
+import uk.hunttrack.core.data.db.BoundaryZoneEntity
+import uk.hunttrack.core.data.db.BoundaryZonePointEntity
 import uk.hunttrack.core.data.db.HuntingPermissionDao
 import uk.hunttrack.core.data.db.HuntingPermissionEntity
 import uk.hunttrack.domain.geo.BoundaryMath
 import uk.hunttrack.domain.geo.BoundaryFenceStyle
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryPoint
+import uk.hunttrack.domain.model.BoundaryZone
+import uk.hunttrack.domain.model.BoundaryZoneKind
 import uk.hunttrack.domain.model.BoundaryZoneType
 import uk.hunttrack.domain.model.HuntingPermission
 import uk.hunttrack.domain.model.PermissionDocType
@@ -27,11 +31,19 @@ class PermissionsRepository @Inject constructor(
         permissionDao.observeAll().map { list -> list.map { it.toDomain() } }
 
     fun observeBoundaries(): Flow<List<BoundaryArea>> =
-        combine(boundaryDao.observeAreas(), boundaryDao.observeAllPoints()) { areas, points ->
+        combine(
+            boundaryDao.observeAreas(),
+            boundaryDao.observeAllPoints(),
+            boundaryDao.observeZones(),
+            boundaryDao.observeZonePoints(),
+        ) { areas, points, zones, zonePoints ->
             areas.map { area ->
                 val pts = points.filter { it.areaId == area.id }
                     .map { BoundaryPoint(it.latitude, it.longitude, it.orderIndex) }
-                area.toDomain(pts)
+                val areaZones = zones.filter { it.boundaryId == area.id }.map { zone ->
+                    zone.toDomain(zonePoints.filter { it.zoneId == zone.id })
+                }
+                area.toDomain(pts, areaZones)
             }
         }
 
@@ -76,8 +88,45 @@ class PermissionsRepository @Inject constructor(
         return resolvedId
     }
 
+    /**
+     * Saves a zone on its parent boundary. The boundary outline and area are not touched,
+     * and the zone polygon is stored as drawn (it may extend past the boundary edge).
+     */
+    suspend fun saveZone(zone: BoundaryZone): Long {
+        val zoneId = boundaryDao.upsertZone(
+            BoundaryZoneEntity(
+                id = zone.id,
+                boundaryId = zone.boundaryId,
+                name = zone.name,
+                kind = zone.kind.name,
+                notes = zone.notes,
+            ),
+        )
+        val resolvedId = if (zone.id == 0L) zoneId else zone.id
+        boundaryDao.deleteZonePoints(resolvedId)
+        boundaryDao.insertZonePoints(
+            zone.points.map {
+                BoundaryZonePointEntity(
+                    zoneId = resolvedId,
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                    orderIndex = it.orderIndex,
+                )
+            },
+        )
+        return resolvedId
+    }
+
+    suspend fun deleteZone(id: Long) {
+        boundaryDao.deleteZonePoints(id)
+        boundaryDao.deleteZone(id)
+    }
+
     suspend fun deleteBoundary(id: Long) {
         permissionDao.clearBoundaryLink(id)
+        val zones = boundaryDao.zonesFor(id)
+        zones.forEach { zone -> boundaryDao.deleteZonePoints(zone.id) }
+        boundaryDao.deleteZonesForBoundary(id)
         boundaryDao.deletePoints(id)
         boundaryDao.deleteArea(id)
     }
@@ -96,11 +145,24 @@ private fun HuntingPermission.toEntity() = HuntingPermissionEntity(
     ownerName, ownerContact, notes, docType.name, attachmentUri, boundaryAreaId,
 )
 
-private fun BoundaryAreaEntity.toDomain(points: List<BoundaryPoint>) = BoundaryArea(
+private fun BoundaryAreaEntity.toDomain(
+    points: List<BoundaryPoint>,
+    zones: List<BoundaryZone> = emptyList(),
+) = BoundaryArea(
     id = id,
     name = name,
     zoneType = runCatching { BoundaryZoneType.valueOf(zoneType) }.getOrDefault(BoundaryZoneType.HUNTING),
     notes = notes,
     points = points,
     areaSqMeters = areaSqMeters,
+    zones = zones,
+)
+
+private fun BoundaryZoneEntity.toDomain(points: List<BoundaryZonePointEntity>) = BoundaryZone(
+    id = id,
+    boundaryId = boundaryId,
+    name = name,
+    kind = runCatching { BoundaryZoneKind.valueOf(kind) }.getOrDefault(BoundaryZoneKind.DANGER),
+    notes = notes,
+    points = points.map { BoundaryPoint(it.latitude, it.longitude, it.orderIndex) },
 )

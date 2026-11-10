@@ -2,7 +2,8 @@ import Foundation
 
 enum FieldBackupFormat {
     static let format = "hunttrack-field-backup"
-    static let version = 1
+    static let version = 2
+    static let minVersion = 1
     static let jsonName = "hunttrack-backup.json"
     static let gpxName = "hunttrack-markers-tracks.gpx"
     static let kmlName = "hunttrack-boundaries.kml"
@@ -45,6 +46,44 @@ struct BackupPermission: Codable {
     var attachmentOmitted: Bool
 }
 
+struct BackupZone: Codable {
+    var id: Int64
+    var name: String
+    var kind: String
+    var notes: String
+    var points: [BackupPoint]
+
+    init(id: Int64, name: String, kind: String, notes: String, points: [BackupPoint]) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.notes = notes
+        self.points = points
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, kind, notes, points
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(Int64.self, forKey: .id) ?? 0
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        kind = try values.decodeIfPresent(String.self, forKey: .kind) ?? "DANGER"
+        notes = try values.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        points = try values.decodeIfPresent([BackupPoint].self, forKey: .points) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(points, forKey: .points)
+    }
+}
+
 struct BackupBoundary: Codable {
     var id: Int64
     var name: String
@@ -52,6 +91,51 @@ struct BackupBoundary: Codable {
     var notes: String
     var areaSqMeters: Double
     var points: [BackupPoint]
+    var zones: [BackupZone]
+
+    init(
+        id: Int64,
+        name: String,
+        zoneType: String,
+        notes: String,
+        areaSqMeters: Double,
+        points: [BackupPoint],
+        zones: [BackupZone] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.zoneType = zoneType
+        self.notes = notes
+        self.areaSqMeters = areaSqMeters
+        self.points = points
+        self.zones = zones
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, zoneType, notes, areaSqMeters, points, zones
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(Int64.self, forKey: .id) ?? 0
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        zoneType = try values.decodeIfPresent(String.self, forKey: .zoneType) ?? "HUNTING"
+        notes = try values.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        areaSqMeters = try values.decodeIfPresent(Double.self, forKey: .areaSqMeters) ?? 0
+        points = try values.decodeIfPresent([BackupPoint].self, forKey: .points) ?? []
+        zones = try values.decodeIfPresent([BackupZone].self, forKey: .zones) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(zoneType, forKey: .zoneType)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(areaSqMeters, forKey: .areaSqMeters)
+        try container.encode(points, forKey: .points)
+        try container.encode(zones, forKey: .zones)
+    }
 }
 
 struct BackupPoint: Codable {
@@ -141,6 +225,17 @@ enum FieldBackupCodec {
                     areaSqMeters: area.areaSqMeters,
                     points: area.points.sorted { $0.orderIndex < $1.orderIndex }.map {
                         BackupPoint(latitude: $0.latitude, longitude: $0.longitude, orderIndex: $0.orderIndex)
+                    },
+                    zones: area.zones.map { zone in
+                        BackupZone(
+                            id: zone.id,
+                            name: zone.name,
+                            kind: zone.kind.rawValue,
+                            notes: zone.notes,
+                            points: zone.points.sorted { $0.orderIndex < $1.orderIndex }.map {
+                                BackupPoint(latitude: $0.latitude, longitude: $0.longitude, orderIndex: $0.orderIndex)
+                            }
+                        )
                     }
                 )
             },
@@ -201,7 +296,9 @@ enum FieldBackupCodec {
 
     static func decode(_ data: Data) throws -> FieldBackupFile {
         let backup = try JSONDecoder().decode(FieldBackupFile.self, from: data)
-        guard backup.format == FieldBackupFormat.format, backup.version == FieldBackupFormat.version else {
+        guard backup.format == FieldBackupFormat.format,
+              backup.version >= FieldBackupFormat.minVersion,
+              backup.version <= FieldBackupFormat.version else {
             throw FieldBackupError("This backup version is not supported.")
         }
         return backup
@@ -231,6 +328,23 @@ enum GeoFormats {
             }
             lines.append("  </trkseg></trk>")
         }
+        for area in backup.boundaries {
+            for zone in area.zones where zone.points.count >= 2 {
+                let ordered = zone.points.sorted { $0.orderIndex < $1.orderIndex }
+                let closed = ordered.count >= 3 ? ordered + [ordered[0]] : ordered
+                let title = zone.name.isEmpty ? zone.kind : zone.name
+                lines.append("  <trk>")
+                lines.append("    <name>\(xml("Zone: \(title) (\(zone.kind))"))</name>")
+                lines.append("    <desc>\(xml("\(area.name). \(zone.notes)"))</desc>")
+                lines.append("    <type>\(xml(zone.kind))</type>")
+                lines.append("    <trkseg>")
+                for point in closed {
+                    lines.append("      <trkpt lat=\"\(coord(point.latitude))\" lon=\"\(coord(point.longitude))\"></trkpt>")
+                }
+                lines.append("    </trkseg>")
+                lines.append("  </trk>")
+            }
+        }
         lines.append("</gpx>")
         return lines.joined(separator: "\n")
     }
@@ -238,11 +352,23 @@ enum GeoFormats {
     static func kml(_ backup: FieldBackupFile) -> String {
         var lines = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
                      "<kml xmlns=\"http://www.opengis.net/kml/2.2\"><Document><name>HunTracK field data</name>"]
+        lines.append("<Folder><name>Boundaries</name>")
         for area in backup.boundaries where area.points.count >= 3 {
             let ring = area.points + [area.points[0]]
             let coords = ring.map { "\(coord($0.longitude)),\(coord($0.latitude)),0" }.joined(separator: " ")
             lines.append("<Placemark><name>\(xml(area.name))</name><Polygon><outerBoundaryIs><LinearRing><coordinates>\(coords)</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>")
         }
+        lines.append("</Folder><Folder><name>Zones</name>")
+        for area in backup.boundaries {
+            for zone in area.zones where zone.points.count >= 3 {
+                let ordered = zone.points.sorted { $0.orderIndex < $1.orderIndex }
+                let ring = ordered + [ordered[0]]
+                let coords = ring.map { "\(coord($0.longitude)),\(coord($0.latitude)),0" }.joined(separator: " ")
+                let title = zone.name.isEmpty ? zone.kind : zone.name
+                lines.append("<Placemark><name>\(xml(title))</name><description>\(xml("\(zone.kind). \(area.name). \(zone.notes)"))</description><Polygon><outerBoundaryIs><LinearRing><coordinates>\(coords)</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>")
+            }
+        }
+        lines.append("</Folder>")
         for marker in backup.markers {
             lines.append("<Placemark><name>\(xml(marker.name))</name><Point><coordinates>\(coord(marker.longitude)),\(coord(marker.latitude)),0</coordinates></Point></Placemark>")
         }
@@ -258,6 +384,11 @@ enum GeoFormats {
         for area in backup.boundaries where area.points.count >= 3 {
             let ring = (area.points + [area.points[0]]).map { "[\(coord($0.longitude)),\(coord($0.latitude))]" }.joined(separator: ",")
             features.append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[\(ring)]]},\"properties\":{\"kind\":\"boundary\",\"name\":\(json(area.name)),\"zoneType\":\(json(area.zoneType))}}")
+            for zone in area.zones where zone.points.count >= 3 {
+                let ordered = zone.points.sorted { $0.orderIndex < $1.orderIndex }
+                let zoneRing = (ordered + [ordered[0]]).map { "[\(coord($0.longitude)),\(coord($0.latitude))]" }.joined(separator: ",")
+                features.append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[\(zoneRing)]]},\"properties\":{\"kind\":\"zone\",\"zoneKind\":\(json(zone.kind)),\"name\":\(json(zone.name)),\"notes\":\(json(zone.notes)),\"boundaryId\":\(json(String(area.id))),\"boundaryName\":\(json(area.name))}}")
+            }
         }
         for route in backup.routes where !route.points.isEmpty {
             let line = route.points.map { "[\(coord($0.longitude)),\(coord($0.latitude))]" }.joined(separator: ",")
@@ -427,6 +558,19 @@ extension DatabaseService {
                 areaSqMeters: area.areaSqMeters
             ))
             if area.id != 0 { boundaryMap[area.id] = newId }
+            for zone in area.zones {
+                saveZone(
+                    BoundaryZone(
+                        name: zone.name,
+                        kind: BoundaryZoneKind(rawValue: zone.kind) ?? .danger,
+                        notes: zone.notes,
+                        points: zone.points.map {
+                            BoundaryPoint(latitude: $0.latitude, longitude: $0.longitude, orderIndex: $0.orderIndex)
+                        }
+                    ),
+                    toBoundary: newId
+                )
+            }
         }
         for permission in backup.permissions {
             addPermission(HuntingPermission(
