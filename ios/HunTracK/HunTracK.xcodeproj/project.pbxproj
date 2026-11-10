@@ -46,6 +46,7 @@
 		A30000032D00000100000001 /* RegionPackCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000032D00000100000001 /* RegionPackCatalog.swift */; };
 		A30000042D00000100000001 /* PacksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000042D00000100000001 /* PacksScreen.swift */; };
 		A30000052D00000100000001 /* YourDataScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000052D00000100000001 /* YourDataScreen.swift */; };
+		A30000062D00000100000001 /* TextFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062D00000100000001 /* TextFormats.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +91,7 @@
 		B30000032D00000100000001 /* RegionPackCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Catalog/RegionPackCatalog.swift; sourceTree = "<group>"; };
 		B30000042D00000100000001 /* PacksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Packs/PacksScreen.swift; sourceTree = "<group>"; };
 		B30000052D00000100000001 /* YourDataScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/YourDataScreen.swift; sourceTree = "<group>"; };
+		B30000062D00000100000001 /* TextFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/TextFormats.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +156,7 @@
 				B20000042D00000100000001 /* CullScreen.swift */,
 				B20000052D00000100000001 /* TidesScreen.swift */,
 				B30000022D00000100000001 /* FieldBackup.swift */,
+				B30000062D00000100000001 /* TextFormats.swift */,
 				B30000032D00000100000001 /* RegionPackCatalog.swift */,
 				B30000042D00000100000001 /* PacksScreen.swift */,
 				B30000052D00000100000001 /* YourDataScreen.swift */,
@@ -278,6 +281,7 @@
 				A20000042D00000100000001 /* CullScreen.swift in Sources */,
 				A20000052D00000100000001 /* TidesScreen.swift in Sources */,
 				A30000022D00000100000001 /* FieldBackup.swift in Sources */,
+				A30000062D00000100000001 /* TextFormats.swift in Sources */,
 				A30000032D00000100000001 /* RegionPackCatalog.swift in Sources */,
 				A30000042D00000100000001 /* PacksScreen.swift in Sources */,
 				A30000052D00000100000001 /* YourDataScreen.swift in Sources */,

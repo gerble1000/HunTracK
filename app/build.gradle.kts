@@ -24,6 +24,22 @@ android {
         targetSdk = 36
         versionCode = 31
         versionName = "1.1.29"
+        // Optional one-ABI debug build, e.g. -PhunttrackAbi=arm64-v8a for a phone test APK.
+        val hunttrackAbi = providers.gradleProperty("hunttrackAbi").orNull
+        if (!hunttrackAbi.isNullOrBlank()) {
+            ndk {
+                abiFilters.add(hunttrackAbi)
+            }
+        }
+    }
+
+    val hunttrackAbi = providers.gradleProperty("hunttrackAbi").orNull
+    if (!hunttrackAbi.isNullOrBlank()) {
+        // Compress dex and native libs so a one-ABI test APK stays small enough to send.
+        packaging {
+            jniLibs.useLegacyPackaging = true
+            dex.useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
