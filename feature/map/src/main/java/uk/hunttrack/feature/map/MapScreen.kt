@@ -46,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -69,6 +70,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -141,6 +143,7 @@ import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.RasterSource
 import org.maplibre.android.style.sources.TileSet
@@ -164,6 +167,7 @@ import uk.hunttrack.core.designsystem.components.slideRightOnPress
 import uk.hunttrack.core.designsystem.theme.HuntColors
 import uk.hunttrack.domain.geo.BoundaryMath
 import uk.hunttrack.domain.geo.OsGridRef
+import uk.hunttrack.domain.geo.ZoneOverlayGeometry
 import uk.hunttrack.domain.model.AppThemeMode
 import uk.hunttrack.domain.model.BoundaryPoint
 import uk.hunttrack.domain.model.FieldMarker
@@ -323,6 +327,7 @@ fun MapScreen(
     var showMarkerPath by remember { mutableStateOf(false) }
     var showScale by remember { mutableStateOf(true) }
     var showOverlaysSheet by remember { mutableStateOf(false) }
+    var showDrawTips by remember { mutableStateOf(true) }
     /** When true, map rotates with compass (track-up). */
     var trackUp by remember { mutableStateOf(false) }
     var goToInput by remember { mutableStateOf("") }
@@ -362,6 +367,10 @@ fun MapScreen(
             MapOverlaySection.OFFLINE -> onToggleOffline(false)
             MapOverlaySection.MARKER -> onSelectMarker(null)
         }
+    }
+
+    LaunchedEffect(state.boundaryMode) {
+        if (state.boundaryMode == BoundaryRecordMode.OFF) showDrawTips = true
     }
 
     val showHomingPanel = MapOverlaySection.HOMING in sectionStack
@@ -647,6 +656,8 @@ fun MapScreen(
         var strokeActive = false
         var lastX = 0f
         var lastY = 0f
+        var lastCommitX = 0f
+        var lastCommitY = 0f
         val minSamplePx = 10f
         val minVisualSamplePx = 4f
         var strokeBasePoints: List<BoundaryPoint> = emptyList()
@@ -663,6 +674,20 @@ fun MapScreen(
         fun samplePoint(map: MapLibreMap, x: Float, y: Float) {
             val latLng = latLngFrom(map, x, y)
             onAppendBoundaryPointRef.value(latLng.latitude, latLng.longitude)
+        }
+
+        // Commit from the last saved sample, not from the 4 px preview.
+        // Sharing one cursor meant a high-rate touch stream (a 120 Hz phone,
+        // zoomed out over a 20 km estate) almost never moved 10 px in a single
+        // event, so the saved ring was a handful of corners kilometres apart.
+        fun commitSample(map: MapLibreMap, x: Float, y: Float, force: Boolean) {
+            val dx = x - lastCommitX
+            val dy = y - lastCommitY
+            if (force || dx * dx + dy * dy >= minSamplePx * minSamplePx) {
+                samplePoint(map, x, y)
+                lastCommitX = x
+                lastCommitY = y
+            }
         }
 
         fun publishDrawCoords(map: MapLibreMap, x: Float, y: Float) {
@@ -716,6 +741,8 @@ fun MapScreen(
                                     strokeBasePoints.size,
                                 ),
                             )
+                            lastCommitX = event.x
+                            lastCommitY = event.y
                             samplePoint(map, event.x, event.y)
                             lastX = event.x
                             lastY = event.y
@@ -742,15 +769,16 @@ fun MapScreen(
                             lastX = event.x
                             lastY = event.y
                         }
-                        if (distSq >= minSamplePx * minSamplePx) {
-                            samplePoint(map, event.x, event.y)
-                        }
+                        commitSample(map, event.x, event.y, force = false)
                         publishDrawCoords(map, event.x, event.y)
                         true
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         if (strokeActive) {
                             strokeActive = false
+                            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                                commitSample(map, event.x, event.y, force = true)
+                            }
                             val style = map.style
                             if (style != null) {
                                 ensureSources(style, context)
@@ -1105,87 +1133,80 @@ fun MapScreen(
                     }
                 }
             }
-            if (state.boundaryMode != BoundaryRecordMode.OFF) {
-                GlassPanel(Modifier.fillMaxWidth()) {
-                    state.pendingZoneCapture?.let { pending ->
-                        Text(
-                            if (pending.zoneId == null) "Draw zone" else "Redraw zone",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = HuntColors.BronzeBright,
-                        )
-                        Text(
-                            pending.name.ifBlank { pending.kind.displayName() },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = HuntColors.Cream,
-                        )
-                        Text(
-                            pending.kind.displayName(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Mist,
-                        )
-                    } ?: state.pendingBoundaryCreation?.let { pending ->
-                        Text(
-                            pending.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = HuntColors.BronzeBright,
-                        )
-                        Text(
-                            pending.zoneType.displayName(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Mist,
-                        )
-                    } ?: Text(
-                        when (state.boundaryMode) {
-                            BoundaryRecordMode.WALKING -> "Walking boundary"
-                            BoundaryRecordMode.DRAWING -> "Draw boundary"
-                            else -> "Boundary"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = HuntColors.BronzeBright,
-                    )
-                    Text(
-                        when {
-                            state.pendingZoneCapture != null &&
-                                state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
-                                "Pinch and zoom until the boundary fits, then tap Start drawing. The zone can extend past the boundary edge."
-                            state.pendingZoneCapture != null ->
-                                "Drag your finger around the zone. It is not clipped to the boundary. Tap Pan map to move, then draw again."
-                            state.boundaryMode == BoundaryRecordMode.WALKING ->
-                                "Walk the fence line — GPS adds points automatically. Tap Save fence when done."
-                            state.boundaryMode == BoundaryRecordMode.DRAWING &&
-                                state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
-                                "Pinch and zoom until your whole shoot or area fits on screen, then tap Start drawing."
-                            state.boundaryMode == BoundaryRecordMode.DRAWING ->
-                                "Drag your finger around the boundary. Tap Pan map to move the view, then draw again."
-                            else -> ""
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = HuntColors.Cream,
-                    )
-                    Text(
-                        "${state.draftBoundaryPoints.size} points recorded",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = HuntColors.Mist,
-                    )
+            if (state.boundaryMode != BoundaryRecordMode.OFF && showDrawTips) {
+                val zonePending = state.pendingZoneCapture
+                val boundaryPending = state.pendingBoundaryCreation
+                val title = when {
+                    zonePending != null -> if (zonePending.zoneId == null) "Draw zone" else "Redraw zone"
+                    boundaryPending != null -> boundaryPending.name
+                    state.boundaryMode == BoundaryRecordMode.WALKING -> "Walking boundary"
+                    else -> "Draw boundary"
+                }
+                val detail = when {
+                    zonePending != null -> {
+                        val name = zonePending.name.ifBlank { zonePending.kind.displayName() }
+                        if (zonePending.name.isBlank()) name else "$name · ${zonePending.kind.displayName()}"
+                    }
+                    boundaryPending != null -> boundaryPending.zoneType.displayName()
+                    else -> null
+                }
+                val instruction = when {
+                    zonePending != null && state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
+                        "Pinch and zoom until the boundary fits, then tap Start drawing. The zone can extend past the boundary edge."
+                    zonePending != null ->
+                        "Drag your finger around the zone. It is not clipped to the boundary. Tap Pan map to move, then draw again."
+                    state.boundaryMode == BoundaryRecordMode.WALKING ->
+                        "Walk the fence line — GPS adds points automatically. Tap Save fence when done."
+                    state.boundaryMode == BoundaryRecordMode.DRAWING &&
+                        state.boundaryDrawPhase == BoundaryDrawPhase.PREP ->
+                        "Pinch and zoom until your whole shoot or area fits on screen, then tap Start drawing."
+                    state.boundaryMode == BoundaryRecordMode.DRAWING ->
+                        "Drag your finger around the boundary. Tap Pan map to move the view, then draw again."
+                    else -> ""
+                }
+                val stats = buildList {
+                    add("${state.draftBoundaryPoints.size} points")
                     if (state.draftBoundaryPoints.size >= 2) {
-                        val perimeter = BoundaryMath.perimeterMeters(
-                            state.draftBoundaryPoints,
-                            closeLoop = state.draftBoundaryPoints.size >= 3,
-                        )
-                        Text(
-                            "Perimeter: ${formatBoundaryPerimeter(perimeter)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Cream,
+                        add(
+                            formatBoundaryPerimeter(
+                                BoundaryMath.perimeterMeters(
+                                    state.draftBoundaryPoints,
+                                    closeLoop = state.draftBoundaryPoints.size >= 3,
+                                ),
+                            ),
                         )
                     }
                     if (state.draftBoundaryPoints.size >= 3) {
-                        val area = BoundaryMath.areaSqMeters(state.draftBoundaryPoints)
-                        Text(
-                            "Area: ${formatBoundaryArea(area)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = HuntColors.Cream,
-                        )
+                        add(formatBoundaryArea(BoundaryMath.areaSqMeters(state.draftBoundaryPoints)))
                     }
+                }.joinToString(" · ")
+                GlassPanel(Modifier.fillMaxWidth(), compact = true) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = HuntColors.BronzeBright,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = { showDrawTips = false },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Close drawing tips",
+                                tint = HuntColors.Cream,
+                            )
+                        }
+                    }
+                    if (!detail.isNullOrBlank()) {
+                        Text(detail, style = MaterialTheme.typography.bodySmall, color = HuntColors.Cream)
+                    }
+                    Text(instruction, style = MaterialTheme.typography.bodySmall, color = HuntColors.Mist)
+                    Text(stats, style = MaterialTheme.typography.labelMedium, color = HuntColors.Cream)
                 }
             }
             state.boundaries.asSequence()
@@ -1426,6 +1447,15 @@ fun MapScreen(
                         leadingIcon = { Icon(Icons.Default.Edit, null) },
                     )
                 } else {
+                    if (!showDrawTips) {
+                        MapToolAssistChip(
+                            onClick = { showDrawTips = true },
+                            label = { Text("Show tips") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.HelpOutline, contentDescription = "Show drawing tips")
+                            },
+                        )
+                    }
                     if (state.boundaryMode == BoundaryRecordMode.DRAWING &&
                         state.boundaryDrawPhase == BoundaryDrawPhase.PREP
                     ) {
@@ -2427,8 +2457,33 @@ private fun ensureSources(style: Style, context: Context) {
     if (style.getImage("zone-hatch-sold") == null) {
         style.addImage("zone-hatch-sold", zoneHatchBitmap(0xE6C47B2B.toInt(), rising = true))
     }
+    // Polygons, outlines and labels must not share a GeoJSON source. MapLibre's
+    // tiler drops the fill of a large polygon (a zone on a 30,000 ha boundary)
+    // when the same source also holds the outline LineString and the label Point.
+    // A zone on a 25 ha boundary is small enough that the mixed source still draws.
+    val zoneOptions = GeoJsonOptions().withTolerance(0f)
     if (style.getSource("zone-source") == null) {
-        style.addSource(GeoJsonSource("zone-source", FeatureCollection.fromFeatures(emptyArray())))
+        style.addSource(
+            GeoJsonSource(
+                "zone-source",
+                FeatureCollection.fromFeatures(emptyArray()),
+                zoneOptions,
+            ),
+        )
+    }
+    if (style.getSource("zone-line-source") == null) {
+        style.addSource(
+            GeoJsonSource(
+                "zone-line-source",
+                FeatureCollection.fromFeatures(emptyArray()),
+                GeoJsonOptions().withTolerance(0f),
+            ),
+        )
+    }
+    if (style.getSource("zone-label-source") == null) {
+        style.addSource(
+            GeoJsonSource("zone-label-source", FeatureCollection.fromFeatures(emptyArray())),
+        )
     }
     if (style.getLayer("zone-fill") == null && style.getSource("zone-source") != null) {
         val fill = FillLayer("zone-fill", "zone-source").withProperties(
@@ -2437,7 +2492,6 @@ private fun ensureSources(style: Style, context: Context) {
                 Expression.coalesce(Expression.get("fillOpacity"), Expression.literal(0.3)),
             ),
         )
-        fill.setFilter(Expression.has("fill"))
         addLayerBelowBoundaryLine(style, fill)
     }
     if (style.getLayer("zone-hatch") == null && style.getSource("zone-source") != null) {
@@ -2448,8 +2502,8 @@ private fun ensureSources(style: Style, context: Context) {
         hatch.setFilter(Expression.has("pattern"))
         addLayerBelowBoundaryLine(style, hatch)
     }
-    if (style.getLayer("zone-line") == null && style.getSource("zone-source") != null) {
-        val line = LineLayer("zone-line", "zone-source").withProperties(
+    if (style.getLayer("zone-line") == null && style.getSource("zone-line-source") != null) {
+        val line = LineLayer("zone-line", "zone-line-source").withProperties(
             PropertyFactory.lineColor(Expression.get("line")),
             PropertyFactory.lineWidth(2.6f),
             PropertyFactory.lineOpacity(0.95f),
@@ -2457,8 +2511,8 @@ private fun ensureSources(style: Style, context: Context) {
         line.setFilter(Expression.eq(Expression.get("kind"), Expression.literal("DANGER")))
         addLayerBelowBoundaryLine(style, line)
     }
-    if (style.getLayer("zone-line-sold") == null && style.getSource("zone-source") != null) {
-        val line = LineLayer("zone-line-sold", "zone-source").withProperties(
+    if (style.getLayer("zone-line-sold") == null && style.getSource("zone-line-source") != null) {
+        val line = LineLayer("zone-line-sold", "zone-line-source").withProperties(
             PropertyFactory.lineColor(Expression.get("line")),
             PropertyFactory.lineWidth(2.6f),
             PropertyFactory.lineOpacity(0.95f),
@@ -2467,8 +2521,8 @@ private fun ensureSources(style: Style, context: Context) {
         line.setFilter(Expression.eq(Expression.get("kind"), Expression.literal("SOLD")))
         addLayerBelowBoundaryLine(style, line)
     }
-    if (style.getLayer("zone-label") == null && style.getSource("zone-source") != null) {
-        val label = SymbolLayer("zone-label", "zone-source").withProperties(
+    if (style.getLayer("zone-label") == null && style.getSource("zone-label-source") != null) {
+        val label = SymbolLayer("zone-label", "zone-label-source").withProperties(
             PropertyFactory.textField(Expression.get("label")),
             PropertyFactory.textSize(13f),
             PropertyFactory.textColor("#F5EED8"),
@@ -3151,14 +3205,23 @@ private fun updateZonesOverlay(
     boundaries: List<uk.hunttrack.domain.model.BoundaryArea>,
     visibility: uk.hunttrack.domain.geo.BoundaryVisibility,
 ) {
-    val source = style.getSource("zone-source") as? GeoJsonSource ?: return
-    val features = boundaries.flatMap { area ->
-        if (!visibility.isVisible(area.id)) return@flatMap emptyList()
-        area.zones.flatMap { zone ->
+    val polygonSource = style.getSource("zone-source") as? GeoJsonSource ?: return
+    val lineSource = style.getSource("zone-line-source") as? GeoJsonSource
+    val labelSource = style.getSource("zone-label-source") as? GeoJsonSource
+    val polygons = mutableListOf<Feature>()
+    val lines = mutableListOf<Feature>()
+    val labels = mutableListOf<Feature>()
+    boundaries.forEach { area ->
+        if (!visibility.isVisible(area.id)) return@forEach
+        area.zones.forEach { zone ->
             val sorted = zone.points.sortedBy { it.orderIndex }
-            if (sorted.size < 3) return@flatMap emptyList()
-            val ring = sorted.map { Point.fromLngLat(it.longitude, it.latitude) }.let { it + it.first() }
-            val polygon = Feature.fromGeometry(Polygon.fromLngLats(listOf(ring))).also { feature ->
+            if (sorted.size < 3) return@forEach
+            // Extra vertices are for the renderer only. Stored points stay as drawn,
+            // including any that sit outside the boundary. Short edges also keep the
+            // fill inside MapLibre's 16-bit tile coordinates when the camera is close.
+            val drawPoints = ZoneOverlayGeometry.densify(sorted)
+            val ring = drawPoints.map { Point.fromLngLat(it.longitude, it.latitude) }.let { it + it.first() }
+            polygons += Feature.fromGeometry(Polygon.fromLngLats(listOf(ring))).also { feature ->
                 feature.addStringProperty("fill", zone.kind.mapColorHex())
                 feature.addNumberProperty("fillOpacity", zone.kind.mapFillOpacity().toDouble())
                 feature.addStringProperty("pattern", zone.kind.hatchPattern())
@@ -3166,21 +3229,22 @@ private fun updateZonesOverlay(
                 feature.addStringProperty("kind", zone.kind.name)
                 feature.addStringProperty("name", zone.label())
             }
-            val outline = Feature.fromGeometry(LineString.fromLngLats(ring)).also { feature ->
+            lines += Feature.fromGeometry(LineString.fromLngLats(ring)).also { feature ->
                 feature.addStringProperty("line", zone.kind.mapColorHex())
                 feature.addStringProperty("kind", zone.kind.name)
                 feature.addNumberProperty("zoneId", zone.id)
             }
             val centroid = BoundaryMath.centroid(zone.points)
-            val label = centroid?.let { (lat, lng) ->
-                Feature.fromGeometry(Point.fromLngLat(lng, lat)).also { feature ->
+            centroid?.let { (lat, lng) ->
+                labels += Feature.fromGeometry(Point.fromLngLat(lng, lat)).also { feature ->
                     feature.addStringProperty("label", zone.label())
                 }
             }
-            listOfNotNull(polygon, outline, label)
         }
     }
-    source.setGeoJson(FeatureCollection.fromFeatures(features.toTypedArray()))
+    polygonSource.setGeoJson(FeatureCollection.fromFeatures(polygons.toTypedArray()))
+    lineSource?.setGeoJson(FeatureCollection.fromFeatures(lines.toTypedArray()))
+    labelSource?.setGeoJson(FeatureCollection.fromFeatures(labels.toTypedArray()))
 }
 
 /** LineString for the visible outline; optional Polygon for fill (LineLayer ignores polygons). */
@@ -3195,7 +3259,10 @@ private fun boundaryMapFeatures(
 ): Array<Feature> {
     val sorted = points.sortedBy { it.orderIndex }
     if (sorted.size < 2) return emptyArray()
-    val coords = sorted.map { Point.fromLngLat(it.longitude, it.latitude) }
+    // Draft fills (a zone still being drawn) hit the same 16-bit tile limit
+    // as a saved zone. Saved boundary lines are left as recorded.
+    val drawPoints = if (sorted.size >= 3 && includeFill) ZoneOverlayGeometry.densify(sorted) else sorted
+    val coords = drawPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
     val features = mutableListOf<Feature>()
     val outline = if (sorted.size >= 3) {
         coords + coords.first()
