@@ -24,21 +24,28 @@ android {
         targetSdk = 36
         versionCode = 31
         versionName = "1.1.29"
-        // Optional one-ABI debug build, e.g. -PhunttrackAbi=arm64-v8a for a phone test APK.
-        val hunttrackAbi = providers.gradleProperty("hunttrackAbi").orNull
-        if (!hunttrackAbi.isNullOrBlank()) {
+        // Device test builds: -PhunttrackAbis=arm64-v8a -PhunttrackCompressNative=true
+        // Default builds keep every ABI Gradle resolves, so this does not change Play.
+        val hunttrackAbis = (project.findProperty("hunttrackAbis") as String?)
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+        if (hunttrackAbis.isNotEmpty()) {
             ndk {
-                abiFilters.add(hunttrackAbi)
+                abiFilters += hunttrackAbis
             }
         }
     }
 
-    val hunttrackAbi = providers.gradleProperty("hunttrackAbi").orNull
-    if (!hunttrackAbi.isNullOrBlank()) {
-        // Compress dex and native libs so a one-ABI test APK stays small enough to send.
+    if (project.findProperty("hunttrackCompressNative") == "true") {
         packaging {
-            jniLibs.useLegacyPackaging = true
-            dex.useLegacyPackaging = true
+            jniLibs {
+                useLegacyPackaging = true
+            }
+            dex {
+                useLegacyPackaging = true
+            }
         }
     }
 
