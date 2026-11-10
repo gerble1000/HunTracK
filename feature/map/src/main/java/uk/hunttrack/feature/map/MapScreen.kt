@@ -1401,6 +1401,11 @@ fun MapScreen(
                     label = { Text("Offline") },
                     leadingIcon = { Icon(Icons.Default.CloudDownload, null) },
                 )
+                MapToolFilterChip(
+                    selected = showSmoke,
+                    onClick = { showSmoke = !showSmoke },
+                    label = { Text(if (showSmoke) "Smoke on" else "Smoke off") },
+                )
                 MapToolAssistChip(
                     onClick = { showOverlaysSheet = true },
                     label = { Text("Overlays") },
@@ -2873,9 +2878,11 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
  * Scent plume tint — soft magenta steam, readable on satellite and outdoor tiles.
  */
 private fun smokeColorForLayer(layer: MapLayerStyle): String = when (layer) {
-    MapLayerStyle.SATELLITE -> "#E8B4D4"
-    MapLayerStyle.OUTDOOR -> "#E0A8CC"
-    MapLayerStyle.STREET -> "#D99AC0"
+    // Same pink the iOS map smoke uses, so the plume reads on every basemap.
+    MapLayerStyle.SATELLITE,
+    MapLayerStyle.OUTDOOR,
+    MapLayerStyle.STREET,
+    -> "#F5529E"
 }
 
 /** Frame pacing — weather-only (zoom must not change smoke character). */
@@ -3030,7 +3037,8 @@ private fun updateWindSmoke(
 ) {
     val source = style.getSource("wind-smoke-source") as? GeoJsonSource
     val layer = style.getLayer("wind-smoke-layer")
-    if (!showSmoke || gps == null) {
+    // No invented west wind: iOS only draws smoke once a real forecast is in hand.
+    if (!showSmoke || gps == null || windFromDeg == null) {
         source?.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
         layer?.setProperties(PropertyFactory.visibility(Property.NONE))
         clearWindSmokeSpine(style)
@@ -3038,7 +3046,7 @@ private fun updateWindSmoke(
     }
     val originLat = gps.latitude
     val originLng = gps.longitude
-    val windFrom = windFromDeg ?: 270.0
+    val windFrom = windFromDeg
     val downwind = (windFrom + 180.0) % 360.0
     val crosswind = downwind + 90.0
     val plume = ScentPlumeGeometry.forConditions(

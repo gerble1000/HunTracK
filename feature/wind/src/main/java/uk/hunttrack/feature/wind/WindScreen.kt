@@ -46,6 +46,7 @@ import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
 import uk.hunttrack.core.designsystem.theme.HuntColors
 import uk.hunttrack.domain.model.WindUnit
+import uk.hunttrack.domain.scent.ScentPlumeGeometry
 
 @Composable
 fun WindRoute(
@@ -124,6 +125,13 @@ fun WindScreen(
                             WindCharacter.VARIABLE_WIDE -> "Gusty · scattered pockets"
                             WindCharacter.STEADY -> "Steady · long linear plume"
                         }
+                        val plume = ScentPlumeGeometry.forConditions(
+                            w.windSpeedKmh,
+                            w.windGustKmh,
+                            w.humidityPercent,
+                            w.temperatureC,
+                        )
+                        val downwindDeg = ((w.windDirectionDeg + 180) % 360).toInt()
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -195,9 +203,14 @@ fun WindScreen(
                                 color = HuntColors.Cream,
                             )
                             Text(
-                                "${((w.windDirectionDeg + 180) % 360).toInt()}° downwind",
+                                "$downwindDeg° downwind",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = HuntColors.Mist,
+                            )
+                            Text(
+                                "Plume length ~${plume.lengthM.toInt()} m",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = HuntColors.Cream,
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -213,12 +226,39 @@ fun WindScreen(
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
+                            Text(
+                                "Your scent travels downwind towards $downwindDeg°. " +
+                                    "Approach quarry from downwind (into the face of the wind) and keep a " +
+                                    "minimum standoff of ${plume.approachStandoffM.toInt()} m. " +
+                                    "The same plume is drawn as smoke on the map.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = HuntColors.Mist,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
                         }
+                    }
+                }
+            }
+            if (state.markers.isEmpty()) {
+                item {
+                    GlassPanel(Modifier.fillMaxWidth()) {
+                        Text(
+                            "No markers placed yet. Drop markers on the map to evaluate live scent risk.",
+                            color = HuntColors.Mist,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
             }
             items(state.markers, key = { it.id }) { marker ->
                 val selected = state.selectedMarkerId == marker.id
+                val eval = evaluateMarkerScent(
+                    state.weather,
+                    state.hunterGps,
+                    marker.latitude,
+                    marker.longitude,
+                )
                 ClickableGlassCard(
                     onClick = { onSelectMarker(if (selected) null else marker.id) },
                     selected = selected,
@@ -230,35 +270,49 @@ fun WindScreen(
                 ) {
                     Text(marker.name, style = MaterialTheme.typography.titleLarge, color = HuntColors.Cream)
                     Text(marker.category.label, color = HuntColors.Mist, style = MaterialTheme.typography.bodyMedium)
+                    when (eval.risk) {
+                        ScentRisk.RISK -> Text(
+                            "RISK",
+                            color = HuntColors.Danger,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        ScentRisk.CLEAR -> Text(
+                            "CLEAR",
+                            color = HuntColors.Success,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        ScentRisk.UNKNOWN -> Text(
+                            "Waiting for wind or GPS",
+                            color = HuntColors.Mist,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    eval.distanceM?.let { distance ->
+                        Text(
+                            "${distance.toInt()} m away · ${eval.bearingDeg?.toInt()}° ${bearingToCardinal(eval.bearingDeg ?: 0.0)}",
+                            color = HuntColors.Mist,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     if (selected) {
-                        when (state.scentRisk) {
+                        when (eval.risk) {
                             ScentRisk.RISK -> Text(
-                                "WARNING — scent drifting toward this spot",
+                                "WARNING: Your scent cone is drifting straight towards this target location. Consider circling around for an upwind approach.",
                                 color = HuntColors.Danger,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             ScentRisk.CLEAR -> Text(
-                                "Clear — scent drifts away",
+                                "Clear: The estimated scent plume is away from this target. Wind can change; verify conditions in the field.",
                                 color = HuntColors.Success,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             ScentRisk.UNKNOWN -> Text(
-                                when {
-                                    state.hunterGps == null -> "Waiting for GPS…"
-                                    else -> "Need wind data"
-                                },
+                                "Scent risk is unavailable until GPS and recent local wind data are available.",
                                 color = HuntColors.Mist,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
-                        state.distanceToTargetM?.let {
-                            Text(
-                                "${it.toInt()} m · ${state.bearingToTargetDeg?.toInt()}° ${bearingToCardinal(state.bearingToTargetDeg ?: 0.0)}",
-                                color = HuntColors.Mist,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        if (state.weather != null) {
+                        if (state.weather != null && eval.risk != ScentRisk.UNKNOWN) {
                             HuntButton(
                                 onClick = onOpenMap,
                                 text = "Show approach on map",

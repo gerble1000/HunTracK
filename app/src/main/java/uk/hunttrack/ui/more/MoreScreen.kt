@@ -21,6 +21,7 @@ import uk.hunttrack.core.designsystem.theme.HuntColors
 @Composable
 fun MoreScreen(
     onOpenCompass: () -> Unit,
+    onOpenWind: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenSpecies: () -> Unit,
@@ -48,6 +49,12 @@ fun MoreScreen(
             item {
                 SectionLabel("Navigation")
                 MoreItem("Compass", "Magnetic, true & GPS heading", hint = "Open compass ›", onClick = onOpenCompass)
+                MoreItem(
+                    "Wind & Scent",
+                    "Downwind scent plume planning",
+                    hint = "Open wind & scent ›",
+                    onClick = onOpenWind,
+                )
             }
             item {
                 SectionLabel("Field knowledge")
