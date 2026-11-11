@@ -26,6 +26,9 @@ public final class PackPurchaseStore: ObservableObject {
         "hunttrack_pack_lt",
         "hunttrack_pack_pl",
         "hunttrack_pack_ro",
+        "hunttrack_pack_es",
+        "hunttrack_pack_pt",
+        "hunttrack_pack_it",
     ]
 
     public func isUnlocked(_ pack: SeasonPack) -> Bool {
@@ -160,7 +163,7 @@ public struct PacksScreen: View {
                     Text("Packs")
                         .font(.field(size: 32, weight: .bold))
                         .foregroundColor(theme.palette.cream)
-                    Text("Country hunting packs: seasons, species and rules. The UK pack is included. Ireland, France, Germany, Estonia, Latvia, Lithuania, Poland and Romania are £1.00 purchases. Restore brings those purchases back on this Apple ID.")
+                    Text("Country hunting packs: seasons, species and rules. The UK pack is included. Ireland, France, Germany, Estonia, Latvia, Lithuania, Poland, Romania, Spain, Portugal and Italy are £1.00 purchases. Restore brings those purchases back on this Apple ID.")
                         .font(.field(size: 14))
                         .foregroundColor(theme.palette.mist)
                     countryList
