@@ -37,6 +37,9 @@ import uk.hunttrack.domain.packs.SeasonPack
  * - hunttrack_pack_lt  Lithuania
  * - hunttrack_pack_pl  Poland
  * - hunttrack_pack_ro  Romania
+ * - hunttrack_pack_es  Spain
+ * - hunttrack_pack_pt  Portugal
+ * - hunttrack_pack_it  Italy
  *
  * Do not change the product ids after release. The price shown in the store replaces the
  * intended £1.00 label. Nothing here publishes a listing or creates a product.

@@ -80,13 +80,30 @@ class RegionPackCatalogTest {
         assertEquals(RuleAnswer.CONDITIONAL, germany.rules.single { it.id == RegionPackCatalog.RULE_NIGHT }.answer)
         assertEquals(RuleAnswer.UNVERIFIED, germany.rules.single { it.id == RegionPackCatalog.RULE_ORANGE }.answer)
         assertTrue(RegionPackCatalog.pack("pl-seasons")!!.rules.all { it.answer == RuleAnswer.UNVERIFIED })
+        val spain = RegionPackCatalog.pack("es-seasons")!!
+        assertEquals(RuleAnswer.PROHIBITED, spain.rules.single { it.id == RegionPackCatalog.RULE_SUPPRESSOR }.answer)
+        assertEquals(RuleAnswer.UNVERIFIED, spain.rules.single { it.id == RegionPackCatalog.RULE_NIGHT }.answer)
+        assertTrue(spain.species.none { it.legalStatus == SpeciesLegalStatus.OPEN_SEASON })
+        val portugal = RegionPackCatalog.pack("pt-seasons")!!
+        val rabbit = portugal.species.single { it.speciesKey == "rabbit" }
+        assertEquals("01-09", rabbit.openFromMonthDay)
+        assertEquals("31-12", rabbit.openToMonthDay)
+        assertEquals(RuleAnswer.CONDITIONAL, portugal.rules.single { it.id == RegionPackCatalog.RULE_SUPPRESSOR }.answer)
+        assertTrue(portugal.species.single { it.speciesKey == "red_deer" }.openFromMonthDay == null)
+        val italy = RegionPackCatalog.pack("it-seasons")!!
+        assertEquals(RuleAnswer.PROHIBITED, italy.rules.single { it.id == RegionPackCatalog.RULE_SUPPRESSOR }.answer)
+        assertTrue(italy.rules.single { it.id == RegionPackCatalog.RULE_NIGHT }.notes.contains("13(2-ter)"))
+        assertTrue(italy.species.none { it.openFromMonthDay != null })
     }
 
     @Test
     fun productsAreOnePerCountryAndOnlyUkIsBundled() {
         val ids = RegionPackCatalog.seasonPacks.map { it.productId }
         assertEquals(ids.size, ids.toSet().size)
-        assertEquals(listOf("gb", "ie", "fr", "de", "ee", "lv", "lt", "pl", "ro").map { "hunttrack_pack_$it" }, ids)
+        assertEquals(
+            listOf("gb", "ie", "fr", "de", "ee", "lv", "lt", "pl", "ro", "es", "pt", "it").map { "hunttrack_pack_$it" },
+            ids,
+        )
         assertEquals(setOf("GB"), RegionPackCatalog.seasonPacks.filter { it.bundledWithApp }.map { it.countryCode }.toSet())
         assertTrue(RegionPackCatalog.seasonPacks.all { it.intendedPriceLabel == "£1.00" })
     }

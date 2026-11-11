@@ -4,7 +4,8 @@ import SwiftUI
 /// StoreKit products are not created in App Store Connect by this build.
 /// Add one non-consumable per country at £1.00, using the same ids as Android:
 /// hunttrack_pack_gb, hunttrack_pack_ie, hunttrack_pack_fr, hunttrack_pack_de,
-/// hunttrack_pack_ee, hunttrack_pack_lv, hunttrack_pack_lt, hunttrack_pack_pl, hunttrack_pack_ro.
+/// hunttrack_pack_ee, hunttrack_pack_lv, hunttrack_pack_lt, hunttrack_pack_pl, hunttrack_pack_ro,
+/// hunttrack_pack_es, hunttrack_pack_pt, hunttrack_pack_it.
 /// The UK pack is included with the app until that product exists.
 @MainActor
 public final class PackPurchaseStore: ObservableObject {
