@@ -71,6 +71,9 @@ public class DatabaseService: ObservableObject {
     /// Published so the Map tab reacts when the wallet hands a capture over.
     @Published public var pendingBoundary: PendingBoundaryCreation?
 
+    /// Zone draw started from a boundary's options. Not persisted.
+    @Published public var pendingZone: PendingZoneCapture?
+
     /// Boundaries the wallet asked the map to frame. Not persisted — the link itself is.
     @Published public var permissionMapFocus: [PermissionMapFocusItem] = []
 
@@ -537,6 +540,34 @@ public class DatabaseService: ObservableObject {
         boundaries.removeAll { $0.id == id }
         unlinkPermissions(fromBoundary: id)
         permissionMapFocus.removeAll { $0.boundaryAreaId == id }
+        if pendingZone?.boundaryId == id { pendingZone = nil }
+    }
+
+    /// Inserts or replaces a zone. The parent boundary's points and area are left unchanged.
+    @discardableResult
+    public func saveZone(_ zone: BoundaryZone, toBoundary boundaryId: Int64) -> Int64 {
+        guard let index = boundaries.firstIndex(where: { $0.id == boundaryId }) else { return 0 }
+        var value = zone
+        value.boundaryId = boundaryId
+        if value.id == 0 {
+            let existing = boundaries.flatMap { $0.zones.map { $0.id } }
+            value.id = nextId(existing)
+        }
+        var area = boundaries[index]
+        if let zoneIndex = area.zones.firstIndex(where: { $0.id == value.id }) {
+            area.zones[zoneIndex] = value
+        } else {
+            area.zones.append(value)
+        }
+        boundaries[index] = area
+        return value.id
+    }
+
+    public func deleteZone(id: Int64, boundaryId: Int64) {
+        guard let index = boundaries.firstIndex(where: { $0.id == boundaryId }) else { return }
+        var area = boundaries[index]
+        area.zones.removeAll { $0.id == id }
+        boundaries[index] = area
     }
 
     /// Shoelace area over an equirectangular projection — matches Android's BoundaryMath.

@@ -55,6 +55,35 @@ object BoundaryMath {
         return 2 * r * atan2(sqrt(a), sqrt(1 - a))
     }
 
+    /**
+     * Ray-cast hit test. Zones are not clipped to their parent boundary, so a point
+     * outside the boundary can still fall inside a zone.
+     */
+    fun contains(points: List<BoundaryPoint>, latitude: Double, longitude: Double): Boolean {
+        val ordered = points.sortedBy { it.orderIndex }
+        if (ordered.size < 3) return false
+        var inside = false
+        var previous = ordered.lastIndex
+        for (index in ordered.indices) {
+            val currentLat = ordered[index].latitude
+            val currentLng = ordered[index].longitude
+            val previousLat = ordered[previous].latitude
+            val previousLng = ordered[previous].longitude
+            val crosses = (currentLat > latitude) != (previousLat > latitude)
+            if (crosses) {
+                val span = previousLat - currentLat
+                val edgeLng = if (span == 0.0) {
+                    currentLng
+                } else {
+                    (previousLng - currentLng) * (latitude - currentLat) / span + currentLng
+                }
+                if (longitude < edgeLng) inside = !inside
+            }
+            previous = index
+        }
+        return inside
+    }
+
     /** Simple centroid for map labels and camera framing. */
     fun centroid(points: List<BoundaryPoint>): Pair<Double, Double>? {
         if (points.isEmpty()) return null

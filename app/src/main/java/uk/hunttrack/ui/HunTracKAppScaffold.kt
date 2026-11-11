@@ -376,6 +376,7 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
             composable(Dest.More.route) {
                 MoreScreen(
                     onOpenCompass = { navController.navigate(Dest.Compass.route) },
+                    onOpenWind = { navController.navigate(Dest.Wind.route) },
                     onOpenSettings = { navController.navigate(Dest.Settings.route) },
                     onOpenAbout = { navController.navigate(Dest.About.route) },
                     onOpenSpecies = { navController.navigate(Dest.Species.route) },

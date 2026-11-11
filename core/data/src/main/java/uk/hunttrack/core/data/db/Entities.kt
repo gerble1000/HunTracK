@@ -1,6 +1,7 @@
 package uk.hunttrack.core.data.db
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -128,6 +129,46 @@ data class BoundaryAreaEntity(
 data class BoundaryPointEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val areaId: Long,
+    val latitude: Double,
+    val longitude: Double,
+    val orderIndex: Int,
+)
+
+@Entity(
+    tableName = "boundary_zones",
+    foreignKeys = [
+        ForeignKey(
+            entity = BoundaryAreaEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["boundaryId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["boundaryId"])],
+)
+data class BoundaryZoneEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val boundaryId: Long,
+    val name: String,
+    val kind: String,
+    val notes: String,
+)
+
+@Entity(
+    tableName = "boundary_zone_points",
+    foreignKeys = [
+        ForeignKey(
+            entity = BoundaryZoneEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["zoneId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["zoneId"])],
+)
+data class BoundaryZonePointEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val zoneId: Long,
     val latitude: Double,
     val longitude: Double,
     val orderIndex: Int,

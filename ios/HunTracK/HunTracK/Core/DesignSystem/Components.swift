@@ -73,6 +73,7 @@ public enum MarkerArtwork {
             case .duck, .goose: return UIColor(red: 0.16, green: 0.32, blue: 0.28, alpha: 1)
             case .crow, .badger: return UIColor(red: 0.12, green: 0.10, blue: 0.08, alpha: 1)
             case .danger: return UIColor(red: 0.85, green: 0.25, blue: 0.18, alpha: 1)
+            case .hide: return UIColor(red: 0.23, green: 0.29, blue: 0.19, alpha: 1)
             default: return UIColor(red: 0.16, green: 0.10, blue: 0.05, alpha: 1)
             }
         }
@@ -182,7 +183,9 @@ public enum MarkerArtwork {
         case .crow: drawBird(in: rect, color: color, longBill: false)
         case .rat, .pest, .other: drawOther(in: rect, color: color)
         case .highSeat, .treeStand: drawHighSeat(in: rect, color: color)
-        case .hide, .shelter, .campsite: drawTent(in: rect, color: color)
+        case .hide: drawHide(in: rect, color: color)
+        case .shelter: drawShelter(in: rect, color: color)
+        case .campsite: drawCampsiteTent(in: rect, color: color)
         case .skull: drawSkull(in: rect, color: color)
         case .feed, .salt: drawLeaf(in: rect, color: glyph == .salt ? UIColor(red: 0.75, green: 0.62, blue: 0.2, alpha: 1) : color)
         case .camera: drawCamera(in: rect, color: color)
@@ -303,12 +306,53 @@ public enum MarkerArtwork {
         fill(seat, color)
     }
 
-    private static func drawTent(in r: CGRect, color: UIColor) {
-        let tent = UIBezierPath()
-        tent.move(to: p(0.50, 0.08, r)); tent.addLine(to: p(0.08, 0.88, r)); tent.addLine(to: p(0.92, 0.88, r)); tent.close()
-        fill(tent, color)
+    /// Dome shooting hide, matching Android `marker_ic_hide` so it is not a tent.
+    private static func drawHide(in r: CGRect, color: UIColor) {
+        let dome = UIBezierPath()
+        dome.move(to: p(0.08, 0.78, r))
+        dome.addCurve(to: p(0.92, 0.78, r), controlPoint1: p(0.18, 0.18, r), controlPoint2: p(0.82, 0.18, r))
+        dome.close()
+        fill(dome, color)
+        let skirt = UIBezierPath(rect: CGRect(
+            x: p(0.18, 0.76, r).x,
+            y: p(0.18, 0.76, r).y,
+            width: r.width * 0.64,
+            height: max(2, r.height * 0.12)
+        ))
+        fill(skirt, color)
+    }
+
+    /// Hut with a roof and walls, matching Android `marker_ic_shelter`.
+    private static func drawShelter(in r: CGRect, color: UIColor) {
+        let roof = UIBezierPath()
+        roof.move(to: p(0.50, 0.06, r))
+        roof.addLine(to: p(0.96, 0.46, r))
+        roof.addLine(to: p(0.04, 0.46, r))
+        roof.close()
+        fill(roof, color)
+        let walls = UIBezierPath(rect: CGRect(
+            x: p(0.22, 0.46, r).x,
+            y: p(0.22, 0.46, r).y,
+            width: r.width * 0.56,
+            height: r.height * 0.42
+        ))
+        fill(walls, color)
+    }
+
+    /// A-frame camping tent with a door flap, matching Android `marker_ic_campsite` (⛺).
+    /// SF Symbol `tent` / `tent.fill` needs iOS 17; this app deploys to iOS 16, so the glyph is drawn.
+    private static func drawCampsiteTent(in r: CGRect, color: UIColor) {
+        let canvas = UIBezierPath()
+        canvas.move(to: p(0.50, 0.06, r))
+        canvas.addLine(to: p(0.08, 0.90, r))
+        canvas.addLine(to: p(0.92, 0.90, r))
+        canvas.close()
+        fill(canvas, color)
         let door = UIBezierPath()
-        door.move(to: p(0.50, 0.42, r)); door.addLine(to: p(0.38, 0.88, r)); door.addLine(to: p(0.62, 0.88, r)); door.close()
+        door.move(to: p(0.50, 0.42, r))
+        door.addLine(to: p(0.36, 0.90, r))
+        door.addLine(to: p(0.64, 0.90, r))
+        door.close()
         fill(door, UIColor(red: 0.89, green: 0.69, blue: 0.36, alpha: 1))
     }
 
@@ -656,11 +700,11 @@ public struct ScreenBackground<Content: View>: View {
 /// displayed build tracks Info.plist instead of drifting from it.
 public enum AppVersion {
     public static var short: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.30"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.31"
     }
 
     public static var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "43"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "44"
     }
 
     public static var display: String {

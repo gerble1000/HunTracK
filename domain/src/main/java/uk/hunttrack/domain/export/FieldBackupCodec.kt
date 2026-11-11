@@ -4,6 +4,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryPoint
+import uk.hunttrack.domain.model.BoundaryZone
+import uk.hunttrack.domain.model.BoundaryZoneKind
 import uk.hunttrack.domain.model.BoundaryZoneType
 import uk.hunttrack.domain.model.EmergencyContact
 import uk.hunttrack.domain.model.EmergencyProfile
@@ -79,6 +81,17 @@ object FieldBackupCodec {
                     points = area.points.sortedBy { it.orderIndex }.map {
                         BackupPoint(it.latitude, it.longitude, it.orderIndex)
                     },
+                    zones = area.zones.map { zone ->
+                        BackupZone(
+                            id = zone.id,
+                            name = zone.name,
+                            kind = zone.kind.name,
+                            notes = zone.notes,
+                            points = zone.points.sortedBy { it.orderIndex }.map {
+                                BackupPoint(it.latitude, it.longitude, it.orderIndex)
+                            },
+                        )
+                    },
                 )
             },
             markers = markers.map { marker ->
@@ -128,7 +141,7 @@ object FieldBackupCodec {
         if (backup.format != FieldBackupFormat.FORMAT) {
             throw FieldBackupException("Unrecognised backup format.")
         }
-        if (backup.version != FieldBackupFormat.VERSION) {
+        if (backup.version < FieldBackupFormat.MIN_VERSION || backup.version > FieldBackupFormat.VERSION) {
             throw FieldBackupException("This backup version is not supported.")
         }
         return backup
@@ -208,6 +221,19 @@ object FieldBackupCodec {
             BoundaryPoint(it.latitude, it.longitude, it.orderIndex)
         },
         areaSqMeters = areaSqMeters,
+        zones = zones.map { zone ->
+            BoundaryZone(
+                id = zone.id,
+                boundaryId = id,
+                name = zone.name,
+                kind = runCatching { BoundaryZoneKind.valueOf(zone.kind) }
+                    .getOrDefault(BoundaryZoneKind.DANGER),
+                notes = zone.notes,
+                points = zone.points.sortedBy { it.orderIndex }.map {
+                    BoundaryPoint(it.latitude, it.longitude, it.orderIndex)
+                },
+            )
+        },
     )
 
     private fun BackupMarker.toDomain() = FieldMarker(

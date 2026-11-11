@@ -16,13 +16,15 @@ import androidx.room.RoomDatabase
         HuntingPermissionEntity::class,
         BoundaryAreaEntity::class,
         BoundaryPointEntity::class,
+        BoundaryZoneEntity::class,
+        BoundaryZonePointEntity::class,
         EmergencyProfileEntity::class,
         CalendarDayEntryEntity::class,
         TideStationCacheEntity::class,
         TideEventsCacheEntity::class,
         CullRecordEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class HunTracKDatabase : RoomDatabase() {

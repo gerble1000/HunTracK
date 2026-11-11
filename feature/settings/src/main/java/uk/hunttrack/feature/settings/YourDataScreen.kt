@@ -43,6 +43,39 @@ import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
 import uk.hunttrack.core.designsystem.theme.HuntColors
 import uk.hunttrack.domain.export.FieldBackupFormat
+import uk.hunttrack.domain.export.TextFormats
+
+enum class ShareKind(
+    val mimeType: String,
+    val subject: String,
+    val chooserTitle: String,
+    val readyPrefix: String,
+) {
+    BACKUP(
+        "application/zip",
+        "HunTracK field backup",
+        "Save HunTracK backup",
+        "Backup ready:",
+    ),
+    CSV(
+        "application/zip",
+        "HunTracK spreadsheet",
+        "Save HunTracK spreadsheet",
+        "Spreadsheet ready:",
+    ),
+    PDF(
+        "application/pdf",
+        "HunTracK print summary",
+        "Save HunTracK print summary",
+        "Print summary ready:",
+    ),
+    XML(
+        "application/xml",
+        "HunTracK XML",
+        "Save HunTracK XML",
+        "XML ready:",
+    ),
+}
 
 @HiltViewModel
 class YourDataViewModel @Inject constructor(
@@ -55,31 +88,42 @@ class YourDataViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    fun share(includeMedical: Boolean) {
+    fun share(includeMedical: Boolean, kind: ShareKind) {
         viewModelScope.launch {
             val backup = runCatching { repository.export(includeMedical) }.getOrElse {
-                _message.value = "Could not build the backup."
+                _message.value = "Could not build the export."
                 return@launch
             }
             val dir = File(context.cacheDir, "field-backup").apply { mkdirs() }
-            val zip = File(dir, FieldBackupFormat.ZIP_NAME)
-            zip.writeBytes(repository.zip(backup))
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", zip)
+            val file = when (kind) {
+                ShareKind.BACKUP -> File(dir, FieldBackupFormat.ZIP_NAME).also {
+                    it.writeBytes(repository.zip(backup))
+                }
+                ShareKind.CSV -> File(dir, TextFormats.CSV_ZIP_NAME).also {
+                    it.writeBytes(TextFormats.csvZipBytes(backup))
+                }
+                ShareKind.PDF -> File(dir, TextFormats.PDF_NAME).also {
+                    it.writeBytes(TextFormats.pdf(backup))
+                }
+                ShareKind.XML -> File(dir, TextFormats.XML_NAME).also {
+                    it.writeText(TextFormats.xml(backup))
+                }
+            }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             val share = Intent(Intent.ACTION_SEND).apply {
-                type = "application/zip"
+                type = kind.mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "HunTracK field backup")
+                putExtra(Intent.EXTRA_SUBJECT, kind.subject)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(share, "Save HunTracK backup")
+            val chooser = Intent.createChooser(share, kind.chooserTitle)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val counts = "${backup.permissions.size} permissions, " +
+                "${backup.boundaries.size} boundaries, ${backup.markers.size} markers, " +
+                "${backup.routes.size} tracks. " +
+                if (backup.includesMedicalProfile) "Medical profile included." else "Medical profile left out."
             runCatching { context.startActivity(chooser) }
-                .onSuccess {
-                    _message.value = "Backup ready: ${backup.permissions.size} permissions, " +
-                        "${backup.boundaries.size} boundaries, ${backup.markers.size} markers, " +
-                        "${backup.routes.size} tracks. " +
-                        if (backup.includesMedicalProfile) "Medical profile included." else "Medical profile left out."
-                }
+                .onSuccess { _message.value = "${kind.readyPrefix} $counts" }
                 .onFailure { _message.value = "Could not open the share sheet." }
         }
     }
@@ -124,7 +168,7 @@ fun YourDataRoute(viewModel: YourDataViewModel = hiltViewModel()) {
         applyMedical = applyMedical.value,
         onIncludeMedical = { includeMedical.value = it },
         onApplyMedical = { applyMedical.value = it },
-        onShare = { viewModel.share(includeMedical.value) },
+        onShare = { kind -> viewModel.share(includeMedical.value, kind) },
         onImport = { picker.launch(arrayOf("application/json", "application/zip", "application/octet-stream", "*/*")) },
     )
 }
@@ -137,7 +181,7 @@ fun YourDataScreen(
     applyMedical: Boolean,
     onIncludeMedical: (Boolean) -> Unit,
     onApplyMedical: (Boolean) -> Unit,
-    onShare: () -> Unit,
+    onShare: (ShareKind) -> Unit,
     onImport: () -> Unit,
 ) {
     ScreenBackground(Modifier.fillMaxSize()) {
@@ -151,8 +195,7 @@ fun YourDataScreen(
             item {
                 Text("Your data", style = MaterialTheme.typography.headlineLarge, color = HuntColors.Cream)
                 Text(
-                    "Export stays on this phone until you share or save it. " +
-                        "The zip holds JSON plus GPX, KML and GeoJSON.",
+                    "Export stays on this phone until you share or save it.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = HuntColors.Mist,
                 )
@@ -174,6 +217,38 @@ fun YourDataScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = HuntColors.Mist,
                     )
+                    FormatNote(
+                        "Backup zip",
+                        "JSON is the full HunTracK backup you can import back onto this phone or another, including danger and sold zones. The same zip also holds GPX, KML and GeoJSON.",
+                    )
+                    FormatNote(
+                        "GPX",
+                        "For a GPS unit and most mapping apps. Markers, tracks and zone outlines.",
+                    )
+                    FormatNote(
+                        "KML",
+                        "For Google Earth. Boundaries, markers and zone outlines.",
+                    )
+                    FormatNote(
+                        "GeoJSON",
+                        "For GIS software and web maps. Boundaries, markers, tracks and zone outlines.",
+                    )
+                    FormatNote(
+                        "Text, not a map",
+                        "Permissions, boundary details and zone notes are just text. Only the map shapes need GPX, KML or GeoJSON.",
+                    )
+                    FormatNote(
+                        "CSV",
+                        "Spreadsheet files for Excel or Google Sheets. One file each for permissions, boundaries, markers, zones and tracks, in a zip. Each zone names the boundary it sits on.",
+                    )
+                    FormatNote(
+                        "PDF",
+                        "A short summary to print and keep: permissions, boundaries with their areas, danger and sold zones, and the marker list.",
+                    )
+                    FormatNote(
+                        "XML",
+                        "The same records as structured text, including zones, if a computer or a club system asks for XML.",
+                    )
                     androidx.compose.foundation.layout.Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -187,8 +262,29 @@ fun YourDataScreen(
                         color = HuntColors.Mist,
                     )
                     HuntButton(
-                        onClick = onShare,
+                        onClick = { onShare(ShareKind.BACKUP) },
                         text = "Share backup",
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    Text(
+                        "JSON, GPX, KML and GeoJSON, in one zip.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = HuntColors.Mist,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    HuntButton(
+                        onClick = { onShare(ShareKind.CSV) },
+                        text = "Share spreadsheet (CSV)",
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    HuntButton(
+                        onClick = { onShare(ShareKind.PDF) },
+                        text = "Share print summary (PDF)",
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    HuntButton(
+                        onClick = { onShare(ShareKind.XML) },
+                        text = "Share XML",
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }
@@ -197,7 +293,7 @@ fun YourDataScreen(
                 GlassPanel(Modifier.fillMaxWidth()) {
                     SectionLabel("Import")
                     Text(
-                        "Adds the permissions, boundaries, markers and tracks from a HunTracK backup. It does not delete what is already here.",
+                        "Adds the permissions, boundaries, markers and tracks from a HunTracK backup. Zones on a boundary come with it. It does not delete what is already here.",
                         style = MaterialTheme.typography.bodySmall,
                         color = HuntColors.Mist,
                     )
@@ -222,4 +318,19 @@ fun YourDataScreen(
             }
         }
     }
+}
+
+@Composable
+private fun FormatNote(title: String, body: String) {
+    Text(
+        title,
+        color = HuntColors.Cream,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(top = 10.dp),
+    )
+    Text(
+        body,
+        color = HuntColors.Mist,
+        style = MaterialTheme.typography.bodySmall,
+    )
 }

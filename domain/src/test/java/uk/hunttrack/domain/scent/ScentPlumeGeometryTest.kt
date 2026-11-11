@@ -1,6 +1,7 @@
 package uk.hunttrack.domain.scent
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -92,6 +93,14 @@ class ScentPlumeGeometryTest {
         val plume = ScentPlumeGeometry.forWind(null)
         assertTrue(plume.lengthM >= 457.2)
         assertTrue(abs(plume.lengthM - ScentPlumeGeometry.plumeLengthM(12.0)) < 0.01)
+    }
+
+    @Test
+    fun reachesTarget_usesPlumeAngleAndDistanceLikeIos() {
+        val plume = ScentPlumeGeometry.forWind(12.0)
+        assertTrue(ScentPlumeGeometry.reachesTarget(0.0, 100.0, plume))
+        assertFalse(ScentPlumeGeometry.reachesTarget(0.0, plume.lengthM * 1.2 + 50.0, plume))
+        assertFalse(ScentPlumeGeometry.reachesTarget(80.0, 100.0, plume))
     }
 
     @Test

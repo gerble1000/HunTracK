@@ -352,6 +352,44 @@ private struct BoundaryCard: View {
                     .foregroundColor(theme.palette.mist)
             }
 
+            if boundary.zones.isEmpty {
+                Text("No zones on this boundary yet.")
+                    .font(.field(size: 13))
+                    .foregroundColor(theme.palette.mist)
+            } else {
+                ForEach(boundary.zones) { zone in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(zone.kind.displayName)
+                            .font(.field(size: 13, weight: .bold))
+                            .foregroundColor(zone.kind == .danger ? theme.palette.danger : theme.palette.bronzeBright)
+                        Text(zone.label)
+                            .font(.field(size: 14, weight: .semibold))
+                            .foregroundColor(theme.palette.cream)
+                        if !zone.notes.isEmpty {
+                            Text(zone.notes)
+                                .font(.field(size: 12))
+                                .foregroundColor(theme.palette.mist)
+                        }
+                        HStack(spacing: 12) {
+                            Button("Edit") {
+                                editor = ZoneEditor(boundaryId: boundary.id, zone: zone, mode: .draw)
+                            }
+                            Button("Rename") {
+                                editor = ZoneEditor(boundaryId: boundary.id, zone: zone, mode: .rename)
+                            }
+                            Button("Delete") {
+                                db.deleteZone(id: zone.id, boundaryId: boundary.id)
+                            }
+                            .foregroundColor(theme.palette.danger)
+                        }
+                        .font(.field(size: 13, weight: .semibold))
+                    }
+                    .padding(.vertical, 4)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Zone \(zone.kind.displayName) \(zone.label)")
+                }
+            }
+
             HStack(spacing: 12) {
                 Menu {
                     if permissions.isEmpty {
@@ -377,11 +415,126 @@ private struct BoundaryCard: View {
                     .foregroundColor(theme.palette.bronzeBright)
                     .accessibilityLabel("Focus on map")
 
-                Button("Delete") { onDelete() }
+                Button("Add zone") {
+                    editor = ZoneEditor(boundaryId: boundary.id, zone: nil, mode: .draw)
+                }
+                .font(.field(size: 14, weight: .semibold))
+                .foregroundColor(theme.palette.bronzeBright)
+                .accessibilityLabel("Add zone")
+
+                Button("Delete") { confirmDelete = true }
                     .font(.field(size: 14, weight: .semibold))
                     .foregroundColor(theme.palette.danger)
             }
             .padding(.top, 6)
+        }
+        .alert("Delete boundary?", isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive) { onDelete() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(boundary.zones.isEmpty
+                 ? "Delete \(boundary.name.isEmpty ? "this boundary" : boundary.name)? This cannot be undone."
+                 : "Delete \(boundary.name.isEmpty ? "this boundary" : boundary.name)? Its \(boundary.zones.count) zone\(boundary.zones.count == 1 ? "" : "s") will be deleted too.")
+        }
+        .sheet(item: $editor) { draft in
+            ZoneEditorSheet(draft: draft)
+        }
+    }
+
+    @State private var confirmDelete = false
+    @State private var editor: ZoneEditor?
+}
+
+private struct ZoneEditor: Identifiable {
+    enum Mode { case draw, rename }
+    let boundaryId: Int64
+    let zone: BoundaryZone?
+    let mode: Mode
+    var id: String { "\(boundaryId)-\(zone?.id ?? 0)-\(mode == .draw ? "draw" : "rename")" }
+}
+
+private struct ZoneEditorSheet: View {
+    let draft: ZoneEditor
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var theme = ThemeManager.shared
+    @ObservedObject private var db = DatabaseService.shared
+    @State private var name: String
+    @State private var notes: String
+    @State private var kind: BoundaryZoneKind
+
+    init(draft: ZoneEditor) {
+        self.draft = draft
+        _name = State(initialValue: draft.zone?.name ?? "")
+        _notes = State(initialValue: draft.zone?.notes ?? "")
+        _kind = State(initialValue: draft.zone?.kind ?? .danger)
+    }
+
+    var body: some View {
+        NavigationView {
+            ScreenBackground {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("A zone sits on this boundary. The boundary outline and area stay the same, and the zone can extend past the edge.")
+                        .font(.field(size: 13))
+                        .foregroundColor(theme.palette.mist)
+                    TextField("Name (optional)", text: $name)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    TextField("Notes (optional)", text: $notes)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    ForEach(BoundaryZoneKind.allCases, id: \.self) { option in
+                        Button {
+                            kind = option
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(option.displayName)
+                                    .font(.field(size: 15, weight: .semibold))
+                                    .foregroundColor(kind == option ? theme.palette.bronzeBright : theme.palette.cream)
+                                Text(option.summary)
+                                    .font(.field(size: 12))
+                                    .foregroundColor(theme.palette.mist)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .accessibilityLabel(option.displayName)
+                    }
+                    if draft.mode == .rename, let zone = draft.zone {
+                        HuntButton("Save", icon: "checkmark") {
+                            db.saveZone(
+                                BoundaryZone(
+                                    id: zone.id,
+                                    boundaryId: draft.boundaryId,
+                                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    kind: kind,
+                                    notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    points: zone.points
+                                ),
+                                toBoundary: draft.boundaryId
+                            )
+                            dismiss()
+                        }
+                    } else {
+                        HuntButton("Draw zone on map", icon: "pencil.tip") {
+                            db.pendingZone = PendingZoneCapture(
+                                boundaryId: draft.boundaryId,
+                                zoneId: draft.zone?.id,
+                                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                kind: kind,
+                                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                            )
+                            dismiss()
+                        }
+                        .accessibilityLabel("Draw zone on map")
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            }
+            .navigationTitle(draft.mode == .rename ? "Rename zone" : (draft.zone == nil ? "Add zone" : "Edit zone"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Close") { dismiss() }
+                }
+            }
         }
     }
 }

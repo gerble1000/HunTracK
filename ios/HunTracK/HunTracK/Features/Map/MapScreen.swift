@@ -68,6 +68,7 @@ private enum OverlayKind {
     case route
     case pendingBoundary
     case zone(strokeHex: String, lineWidth: CGFloat, fillHex: String, fillOpacity: Double)
+    case fieldZone(zoneId: Int64, kind: BoundaryZoneKind, strokeHex: String, fillHex: String, fillOpacity: Double)
     case grid(major: Bool)
     case plume
 }
@@ -87,6 +88,7 @@ private struct MapContentSnapshot: Equatable {
     var pendingCoordinates: [String] = []
     var focusedBoundaryIds: [Int64] = []
     var linkedBoundaryIds: [Int64] = []
+    var zoneFingerprints: [String] = []
 }
 
 // MARK: - The UIKit map host
@@ -94,6 +96,36 @@ private struct MapContentSnapshot: Equatable {
 /// Drifting pink scent smoke. Puff positions follow the same plume model as Wind & Scent;
 /// puff size stays in screen points (as Android's circle layer does) so a country-scale
 /// view does not inflate them into a solid cone.
+private final class HatchedPolygonRenderer: MKPolygonRenderer {
+    var hatchRising = false
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        super.draw(mapRect, zoomScale: zoomScale, in: context)
+        guard let path = path else { return }
+        context.saveGState()
+        context.addPath(path)
+        context.clip()
+        context.setStrokeColor((strokeColor ?? UIColor.red).withAlphaComponent(0.9).cgColor)
+        context.setLineWidth(1.6 / CGFloat(zoomScale))
+        let bounds = path.boundingBox
+        let spacing = 8.0 / CGFloat(zoomScale)
+        var offset = bounds.minX - bounds.height
+        let limit = bounds.maxX + bounds.height
+        while offset < limit {
+            if hatchRising {
+                context.move(to: CGPoint(x: offset, y: bounds.maxY))
+                context.addLine(to: CGPoint(x: offset + bounds.height, y: bounds.minY))
+            } else {
+                context.move(to: CGPoint(x: offset, y: bounds.minY))
+                context.addLine(to: CGPoint(x: offset + bounds.height, y: bounds.maxY))
+            }
+            offset += spacing
+        }
+        context.strokePath()
+        context.restoreGState()
+    }
+}
+
 private final class ScentSmokeRenderer: MKOverlayRenderer {
     let fix: GpsFix
     let weather: WeatherSnapshot
@@ -408,7 +440,10 @@ private struct MapViewHost: UIViewRepresentable {
             homingLongitude: homingTarget?.longitude,
             pendingCoordinates: pendingPoints.map { "\($0.orderIndex):\($0.latitude):\($0.longitude)" },
             focusedBoundaryIds: focusedBoundaryIds.sorted(),
-            linkedBoundaryIds: linkedBoundaryIds.sorted()
+            linkedBoundaryIds: linkedBoundaryIds.sorted(),
+            zoneFingerprints: boundaries.flatMap { boundary in
+                boundary.zones.map { "\($0.id):\($0.kind.rawValue):\($0.name):\($0.points.count):\($0.notes)" }
+            }
         )
 
         if coordinator.lastSnapshot != snapshot {
@@ -558,6 +593,23 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
                 fillOpacity: boundary.zoneType.mapFillOpacity
             )
             mapView.addOverlay(polygon)
+
+            for zone in boundary.zones {
+                let zonePoints = zone.points.sorted { $0.orderIndex < $1.orderIndex }
+                guard zonePoints.count >= 3 else { continue }
+                var zoneCoordinates = zonePoints.map {
+                    CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                }
+                let patch = MKPolygon(coordinates: &zoneCoordinates, count: zoneCoordinates.count)
+                overlayKinds[ObjectIdentifier(patch)] = .fieldZone(
+                    zoneId: zone.id,
+                    kind: zone.kind,
+                    strokeHex: zone.kind.mapColorHex,
+                    fillHex: zone.kind.mapColorHex,
+                    fillOpacity: zone.kind.mapFillOpacity
+                )
+                mapView.addOverlay(patch)
+            }
         }
 
         // --- Tracks ---
@@ -779,6 +831,20 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             renderer.fillColor = mapUIColor(hex: fillHex).withAlphaComponent(CGFloat(fillOpacity))
             return renderer
 
+        case .fieldZone(_, let kind, let strokeHex, _, let fillOpacity):
+            guard let polygon = overlay as? MKPolygon else {
+                return MKOverlayRenderer(overlay: overlay)
+            }
+            let renderer = HatchedPolygonRenderer(polygon: polygon)
+            renderer.strokeColor = mapUIColor(hex: strokeHex)
+            renderer.lineWidth = 2.6
+            renderer.fillColor = mapUIColor(hex: strokeHex).withAlphaComponent(CGFloat(fillOpacity))
+            renderer.hatchRising = kind == .sold
+            if kind == .sold {
+                renderer.lineDashPattern = [NSNumber(value: 6), NSNumber(value: 4)]
+            }
+            return renderer
+
         case .route:
             guard let line = overlay as? MKPolyline else {
                 return MKOverlayRenderer(overlay: overlay)
@@ -882,8 +948,12 @@ public struct MapScreen: View {
     @State private var arrivalNotified = false
 
     @State private var capture: PendingBoundaryCreation?
+    @State private var zoneCapture: PendingZoneCapture?
+    @State private var selectedZone: BoundaryZone?
     @State private var pendingPoints: [BoundaryPoint] = []
     @State private var boundaryName = ""
+
+    private var isCapturing: Bool { capture != nil || zoneCapture != nil }
 
     @State private var mapCentreGridRef: String?
 
@@ -912,7 +982,7 @@ public struct MapScreen: View {
                     focusedBoundaryIds: Set(db.permissionMapFocus.map { $0.boundaryAreaId }),
                     linkedBoundaryIds: linkedBoundaryIds,
                     bronze: UIColor(theme.palette.bronze),
-                    isDrawing: capture?.mode == .draw,
+                    isDrawing: capture?.mode == .draw || zoneCapture != nil,
                     onRegionChanged: { coordinate, visibleSpan in
                         centre = coordinate
                         spanMeters = visibleSpan
@@ -938,17 +1008,21 @@ public struct MapScreen: View {
                         focusBanner
                             .padding(.horizontal, 14)
                     }
+                    if let zone = selectedZone {
+                        zoneBanner(zone)
+                            .padding(.horizontal, 14)
+                    }
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if capture == nil {
+                if !isCapturing {
                     mapControls
                         .padding(.trailing, 12)
                         .padding(.bottom, 8)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if capture != nil {
+                if isCapturing {
                     captureBar
                         .padding(.horizontal, 12)
                         .padding(.top, 4)
@@ -1016,6 +1090,7 @@ public struct MapScreen: View {
             }
             updateGridRef(centre)
             syncBoundaryCapture()
+            syncZoneCapture()
             refreshWindIfNeeded()
         }
         .onChange(of: location.latestFix) { fix in
@@ -1033,6 +1108,9 @@ public struct MapScreen: View {
         }
         .onChange(of: db.pendingBoundary) { _ in
             syncBoundaryCapture()
+        }
+        .onChange(of: db.pendingZone) { _ in
+            syncZoneCapture()
         }
         .onChange(of: db.permissionMapFocus) { focus in
             frameBoundaries(focus.map { $0.boundaryAreaId })
@@ -1175,10 +1253,15 @@ public struct MapScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    SectionLabel("Boundary capture")
-                    Text(capture?.zoneType.displayName ?? "")
+                    SectionLabel(zoneCapture == nil ? "Boundary capture" : (zoneCapture?.zoneId == nil ? "Draw zone" : "Redraw zone"))
+                    Text(zoneCapture?.kind.displayName ?? capture?.zoneType.displayName ?? "")
                         .font(.field(size: 16, weight: .semibold))
                         .foregroundColor(theme.palette.cream)
+                    if let zoneName = zoneCapture?.name, !zoneName.isEmpty {
+                        Text(zoneName)
+                            .font(.field(size: 13, weight: .semibold))
+                            .foregroundColor(theme.palette.bronzeBright)
+                    }
                 }
                 Spacer(minLength: 8)
                 Text(MapZoom.label(spanMeters))
@@ -1213,7 +1296,9 @@ public struct MapScreen: View {
                 zoomChip("minus") { zoom(inward: false) }
             }
 
-            HuntButton("Save boundary", icon: "checkmark") { saveBoundary() }
+            HuntButton(zoneCapture == nil ? "Save boundary" : "Save zone", icon: "checkmark") {
+                if zoneCapture != nil { saveZone() } else { saveBoundary() }
+            }
                 .disabled(pendingPoints.count < 3)
 
             HStack(spacing: 10) {
@@ -1257,10 +1342,44 @@ public struct MapScreen: View {
     }
 
     private var captureHelp: String {
-        capture?.mode == .walk
+        if zoneCapture != nil {
+            return "Drag on the map to draw the zone. It can extend past the boundary edge. "
+                + "You can also tap corners one at a time."
+        }
+        return capture?.mode == .walk
             ? "Walk the boundary — each GPS fix is appended in order."
             : "Drag on the map to draw the fence line — lift your finger to finish. "
                 + "You can also tap corners one at a time."
+    }
+
+    private func zoneBanner(_ zone: BoundaryZone) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(zone.kind.displayName)
+                    .font(.field(size: 12, weight: .bold))
+                    .foregroundColor(theme.palette.cream)
+                Text(zone.label)
+                    .font(.field(size: 14, weight: .semibold))
+                    .foregroundColor(theme.palette.bronzeBright)
+                    .lineLimit(1)
+                if !zone.notes.isEmpty {
+                    Text(zone.notes)
+                        .font(.field(size: 12))
+                        .foregroundColor(theme.palette.mist)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 4)
+            Button("Close") { selectedZone = nil }
+                .font(.field(size: 12, weight: .bold))
+                .foregroundColor(theme.palette.bronzeBright)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(theme.palette.charcoal.opacity(0.92))
+        .cornerRadius(8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Selected zone \(zone.kind.displayName) \(zone.label)")
     }
 
     private var mapMenu: some View {
@@ -1397,6 +1516,7 @@ public struct MapScreen: View {
     }
 
     private func syncBoundaryCapture() {
+        guard zoneCapture == nil else { return }
         guard capture != db.pendingBoundary else { return }
         capture = db.pendingBoundary
         pendingPoints = []
@@ -1405,11 +1525,26 @@ public struct MapScreen: View {
         if capture?.mode == .walk, let fix = location.latestFix { appendWalkPoint(fix) }
     }
 
+    private func syncZoneCapture() {
+        guard zoneCapture != db.pendingZone else { return }
+        zoneCapture = db.pendingZone
+        if zoneCapture != nil {
+            capture = nil
+            pendingPoints = []
+            followUser = false
+            if let boundaryId = zoneCapture?.boundaryId {
+                frameBoundaries([boundaryId])
+            }
+        }
+    }
+
     private func finishBoundaryCapture() {
-        let returnToPermissions = capture?.returnToPermissions == true
+        let returnToPermissions = capture?.returnToPermissions == true || zoneCapture?.returnToPermissions == true
         capture = nil
+        zoneCapture = nil
         pendingPoints = []
         db.pendingBoundary = nil
+        db.pendingZone = nil
         if returnToPermissions {
             NotificationCenter.default.post(name: .boundaryCaptureFinished, object: nil)
         }
@@ -1536,13 +1671,52 @@ public struct MapScreen: View {
     // MARK: - Actions
 
     private func handleMapTap(_ coordinate: CLLocationCoordinate2D) {
-        if capture?.mode == .draw {
+        if capture?.mode == .draw || zoneCapture != nil {
             appendDraftPoint(coordinate, minimumMeters: 3, playClick: true)
-        } else if capture == nil, db.preferences.markAnywhereEnabled {
+            return
+        }
+        if let zone = zone(at: coordinate) {
+            selectedZone = zone
+            return
+        }
+        selectedZone = nil
+        if capture == nil, db.preferences.markAnywhereEnabled {
             followUser = false
             markerCoordinate = coordinate
             showingAddSheet = true
         }
+    }
+
+    private func zone(at coordinate: CLLocationCoordinate2D) -> BoundaryZone? {
+        for boundary in visibleBoundaries.reversed() {
+            for zone in boundary.zones.reversed() where polygonContains(zone.points, latitude: coordinate.latitude, longitude: coordinate.longitude) {
+                return zone
+            }
+        }
+        return nil
+    }
+
+    private func polygonContains(_ points: [BoundaryPoint], latitude: Double, longitude: Double) -> Bool {
+        let ordered = points.sorted { $0.orderIndex < $1.orderIndex }
+        guard ordered.count >= 3 else { return false }
+        var inside = false
+        var previous = ordered.count - 1
+        for index in ordered.indices {
+            let currentLat = ordered[index].latitude
+            let currentLng = ordered[index].longitude
+            let previousLat = ordered[previous].latitude
+            let previousLng = ordered[previous].longitude
+            let crosses = (currentLat > latitude) != (previousLat > latitude)
+            if crosses {
+                let span = previousLat - currentLat
+                let edgeLng = span == 0
+                    ? currentLng
+                    : (previousLng - currentLng) * (latitude - currentLat) / span + currentLng
+                if longitude < edgeLng { inside.toggle() }
+            }
+            previous = index
+        }
+        return inside
     }
 
     /// Adds a draft corner, ignoring samples that are too close to the previous one
@@ -1552,7 +1726,7 @@ public struct MapScreen: View {
         minimumMeters: Double,
         playClick: Bool
     ) {
-        guard capture?.mode == .draw else { return }
+        guard capture?.mode == .draw || zoneCapture != nil else { return }
         if let last = pendingPoints.last {
             let moved = DatabaseService.haversineMeters(
                 last.latitude, last.longitude, coordinate.latitude, coordinate.longitude
@@ -1605,6 +1779,37 @@ public struct MapScreen: View {
 
         finishBoundaryCapture()
         sound.play(.success)
+    }
+
+    private func saveZone() {
+        guard let zoneCapture = zoneCapture, pendingPoints.count >= 3 else { return }
+        let keptArea = db.boundaries.first { $0.id == zoneCapture.boundaryId }?.areaSqMeters
+        db.saveZone(
+            BoundaryZone(
+                id: zoneCapture.zoneId ?? 0,
+                boundaryId: zoneCapture.boundaryId,
+                name: zoneCapture.name,
+                kind: zoneCapture.kind,
+                notes: zoneCapture.notes,
+                points: pendingPoints
+            ),
+            toBoundary: zoneCapture.boundaryId
+        )
+        if let keptArea = keptArea,
+           let index = db.boundaries.firstIndex(where: { $0.id == zoneCapture.boundaryId }),
+           db.boundaries[index].areaSqMeters != keptArea {
+            var area = db.boundaries[index]
+            area.areaSqMeters = keptArea
+            db.boundaries[index] = area
+        }
+        let returnToPermissions = zoneCapture.returnToPermissions
+        self.zoneCapture = nil
+        pendingPoints = []
+        db.pendingZone = nil
+        sound.play(.success)
+        if returnToPermissions {
+            NotificationCenter.default.post(name: .boundaryCaptureFinished, object: nil)
+        }
     }
 
     private func recordIfNeeded(_ fix: GpsFix) {

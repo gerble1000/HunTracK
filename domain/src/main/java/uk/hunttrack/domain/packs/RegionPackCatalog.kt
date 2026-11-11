@@ -85,6 +85,23 @@ object RegionPackCatalog {
         ident("canada_goose", "Canada goose", "Branta canadensis"),
         ident("greylag_goose", "Greylag goose", "Anser anser"),
         ident("hare", "Hare", "Lepus"),
+        ident("iberian_hare", "Iberian hare", "Lepus granatensis"),
+        ident("egyptian_mongoose", "Egyptian mongoose", "Herpestes ichneumon"),
+        ident("rock_dove", "Rock dove", "Columba livia"),
+        ident("stock_dove", "Stock dove", "Columba oenas"),
+        ident("turtle_dove", "Turtle dove", "Streptopelia turtur"),
+        ident("magpie", "Magpie", "Pica pica"),
+        ident("carrion_crow", "Carrion crow", "Corvus corone"),
+        ident("pintail", "Pintail", "Anas acuta"),
+        ident("pochard", "Common pochard", "Aythya ferina"),
+        ident("coot", "Eurasian coot", "Fulica atra"),
+        ident("moorhen", "Moorhen", "Gallinula chloropus"),
+        ident("quail", "Common quail", "Coturnix coturnix"),
+        ident("fieldfare", "Fieldfare", "Turdus pilaris"),
+        ident("song_thrush", "Song thrush", "Turdus philomelos"),
+        ident("redwing", "Redwing", "Turdus iliacus"),
+        ident("mistle_thrush", "Mistle thrush", "Turdus viscivorus"),
+        ident("starling", "Common starling", "Sturnus vulgaris"),
     )
 
     private val directoryByKey = speciesDirectory.associateBy { it.speciesKey }
@@ -99,6 +116,9 @@ object RegionPackCatalog {
         lithuaniaPack(),
         polandPack(),
         romaniaPack(),
+        spainPack(),
+        portugalPack(),
+        italyPack(),
     )
 
     val mapRegions: List<MapPackRegion> = listOf(
@@ -118,6 +138,9 @@ object RegionPackCatalog {
         region("lt-dzukija", "LT", "Dzūkija sample", "About 15 square miles in Dzūkija.", 54.10, 24.30),
         region("pl-bialowieza", "PL", "Białowieża sample", "About 15 square miles around Białowieża.", 52.70, 23.85),
         region("ro-apuseni", "RO", "Apuseni sample", "About 15 square miles in the Apuseni.", 46.55, 22.75),
+        region("es-gredos", "ES", "Gredos sample", "About 15 square miles in the Sierra de Gredos, not the whole range.", 40.25, -5.15),
+        region("pt-estrela", "PT", "Serra da Estrela sample", "About 15 square miles in the Serra da Estrela, not the whole range.", 40.32, -7.60),
+        region("it-gran-sasso", "IT", "Gran Sasso sample", "About 15 square miles around Gran Sasso, not the whole massif.", 42.45, 13.55),
     )
 
     fun pack(id: String): SeasonPack? = seasonPacks.firstOrNull { it.id == id }
@@ -189,6 +212,9 @@ object RegionPackCatalog {
         "FR" -> franceRules()
         "IE" -> irelandRules()
         "DE" -> germanyRules()
+        "ES" -> spainRules()
+        "PT" -> portugalRules()
+        "IT" -> italyRules()
         else -> unverifiedRules(countryCode)
     }
 
@@ -440,6 +466,299 @@ object RegionPackCatalog {
         dated("woodcock", "Either", "15-09", "15-04", "Law 407/2006 annex as summarised. Verify the current annex.")
         place("mouflon", "chamois", "alpine_ibex", "badger", "brown_hare", "red_fox", "moose")
     }
+
+    private fun spainPack(): SeasonPack = european(
+        id = "es-seasons",
+        countryCode = "ES",
+        countryName = "Spain",
+        title = "Spain seasons",
+        sourceTitle = "Reglamento de Armas (BOE)",
+        sourceUrl = "https://www.boe.es/buscar/act.php?id=BOE-A-1993-6202",
+        summary = "No national open-season calendar is stored. Hunting periods in Spain are set by each autonomous community. " +
+            "Species rows stay unverified until an official orden de vedas is copied. " +
+            "The silencer rule is taken from the national weapons regulation, read on 9 November 2026.",
+    ) {
+        listOf(
+            "red_deer", "roe_deer", "fallow_deer", "wild_boar", "mouflon", "chamois", "alpine_ibex",
+            "rabbit", "iberian_hare", "red_legged_partridge", "red_fox",
+        ).forEach { key ->
+            notListed(
+                key,
+                "Named here only so the slot is not a blank placeholder. " +
+                    "No national season was copied. Each comunidad autónoma publishes its own orden de vedas.",
+            )
+        }
+    }
+
+    private fun portugalPack(): SeasonPack = european(
+        id = "pt-seasons",
+        countryCode = "PT",
+        countryName = "Portugal",
+        title = "Portugal seasons",
+        sourceTitle = "Calendário venatório 2024-2027",
+        sourceUrl = "https://diariodarepublica.pt/dr/legislacao-consolidada/portaria/2024-898587591",
+        summary = "Fixed dates below are copied from the consolidated hunting calendar for the 2024-2025, 2025-2026 and 2026-2027 seasons " +
+            "(Portaria n.º 67/2024, as shown on diariodarepublica.pt on 9 November 2026). " +
+            "They are the ordered-land window unless the note says otherwise. " +
+            "A period that starts on a numbered Sunday is kept in words, not converted to a day. " +
+            "A blank period cell was not given the date from the row above. " +
+            "Fallow deer, red deer, roe deer and mouflon are named in that table with empty period cells, so no season is stored for them.",
+    ) {
+        val src = "Copied from the consolidated Portuguese hunting calendar for 2024-2025, 2025-2026 and 2026-2027, read on 9 November 2026."
+        cited(
+            "rabbit",
+            "Either",
+            "01-09",
+            "31-12",
+            "$src Ordered land. Unordered land is the first Sunday of October to the last Sunday of November. " +
+                "Daily bag on the same row: (3) on ordered land and 1 on unordered land.",
+        )
+        cited(
+            "red_fox",
+            "Either",
+            "01-10",
+            "28-02",
+            "$src Ordered land. Unordered land is the first Sunday of October to the last Sunday of December. " +
+                "Daily bag on unordered land on that row: 1.",
+        )
+        cited(
+            "red_legged_partridge",
+            "Either",
+            "01-10",
+            "31-01",
+            "$src Ordered land. The unordered-land cell on the Portaria n.º 309/2024 extract of this table is a dash. Daily bag on unordered land: 1.",
+        )
+        cited(
+            "gadwall",
+            "Either",
+            "01-10",
+            "20-01",
+            "$src Ordered land, on the gadwall row. The unordered-land cell is a dash. Daily bag on ordered land on that row: 1. " +
+                "Later duck rows with a blank period cell are not given this date.",
+        )
+        cited(
+            "golden_plover",
+            "Either",
+            "01-11",
+            "20-01",
+            "$src On the golden-plover row. Daily bag on that row: 5.",
+        )
+        cited(
+            "woodcock",
+            "Either",
+            "01-11",
+            "10-02",
+            "$src On the woodcock row. Daily bag on that row: 3.",
+        )
+        cited(
+            "quail",
+            "Either",
+            "01-09",
+            "30-11",
+            "$src On the quail row. Daily bag on that row: 10.",
+        )
+        cited(
+            "wild_boar",
+            "Either",
+            "01-06",
+            "31-05",
+            "$src On the wild-boar row. The window runs across the year. Daily bag cell on that row: (3).",
+        )
+        notListed(
+            "iberian_hare",
+            "$src The Iberian hare is named. The period cells on that row were blank, so no season is stored. Daily bag on unordered land on that row: 1.",
+        )
+        notListed(
+            "egyptian_mongoose",
+            "$src The Egyptian mongoose is named. The period cells on that row were blank, so no season is stored. Daily bag on unordered land on that row: 1.",
+        )
+        notListed(
+            "pheasant",
+            "$src The pheasant row has a blank ordered-land period and a dash for unordered land. No season is stored.",
+        )
+        notListed(
+            "rock_dove",
+            "$src Ordered land: from the third Sunday of August to 31 December. " +
+                "Unordered land: first Sunday of October to the last Sunday of December. " +
+                "Daily bag 25 ordered and 15 unordered. Not stored as day-month dates because the start is a Sunday.",
+        )
+        notListed(
+            "magpie",
+            "$src Ordered land: from the third Sunday of August to 28 February. Daily bag on that row: (3) ordered and 1 unordered. " +
+                "Not stored as day-month dates because the start is a Sunday.",
+        )
+        notListed(
+            "carrion_crow",
+            "$src Named on the row under magpie. The period cells were blank, so the magpie window was not copied onto this row.",
+        )
+        listOf("shoveler", "pochard", "tufted_duck", "teal", "pintail", "wigeon").forEach { key ->
+            notListed(
+                key,
+                "$src Named in the duck block under gadwall. The period cell on this row was blank, so 1 October–20 January was not copied here.",
+            )
+        }
+        notListed(
+            "mallard",
+            "$src The mallard row states from the third Sunday of August to 20 January. Not stored as day-month dates because the start is a Sunday.",
+        )
+        notListed("coot", "$src Named under mallard. The period cell on this row was blank, so no season is stored.")
+        notListed("moorhen", "$src Named under mallard. The period cell on this row was blank. A daily-bag figure of 5 appears on that row.")
+        notListed(
+            "snipe",
+            "$src One extract put 1 November–20 February on the common-snipe row and another left the period cell blank under golden plover. No date is stored.",
+        )
+        notListed("jack_snipe", "$src Named under common snipe. The period cell was blank, so no season is stored.")
+        notListed(
+            "turtle_dove",
+            "$src The turtle-dove row states the 3rd and 4th Sundays of August and the 1st and 2nd Sundays of September. Daily bag on that row: 4. " +
+                "Not stored as day-month dates.",
+        )
+        notListed(
+            "stock_dove",
+            "$src From the third Sunday of August to 20 February. Daily bag on that row: 50. Not stored as day-month dates because the start is a Sunday.",
+        )
+        notListed("woodpigeon", "$src Named under stock dove. The period cell was blank, so the stock-dove window was not copied here.")
+        notListed(
+            "fieldfare",
+            "$src The fieldfare row states 1 November to 20 February in one extract, with a daily bag of 40. " +
+                "The same block's later thrush rows are blank. Because the extracts do not agree on which row owns that window, no date is stored.",
+        )
+        listOf("song_thrush", "redwing", "mistle_thrush", "starling").forEach { key ->
+            notListed(key, "$src Named in the thrush block. The period cell on this row was blank, so no season is stored.")
+        }
+        listOf("fallow_deer", "red_deer", "roe_deer", "mouflon").forEach { key ->
+            notListed(
+                key,
+                "$src Named at the end of the table. The period cells were empty, so no season is stored.",
+            )
+        }
+    }
+
+    private fun italyPack(): SeasonPack = european(
+        id = "it-seasons",
+        countryCode = "IT",
+        countryName = "Italy",
+        title = "Italy seasons",
+        sourceTitle = "Legge 11 febbraio 1992, n. 157",
+        sourceUrl = "https://www.normattiva.it/atto/caricaDettaglioAtto?atto.articolo.numero=21&atto.codiceRedazionale=092G0211&atto.dataPubblicazioneGazzetta=1992-02-25",
+        summary = "No species dates are stored. Regional hunting calendars set the seasons, and those calendars were not copied. " +
+            "Articles 13 and 21 of Law 157/1992 were read on Normattiva on 9 November 2026 for the rules below.",
+    ) {
+        listOf(
+            "red_deer", "roe_deer", "fallow_deer", "wild_boar", "mouflon", "chamois", "alpine_ibex",
+            "brown_hare", "pheasant", "red_legged_partridge", "grey_partridge",
+        ).forEach { key ->
+            notListed(
+                key,
+                "No national season was copied. The regions publish the hunting calendar. " +
+                    "Articles 13 and 21 of Law 157/1992, read on 9 November 2026, do not set this species' dates.",
+            )
+        }
+    }
+
+    private fun spainRules(): List<HuntingRule> = listOf(
+        HuntingRule(
+            id = RULE_SUPPRESSOR,
+            title = "Sound moderator / silencer",
+            answer = RuleAnswer.PROHIBITED,
+            notes = "Reglamento de Armas, article 5.1.k, consolidated text on the BOE and restated by Real Decreto 726/2020: " +
+                "advertising, sale, possession and use of silencers adaptable to firearms is prohibited, " +
+                "except by specially authorised officials and under the rules that apply to them. " +
+                "Article 5.4 says those items may be sold by authorised dealers only to the bodies those officials belong to.",
+            sourceTitle = "Reglamento de Armas, artículo 5",
+            sourceUrl = "https://www.boe.es/buscar/act.php?id=BOE-A-1993-6202",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_NIGHT,
+            title = "Night hunting",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "Not confirmed in a national statute read for this pack. Night hunting is commonly set in each autonomous community's orden de vedas. No yes or no is stored.",
+            sourceTitle = "No national night-hunting article copied",
+            sourceUrl = "https://www.boe.es/buscar/act.php?id=BOE-A-1993-6202",
+            lastVerified = null,
+        ),
+        HuntingRule(
+            id = RULE_ORANGE,
+            title = "Blaze orange / high-vis clothing",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "Not confirmed in a national statute read for this pack. The weapons regulation read on 9 November 2026 does not mention hunting clothing. No yes or no is stored.",
+            sourceTitle = "No national high-vis article copied",
+            sourceUrl = "https://www.boe.es/buscar/act.php?id=BOE-A-1993-6202",
+            lastVerified = null,
+        ),
+    )
+
+    private fun portugalRules(): List<HuntingRule> = listOf(
+        HuntingRule(
+            id = RULE_SUPPRESSOR,
+            title = "Sound moderator / silencer",
+            answer = RuleAnswer.CONDITIONAL,
+            notes = "Lei n.º 5/2006, consolidated text read on 9 November 2026. " +
+                "A silencer is defined as an accessory fitted to the muzzle to eliminate or reduce the noise of the shot. " +
+                "A sound moderator is a homologated accessory that removes up to 50 dB. " +
+                "Silencers, and sound moderators that are not homologated or that reduce the sound by more than 50 dB, are class A. " +
+                "Homologated sound moderators with a maximum reduction of 50 dB are class C. " +
+                "Class C weapons and accessories need prior authorisation from the national director of the PSP. " +
+                "Using a sound moderator on a firearm that is not class C is an offence (fine of €400 to €4,000).",
+            sourceTitle = "Lei n.º 5/2006 (consolidated)",
+            sourceUrl = "https://diariodarepublica.pt/dr/legislacao-consolidada/lei/2006-34574575",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_NIGHT,
+            title = "Night hunting",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "The consolidated hunting calendar read on 9 November 2026 lists species periods and does not state a night-hunting rule. No yes or no is stored.",
+            sourceTitle = "Calendário venatório 2024-2027",
+            sourceUrl = "https://diariodarepublica.pt/dr/legislacao-consolidada/portaria/2024-898587591",
+            lastVerified = null,
+        ),
+        HuntingRule(
+            id = RULE_ORANGE,
+            title = "Blaze orange / high-vis clothing",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "The consolidated hunting calendar read on 9 November 2026 does not mention blaze-orange or high-vis clothing. No yes or no is stored.",
+            sourceTitle = "Calendário venatório 2024-2027",
+            sourceUrl = "https://diariodarepublica.pt/dr/legislacao-consolidada/portaria/2024-898587591",
+            lastVerified = null,
+        ),
+    )
+
+    private fun italyRules(): List<HuntingRule> = listOf(
+        HuntingRule(
+            id = RULE_SUPPRESSOR,
+            title = "Sound moderator / silencer",
+            answer = RuleAnswer.PROHIBITED,
+            notes = "Law 157/1992, article 21(1)(u), text in force on Normattiva read on 9 November 2026: " +
+                "it is forbidden for anyone to use firearms fitted with a silencer. " +
+                "The same letter also forbids shot on ungulates and several other means. " +
+                "Article 13(5) forbids every hunting weapon and means that article 13 does not explicitly allow. Silencers are not in that list.",
+            sourceTitle = "Legge 157/1992, articolo 21",
+            sourceUrl = "https://www.normattiva.it/atto/caricaDettaglioAtto?atto.articolo.numero=21&atto.codiceRedazionale=092G0211&atto.dataPubblicazioneGazzetta=1992-02-25",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_NIGHT,
+            title = "Night hunting",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "Articles 13 and 21, read on 9 November 2026, do not state a general night-hunting ban, so no yes or no is stored. " +
+                "Article 13(2-ter) does allow night-vision aiming devices, including digital ones, for selective wild-boar culling in the forms the law provides, " +
+                "except devices that are military materiel under Law 185/1990, article 2. That is an aiming-device rule, not a season.",
+            sourceTitle = "Legge 157/1992, articolo 13",
+            sourceUrl = "https://www.normattiva.it/atto/caricaDettaglioAtto?atto.articolo.numero=13&atto.codiceRedazionale=092G0211&atto.dataPubblicazioneGazzetta=1992-02-25",
+            lastVerified = "2026-11-09",
+        ),
+        HuntingRule(
+            id = RULE_ORANGE,
+            title = "Blaze orange / high-vis clothing",
+            answer = RuleAnswer.UNVERIFIED,
+            notes = "Articles 13 and 21, read on 9 November 2026, do not mention blaze-orange or high-vis clothing. No yes or no is stored.",
+            sourceTitle = "Legge 157/1992, articolo 21",
+            sourceUrl = "https://www.normattiva.it/atto/caricaDettaglioAtto?atto.articolo.numero=21&atto.codiceRedazionale=092G0211&atto.dataPubblicazioneGazzetta=1992-02-25",
+            lastVerified = null,
+        ),
+    )
 
     private fun ukRules(): List<HuntingRule> = listOf(
         HuntingRule(

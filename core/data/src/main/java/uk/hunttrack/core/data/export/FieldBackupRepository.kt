@@ -75,8 +75,11 @@ class FieldBackupRepository @Inject constructor(
         val decoded = FieldBackupCodec.materialize(backup, applyMedical)
         val idMap = linkedMapOf<Long, Long>()
         decoded.boundaries.forEach { area ->
-            val newId = permissionsRepository.saveBoundary(area.copy(id = 0))
+            val newId = permissionsRepository.saveBoundary(area.copy(id = 0, zones = emptyList()))
             if (area.id != 0L) idMap[area.id] = newId
+            area.zones.forEach { zone ->
+                permissionsRepository.saveZone(zone.copy(id = 0, boundaryId = newId))
+            }
         }
         decoded.permissions.forEach { permission ->
             val mapped = permission.boundaryAreaId?.let { old -> idMap[old] }

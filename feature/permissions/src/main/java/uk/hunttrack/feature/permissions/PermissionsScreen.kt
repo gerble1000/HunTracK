@@ -10,9 +10,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -64,6 +73,8 @@ import uk.hunttrack.core.designsystem.theme.HuntColors
 import uk.hunttrack.domain.geo.BoundaryMath
 import uk.hunttrack.domain.model.BoundaryArea
 import uk.hunttrack.domain.model.BoundaryCaptureMode
+import uk.hunttrack.domain.model.BoundaryZone
+import uk.hunttrack.domain.model.BoundaryZoneKind
 import uk.hunttrack.domain.model.BoundaryZoneType
 import uk.hunttrack.domain.model.displayLabel
 import uk.hunttrack.domain.model.displayName
@@ -104,6 +115,12 @@ fun PermissionsRoute(
         onCreateBoundary = viewModel::createSquareBoundary,
         onCreateBoundaryForPending = viewModel::createSquareBoundaryForPending,
         onDeleteBoundary = viewModel::deleteBoundary,
+        onDrawZone = { boundaryId, zoneId, name, notes, kind ->
+            viewModel.startZoneOnMap(boundaryId, zoneId, name, notes, kind)
+            onOpenMapForBoundary()
+        },
+        onSaveZoneDetails = viewModel::saveZoneDetails,
+        onDeleteZone = viewModel::deleteZone,
         onTogglePermissionSelection = viewModel::togglePermissionSelection,
         onSelectAllWithBoundaries = viewModel::selectAllWithBoundaries,
         onClearPermissionSelection = viewModel::clearPermissionSelection,
@@ -130,6 +147,9 @@ fun PermissionsScreen(
     onCreateBoundary: (name: String, zone: BoundaryZoneType, sizeMeters: Double) -> Unit,
     onCreateBoundaryForPending: (name: String, zone: BoundaryZoneType, sizeMeters: Double) -> Unit,
     onDeleteBoundary: (Long) -> Unit,
+    onDrawZone: (boundaryId: Long, zoneId: Long?, name: String, notes: String, kind: BoundaryZoneKind) -> Unit = { _, _, _, _, _ -> },
+    onSaveZoneDetails: (BoundaryZone) -> Unit = {},
+    onDeleteZone: (Long) -> Unit = {},
     onTogglePermissionSelection: (Long) -> Unit,
     onSelectAllWithBoundaries: () -> Unit,
     onClearPermissionSelection: () -> Unit,
@@ -147,6 +167,8 @@ fun PermissionsScreen(
     var notes by remember { mutableStateOf("") }
     var boundaryName by remember { mutableStateOf("") }
     var zone by remember { mutableStateOf(BoundaryZoneType.HUNTING) }
+    var zoneDraft by remember { mutableStateOf<ZoneDraft?>(null) }
+    var boundaryPendingDelete by remember { mutableStateOf<BoundaryArea?>(null) }
 
     var hadPendingLink by remember { mutableStateOf(false) }
     LaunchedEffect(state.pendingBoundaryLink) {
@@ -470,13 +492,123 @@ fun PermissionsScreen(
                         MetricRow("Perimeter", formatBoundaryPerimeter(BoundaryMath.perimeterMeters(b.points)))
                         MetricRow("Area", formatBoundaryArea(b.areaSqMeters))
                         if (b.notes.isNotBlank()) Text(b.notes, style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { onDeleteBoundary(b.id) }) { Text("Delete") }
+                        SectionLabel("Zones")
+                        if (b.zones.isEmpty()) {
+                            Text(
+                                "No zones on this boundary yet.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = HuntColors.Mist,
+                            )
+                        } else {
+                            b.zones.forEach { overlay ->
+                                ZoneRow(
+                                    zone = overlay,
+                                    onEdit = {
+                                        zoneDraft = ZoneDraft(
+                                            boundaryId = b.id,
+                                            zoneId = overlay.id,
+                                            mode = ZoneDraftMode.DRAW,
+                                            name = overlay.name,
+                                            notes = overlay.notes,
+                                            kind = overlay.kind,
+                                        )
+                                    },
+                                    onRename = {
+                                        zoneDraft = ZoneDraft(
+                                            boundaryId = b.id,
+                                            zoneId = overlay.id,
+                                            mode = ZoneDraftMode.RENAME,
+                                            name = overlay.name,
+                                            notes = overlay.notes,
+                                            kind = overlay.kind,
+                                        )
+                                    },
+                                    onDelete = { onDeleteZone(overlay.id) },
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                onClick = {
+                                    zoneDraft = ZoneDraft(
+                                        boundaryId = b.id,
+                                        zoneId = null,
+                                        mode = ZoneDraftMode.DRAW,
+                                        name = "",
+                                        notes = "",
+                                        kind = BoundaryZoneKind.DANGER,
+                                    )
+                                },
+                                modifier = Modifier.semantics { contentDescription = "Add zone" },
+                            ) { Text("Add zone") }
+                            TextButton(onClick = { boundaryPendingDelete = b }) { Text("Delete") }
+                        }
                     }
                 }
             }
         }
     }
+
+    boundaryPendingDelete?.let { boundary ->
+        val zoneCount = boundary.zones.size
+        AlertDialog(
+            onDismissRequest = { boundaryPendingDelete = null },
+            title = { Text("Delete boundary?") },
+            text = {
+                Text(
+                    if (zoneCount == 0) {
+                        "Delete ${boundary.name.ifBlank { "this boundary" }}? This cannot be undone."
+                    } else {
+                        "Delete ${boundary.name.ifBlank { "this boundary" }}? Its $zoneCount zone${if (zoneCount == 1) "" else "s"} will be deleted too."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteBoundary(boundary.id)
+                        boundaryPendingDelete = null
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { boundaryPendingDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    zoneDraft?.let { draft ->
+        ZoneEditorSheet(
+            draft = draft,
+            onDismiss = { zoneDraft = null },
+            onDraw = { name, notes, kind ->
+                onDrawZone(draft.boundaryId, draft.zoneId, name, notes, kind)
+                zoneDraft = null
+            },
+            onRename = { name, notes, kind ->
+                val existing = state.boundaries
+                    .firstOrNull { it.id == draft.boundaryId }
+                    ?.zones
+                    ?.firstOrNull { it.id == draft.zoneId }
+                if (existing != null) {
+                    onSaveZoneDetails(existing.copy(name = name.trim(), notes = notes.trim(), kind = kind))
+                }
+                zoneDraft = null
+            },
+        )
+    }
 }
+
+private enum class ZoneDraftMode { DRAW, RENAME }
+
+private data class ZoneDraft(
+    val boundaryId: Long,
+    val zoneId: Long?,
+    val mode: ZoneDraftMode,
+    val name: String,
+    val notes: String,
+    val kind: BoundaryZoneKind,
+)
 
 @Composable
 private fun PermissionBoundaryLinkSheet(
@@ -638,6 +770,137 @@ private fun LinkedBoundarySummary(boundary: BoundaryArea) {
 }
 
 private fun fmt(epoch: Long): String = SimpleDateFormat("dd MMM yyyy", Locale.UK).format(Date(epoch))
+
+@Composable
+private fun ZoneRow(
+    zone: BoundaryZone,
+    onEdit: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val accent = if (zone.kind == BoundaryZoneKind.DANGER) HuntColors.Danger else HuntColors.Bronze
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(HuntColors.ForestGreen.copy(alpha = 0.35f))
+            .padding(10.dp)
+            .semantics { contentDescription = "Zone ${zone.kind.displayName()} ${zone.label()}" },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(accent),
+            )
+            Text(zone.kind.displayName(), style = MaterialTheme.typography.titleSmall, color = accent)
+        }
+        Text(zone.label(), style = MaterialTheme.typography.bodyMedium, color = HuntColors.Cream)
+        if (zone.notes.isNotBlank()) {
+            Text(zone.notes, style = MaterialTheme.typography.bodySmall, color = HuntColors.Mist)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onEdit) { Text("Edit") }
+            TextButton(onClick = onRename) { Text("Rename") }
+            TextButton(onClick = onDelete) { Text("Delete") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ZoneEditorSheet(
+    draft: ZoneDraft,
+    onDismiss: () -> Unit,
+    onDraw: (name: String, notes: String, kind: BoundaryZoneKind) -> Unit,
+    onRename: (name: String, notes: String, kind: BoundaryZoneKind) -> Unit,
+) {
+    var name by remember(draft) { mutableStateOf(draft.name) }
+    var notes by remember(draft) { mutableStateOf(draft.notes) }
+    var kind by remember(draft) { mutableStateOf(draft.kind) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The map screen hides the navigation bar, so reported insets can be 0 while
+    // the home gesture still eats taps. Keep the draw button above that band.
+    val gestureBottom = WindowInsets.navigationBars
+        .union(WindowInsets.systemGestures)
+        .union(WindowInsets.ime)
+        .only(WindowInsetsSides.Bottom)
+        .asPaddingValues()
+        .calculateBottomPadding()
+        .coerceAtLeast(48.dp)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = HuntColors.ForestDeep,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(top = 4.dp, bottom = gestureBottom + 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                when {
+                    draft.mode == ZoneDraftMode.RENAME -> "Rename zone"
+                    draft.zoneId == null -> "Add zone"
+                    else -> "Edit zone"
+                },
+                style = MaterialTheme.typography.headlineSmall,
+                color = HuntColors.Cream,
+            )
+            Text(
+                "A zone sits on this boundary. The boundary outline and area stay the same, and the zone can extend past the edge.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = HuntColors.Mist,
+            )
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name (optional)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text("Notes (optional)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            BoundaryZoneKind.entries.forEach { option ->
+                val selected = kind == option
+                val accent = if (option == BoundaryZoneKind.DANGER) HuntColors.Danger else HuntColors.Bronze
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(if (selected) 2.dp else 1.dp, if (selected) accent else HuntColors.GlassBorder, RoundedCornerShape(12.dp))
+                        .clickable { kind = option }
+                        .padding(12.dp)
+                        .semantics { contentDescription = option.displayName() },
+                ) {
+                    Text(option.displayName(), color = if (selected) accent else HuntColors.Cream)
+                    Text(option.summary(), style = MaterialTheme.typography.bodySmall, color = HuntColors.Mist)
+                }
+            }
+            if (draft.mode == ZoneDraftMode.RENAME) {
+                Button(
+                    onClick = { onRename(name, notes, kind) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Save") }
+            } else {
+                Button(
+                    onClick = { onDraw(name, notes, kind) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = "Draw zone on map" },
+                ) { Text("Draw zone on map") }
+            }
+        }
+    }
+}
 
 @Composable
 private fun ZoneTypeOption(
