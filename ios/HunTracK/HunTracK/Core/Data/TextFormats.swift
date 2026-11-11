@@ -168,9 +168,9 @@ enum TextFormats {
         } else {
             for zone in zoneRows {
                 let title = zone.name.isEmpty ? kindLabel(zone.kind) : zone.name
-                let where = zone.boundaryName.isEmpty ? "boundary \(zone.boundaryId)" : zone.boundaryName
+                let boundaryLabel = zone.boundaryName.isEmpty ? "boundary \(zone.boundaryId)" : zone.boundaryName
                 let notes = zone.notes.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
-                var line = "\(title) — \(kindLabel(zone.kind)) — on \(where). \(zone.points.count) \(zone.points.count == 1 ? "corner." : "corners.")"
+                var line = "\(title) — \(kindLabel(zone.kind)) — on \(boundaryLabel). \(zone.points.count) \(zone.points.count == 1 ? "corner." : "corners.")"
                 if !notes.isEmpty { line += " \(notes)" }
                 pages.bullet(line)
             }
