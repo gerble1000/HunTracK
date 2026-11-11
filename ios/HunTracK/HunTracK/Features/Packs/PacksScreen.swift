@@ -115,13 +115,13 @@ public final class PackPurchaseStore: ObservableObject {
     private func startListening() {
         guard updates == nil else { return }
         updates = Task { [weak self] in
-            for await result in Transaction.updates {
+            for await result in StoreKit.Transaction.updates {
                 await self?.handle(result)
             }
         }
     }
 
-    private func handle(_ result: VerificationResult<Transaction>) async {
+    private func handle(_ result: VerificationResult<StoreKit.Transaction>) async {
         guard case .verified(let transaction) = result else {
             message = "A purchase could not be verified."
             return
@@ -132,12 +132,12 @@ public final class PackPurchaseStore: ObservableObject {
 
     private func currentOwnedProductIds() async -> Set<String> {
         var purchased: Set<String> = []
-        for await result in Transaction.currentEntitlements {
+        for await result in StoreKit.Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
                 purchased.insert(transaction.productID)
             }
         }
-        for await result in Transaction.unfinished {
+        for await result in StoreKit.Transaction.unfinished {
             if case .verified(let transaction) = result {
                 purchased.insert(transaction.productID)
                 await transaction.finish()
