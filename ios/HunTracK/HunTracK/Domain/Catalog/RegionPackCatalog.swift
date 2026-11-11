@@ -112,7 +112,11 @@ public struct SeasonPack: Codable, Identifiable {
 }
 
 public struct PackSpeciesSeason: Codable, Identifiable {
-    public var id: String { "\(speciesKey)-\(sexLabel)-\(regionLabel)" }
+    /// Includes the season window and notes so two open periods for one species
+    /// (Ireland's geese) stay distinct in the list.
+    public var id: String {
+        "\(speciesKey)|\(sexLabel)|\(regionLabel)|\(openFromMonthDay ?? "")|\(openToMonthDay ?? "")|\(notes)"
+    }
     public var speciesKey: String
     public var commonName: String
     public var scientificName: String
