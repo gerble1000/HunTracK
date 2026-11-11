@@ -22,8 +22,8 @@ android {
         applicationId = "uk.hunttrack.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.1.29"
+        versionCode = 32
+        versionName = "1.1.31"
         // Device test builds: -PhunttrackAbis=arm64-v8a -PhunttrackCompressNative=true
         // Default builds keep every ABI Gradle resolves, so this does not change Play.
         val hunttrackAbis = (project.findProperty("hunttrackAbis") as String?)

@@ -700,11 +700,11 @@ public struct ScreenBackground<Content: View>: View {
 /// displayed build tracks Info.plist instead of drifting from it.
 public enum AppVersion {
     public static var short: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.30"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.31"
     }
 
     public static var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "43"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "44"
     }
 
     public static var display: String {
