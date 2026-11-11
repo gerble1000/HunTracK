@@ -23,6 +23,7 @@ import uk.hunttrack.domain.model.FieldMarker
 import uk.hunttrack.domain.model.GpsFix
 import uk.hunttrack.domain.model.UserPreferences
 import uk.hunttrack.domain.model.WeatherSnapshot
+import uk.hunttrack.domain.scent.ScentPlumeGeometry
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -82,11 +83,11 @@ class WindViewModel @Inject constructor(
         var distanceM: Double? = null
 
         if (weather != null && marker != null && hunter != null) {
+            val eval = evaluateMarkerScent(weather, hunter, marker.latitude, marker.longitude)
             scentBearing = (weather.windDirectionDeg + 180.0) % 360.0
-            bearingToTarget = bearing(hunter.latitude, hunter.longitude, marker.latitude, marker.longitude)
-            distanceM = haversine(hunter.latitude, hunter.longitude, marker.latitude, marker.longitude)
-            val delta = angularDiff(scentBearing!!, bearingToTarget!!)
-            scentRisk = if (delta < 40.0) ScentRisk.RISK else ScentRisk.CLEAR
+            bearingToTarget = eval.bearingDeg
+            distanceM = eval.distanceM
+            scentRisk = eval.risk
         }
 
         WindUiState(
@@ -150,30 +151,63 @@ class WindViewModel @Inject constructor(
         }
     }
 
-    private fun bearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val dLon = Math.toRadians(lon2 - lon1)
-        val y = sin(dLon) * cos(Math.toRadians(lat2))
-        val x = cos(Math.toRadians(lat1)) * sin(Math.toRadians(lat2)) -
-            sin(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * cos(dLon)
-        return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
-    }
-
-    private fun angularDiff(a: Double, b: Double): Double {
-        val d = kotlin.math.abs(a - b) % 360.0
-        return if (d > 180) 360 - d else d
-    }
-
-    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val r = 6371000.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-            sin(dLon / 2) * sin(dLon / 2)
-        return 2 * r * atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-    }
-
     companion object {
         private const val WEATHER_POLL_MS = 5 * 60_000L
     }
+}
+
+internal data class MarkerScentEval(
+    val risk: ScentRisk,
+    val distanceM: Double?,
+    val bearingDeg: Double?,
+)
+
+/** Same cone-and-distance check the iOS Wind & Scent screen uses for each marker. */
+internal fun evaluateMarkerScent(
+    weather: WeatherSnapshot?,
+    hunter: GpsFix?,
+    latitude: Double,
+    longitude: Double,
+): MarkerScentEval {
+    if (weather == null || hunter == null) {
+        return MarkerScentEval(ScentRisk.UNKNOWN, null, null)
+    }
+    val downwind = (weather.windDirectionDeg + 180.0) % 360.0
+    val bearing = bearingDegrees(hunter.latitude, hunter.longitude, latitude, longitude)
+    val distance = haversineMeters(hunter.latitude, hunter.longitude, latitude, longitude)
+    val plume = ScentPlumeGeometry.forConditions(
+        weather.windSpeedKmh,
+        weather.windGustKmh,
+        weather.humidityPercent,
+        weather.temperatureC,
+    )
+    val risk = if (ScentPlumeGeometry.reachesTarget(angularDifference(downwind, bearing), distance, plume)) {
+        ScentRisk.RISK
+    } else {
+        ScentRisk.CLEAR
+    }
+    return MarkerScentEval(risk, distance, bearing)
+}
+
+private fun bearingDegrees(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val dLon = Math.toRadians(lon2 - lon1)
+    val y = sin(dLon) * cos(Math.toRadians(lat2))
+    val x = cos(Math.toRadians(lat1)) * sin(Math.toRadians(lat2)) -
+        sin(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * cos(dLon)
+    return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
+}
+
+private fun angularDifference(a: Double, b: Double): Double {
+    val d = kotlin.math.abs(a - b) % 360.0
+    return if (d > 180) 360 - d else d
+}
+
+private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+        sin(dLon / 2) * sin(dLon / 2)
+    return 2 * r * atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
 }

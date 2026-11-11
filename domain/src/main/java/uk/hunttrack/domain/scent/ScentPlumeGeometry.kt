@@ -154,6 +154,17 @@ object ScentPlumeGeometry {
         return distanceM * tan(Math.toRadians(halfAngleDeg))
     }
 
+    /**
+     * True when a marker sits inside the downwind cone.
+     * Same rule as iOS Wind & Scent: within the wider of 35° or the full plume angle,
+     * and no farther than 1.2× the modelled length.
+     */
+    fun reachesTarget(angularSeparationDeg: Double, distanceM: Double, plume: Plume): Boolean {
+        val riskThreshold = maxOf(35.0, plume.halfAngleDeg * 2.0)
+        val reach = plume.lengthM * 1.2
+        return angularSeparationDeg <= riskThreshold && distanceM <= reach
+    }
+
     /** Into-wind approach standoff ≈ 85% of detection length for current conditions. */
     fun approachStandoffM(
         speedKmh: Double?,
