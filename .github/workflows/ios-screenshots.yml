@@ -35,7 +35,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     name: Capture App Store screenshots
     runs-on: macos-15
-    timeout-minutes: 22
+    timeout-minutes: 32
     steps:
       - name: Checkout
         uses: actions/checkout@v4

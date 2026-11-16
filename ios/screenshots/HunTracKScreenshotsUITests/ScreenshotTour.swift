@@ -28,7 +28,7 @@ final class ScreenshotTour: XCTestCase {
         waitForText("IN CASE OF EMERGENCY", timeout: 8)
         // Weather is fetched from Open-Meteo. Keep going if the network is slow;
         // astronomy and the conditions panel are already on screen.
-        _ = waitForTextOptional("Temperature", timeout: 18)
+        _ = waitForTextOptional("Temperature", timeout: 30)
         shot("01-home", settle: 1.2)
 
         tapTab("Map")

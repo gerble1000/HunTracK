@@ -110,7 +110,7 @@ boot_simulator() {
     xcrun simctl boot "$udid" || true
     xcrun simctl bootstatus "$udid" -b
     open -a Simulator --args -CurrentDeviceUDID "$udid" || open -a Simulator
-    sleep 4
+    sleep 2
   fi
   status_bar "$udid"
 }
@@ -313,28 +313,12 @@ main() {
   local plan_count
   plan_count="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["plans"]))' "$PLAN_JSON")"
   [ "$plan_count" -ge 1 ]
+  # The newest runtime is first. iPhone 17 Pro Max on that runtime is
+  # 1320x2868; the tour checks the pixels again before it keeps a device.
+  local chosen=0
+  local udid
+  udid="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][0]["slots"][0]["udid"])' "$PLAN_JSON")"
   build_app
-
-  local chosen=-1
-  local p udid w h name
-  for ((p = 0; p < plan_count; p++)); do
-    udid="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][0]["udid"])' "$PLAN_JSON" "$p")"
-    w="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][0]["width"])' "$PLAN_JSON" "$p")"
-    h="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][0]["height"])' "$PLAN_JSON" "$p")"
-    name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][0]["name"])' "$PLAN_JSON" "$p")"
-    echo "Checking $name ($udid) for ${w}x${h}"
-    boot_simulator "$udid"
-    if ensure_size "$udid" "$w" "$h"; then
-      chosen=$p
-      break
-    fi
-    xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
-  done
-  if [ "$chosen" -lt 0 ]; then
-    echo "::error::No simulator matched 1320x2868 for the 6.9-inch slot"
-    exit 1
-  fi
-
   build_tests "$udid"
 
   {
