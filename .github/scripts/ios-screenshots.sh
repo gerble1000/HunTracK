@@ -28,7 +28,6 @@ select_xcode() {
     sudo xcode-select -s "$chosen/Contents/Developer"
   fi
   xcodebuild -version
-  xcrun simctl help status_bar >/dev/null
 }
 
 build_app() {
@@ -36,9 +35,10 @@ build_app() {
   rm -rf "$APP_DD"
   xcodebuild \
     -project ios/HunTracK/HunTracK.xcodeproj \
-    -target HunTracK \
+    -scheme HunTracK \
     -configuration Debug \
     -sdk iphonesimulator \
+    -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "$APP_DD" \
     ARCHS=arm64 \
     ONLY_ACTIVE_ARCH=YES \
