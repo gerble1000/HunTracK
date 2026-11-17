@@ -47,6 +47,7 @@
 		A30000042D00000100000001 /* PacksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000042D00000100000001 /* PacksScreen.swift */; };
 		A30000052D00000100000001 /* YourDataScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000052D00000100000001 /* YourDataScreen.swift */; };
 		A30000062D00000100000001 /* TextFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062D00000100000001 /* TextFormats.swift */; };
+		A40000012D00000100000001 /* AudioPackDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000012D00000100000001 /* AudioPackDownload.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +93,7 @@
 		B30000042D00000100000001 /* PacksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Packs/PacksScreen.swift; sourceTree = "<group>"; };
 		B30000052D00000100000001 /* YourDataScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/YourDataScreen.swift; sourceTree = "<group>"; };
 		B30000062D00000100000001 /* TextFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/TextFormats.swift; sourceTree = "<group>"; };
+		B40000012D00000100000001 /* AudioPackDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calls/AudioPackDownload.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -160,6 +162,7 @@
 				B30000032D00000100000001 /* RegionPackCatalog.swift */,
 				B30000042D00000100000001 /* PacksScreen.swift */,
 				B30000052D00000100000001 /* YourDataScreen.swift */,
+				B40000012D00000100000001 /* AudioPackDownload.swift */,
 				D10000032D00000100000001 /* Resources */,
 			);
 			path = HunTracK;
@@ -285,6 +288,7 @@
 				A30000032D00000100000001 /* RegionPackCatalog.swift in Sources */,
 				A30000042D00000100000001 /* PacksScreen.swift in Sources */,
 				A30000052D00000100000001 /* YourDataScreen.swift in Sources */,
+				A40000012D00000100000001 /* AudioPackDownload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -302,7 +306,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -351,7 +355,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

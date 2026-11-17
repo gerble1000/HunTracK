@@ -938,8 +938,8 @@ public enum UkFieldCatalog {
             tracks: [
                 AudioPackTrack(callId: "roe_growl", fileName: "roe_growl.mp3", remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c8/Male_roe_deer_growl.ogg/Male_roe_deer_growl.ogg.mp3")
             ],
-            downloaded: true,
-            downloadProgress: 1.0
+            downloaded: false,
+            downloadProgress: 0
         ),
         AudioPack(
             id: "uk_fox_pack",
@@ -950,8 +950,8 @@ public enum UkFieldCatalog {
             tracks: [
                 AudioPackTrack(callId: "fox_field", fileName: "fox_field.mp3", remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/transcoded/7/79/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg/Red_Fox_%28Vulpes_vulpes%29_%28W1CDR0001529_BD12%29.ogg.mp3")
             ],
-            downloaded: true,
-            downloadProgress: 1.0
+            downloaded: false,
+            downloadProgress: 0
         ),
         AudioPack(
             id: "uk_wildfowl_pack",
@@ -965,8 +965,8 @@ public enum UkFieldCatalog {
                 AudioPackTrack(callId: "mallard_xc2", fileName: "mallard_112828.mp3", remoteUrl: "https://xeno-canto.org/112828/download"),
                 AudioPackTrack(callId: "goose_hail", fileName: "canada_goose.mp3", remoteUrl: "https://upload.wikimedia.org/wikipedia/commons/a/a7/Branta_canadensis_-_Canada_Goose_XC62259.mp3")
             ],
-            downloaded: true,
-            downloadProgress: 1.0
+            downloaded: false,
+            downloadProgress: 0
         ),
         AudioPack(
             id: "uk_woodland_pack",
@@ -979,8 +979,8 @@ public enum UkFieldCatalog {
                 AudioPackTrack(callId: "owl_barn", fileName: "barn_owl.mp3", remoteUrl: "https://bigsoundbank.com/UPLOAD/mp3/1400.mp3"),
                 AudioPackTrack(callId: "owl_tawny", fileName: "tawny_owls.mp3", remoteUrl: "https://bigsoundbank.com/UPLOAD/mp3/0429.mp3")
             ],
-            downloaded: true,
-            downloadProgress: 1.0
+            downloaded: false,
+            downloadProgress: 0
         )
     ]
     

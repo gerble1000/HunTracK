@@ -15,6 +15,11 @@ final class CallAudioPlayer: NSObject, ObservableObject {
     private var player: AVPlayer?
     private var notifications: [NSObjectProtocol] = []
     private var observations: [NSKeyValueObservation] = []
+    /// Remote URL to try if the local copy fails to play.
+    private var streamingFallback: String?
+    private var playingLocalFile = false
+    /// Ignores a failure callback from a player that has already been replaced.
+    private var playbackGeneration = 0
 
     private override init() {
         super.init()
@@ -35,8 +40,22 @@ final class CallAudioPlayer: NSObject, ObservableObject {
     }
 
     func play(callId: String, urlString: String) {
+        streamingFallback = nil
+        playingLocalFile = false
+        if let local = AudioPackFiles.existingFile(forRemoteURL: urlString) {
+            streamingFallback = urlString
+            playingLocalFile = true
+            begin(callId: callId, urlString: local.path)
+        } else {
+            begin(callId: callId, urlString: urlString)
+        }
+    }
+
+    private func begin(callId: String, urlString: String) {
         errorMessage = nil
         teardown()
+        playbackGeneration += 1
+        let generation = playbackGeneration
 
         // Accept http(s) streams as well as on-device recordings, which arrive
         // as bare filesystem paths from the recorder and the file importer.
@@ -66,7 +85,7 @@ final class CallAudioPlayer: NSObject, ObservableObject {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            guard let self = self else { return }
+            guard let self = self, self.playbackGeneration == generation else { return }
             if self.loopEnabled {
                 self.player?.seek(to: .zero)
                 self.player?.play()
@@ -81,7 +100,7 @@ final class CallAudioPlayer: NSObject, ObservableObject {
             object: item,
             queue: .main
         ) { [weak self] note in
-            guard let self = self else { return }
+            guard let self = self, self.playbackGeneration == generation else { return }
             let error = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
             self.fail(with: error?.localizedDescription)
         }
@@ -90,7 +109,8 @@ final class CallAudioPlayer: NSObject, ObservableObject {
         let statusObservation = item.observe(\.status, options: [.new]) { [weak self] observed, _ in
             guard observed.status == .failed else { return }
             DispatchQueue.main.async {
-                self?.fail(with: observed.error?.localizedDescription)
+                guard let self = self, self.playbackGeneration == generation else { return }
+                self.fail(with: observed.error?.localizedDescription)
             }
         }
         observations.append(statusObservation)
@@ -112,6 +132,14 @@ final class CallAudioPlayer: NSObject, ObservableObject {
     }
 
     private func fail(with message: String?) {
+        let fallback = playingLocalFile ? streamingFallback : nil
+        let callId = currentCallId
+        playingLocalFile = false
+        streamingFallback = nil
+        if let remote = fallback, let id = callId {
+            begin(callId: id, urlString: remote)
+            return
+        }
         errorMessage = message ?? "This recording could not be played on iOS."
         teardown()
     }
@@ -231,6 +259,7 @@ public struct CallsScreen: View {
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var player = CallAudioPlayer.shared
     @ObservedObject private var recorder = CallRecorder.shared
+    @ObservedObject private var downloads = AudioPackDownloader.shared
 
     @State private var selectedTab: CallsTab = .library
     @State private var logTarget: AnimalCall?
@@ -295,6 +324,7 @@ public struct CallsScreen: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { downloads.reconcileStoredPacks() }
         .onDisappear { player.release() }
         .sheet(item: $logTarget) { call in
             CallLogSheet(call: call)
@@ -687,20 +717,38 @@ public struct CallsScreen: View {
                             .font(.field(size: 12))
                             .foregroundColor(theme.palette.mist)
 
-                        if pack.downloaded {
+                        if downloads.activePackId == pack.id {
+                            ProgressView(value: downloads.fraction)
+                                .tint(theme.palette.bronze)
+                            Text(downloads.detail)
+                                .font(.field(size: 12, weight: .semibold))
+                                .foregroundColor(theme.palette.gold)
+                                .padding(.top, 4)
+                        } else if pack.downloaded {
                             Text("Downloaded · Ready offline")
                                 .font(.field(size: 12, weight: .semibold))
                                 .foregroundColor(theme.palette.success)
                                 .padding(.top, 4)
-                        } else {
-                            HuntButton("Download audio pack", icon: "arrow.down.circle") {
-                                var updated = pack
-                                updated.downloaded = true
-                                updated.downloadProgress = 1.0
-                                db.updateAudioPack(updated)
-                                SoundManager.shared.play(.success)
+                            HuntButton("Remove download", icon: "trash") {
+                                downloads.remove(pack)
                             }
                             .padding(.top, 4)
+                        } else {
+                            if let message = downloads.errors[pack.id] {
+                                Text(message)
+                                    .font(.field(size: 12))
+                                    .foregroundColor(theme.palette.danger)
+                                    .padding(.top, 4)
+                                HuntButton("Retry", icon: "arrow.clockwise") {
+                                    Task { await downloads.download(pack) }
+                                }
+                                .padding(.top, 4)
+                            } else {
+                                HuntButton("Download audio pack", icon: "arrow.down.circle") {
+                                    Task { await downloads.download(pack) }
+                                }
+                                .padding(.top, 4)
+                            }
                         }
                     }
                 }
