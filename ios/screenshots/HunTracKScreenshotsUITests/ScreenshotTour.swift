@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Drives the installed HunTracK app through its real screens.
@@ -58,6 +59,18 @@ final class ScreenshotTour: XCTestCase {
         tapRow("Red deer")
         waitForText("Cervus elaphus", timeout: 12)
         shot("05-red-deer", settle: 1.5)
+
+        // The IAP review shot is the iPhone 6.9" Packs screen. iPad keeps the
+        // six feature screens and does not need this extra page.
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            goBack()
+            waitForText("UK Species", timeout: 8)
+            goBack()
+            waitForText("Tap any row to open", timeout: 8)
+            tapRow("Packs")
+            waitForText("Restore purchases", timeout: 15)
+            shot("07-packs", settle: 2.0)
+        }
     }
 
     private func shot(_ name: String, settle: TimeInterval) {
@@ -90,14 +103,24 @@ final class ScreenshotTour: XCTestCase {
     }
 
     private func tapTab(_ name: String) {
-        let tab = app.tabBars.buttons[name]
-        if tab.waitForExistence(timeout: 6) {
+        // iPad can expose the same tab label more than once. A unique
+        // XCUIElement query throws in that case, so always take firstMatch.
+        let exact = NSPredicate(format: "label == %@", name)
+        let tab = app.tabBars.buttons.matching(exact).firstMatch
+        if tab.waitForExistence(timeout: 4) {
             tapHittable(tab, label: name)
             return
         }
-        let button = app.buttons[name]
-        if button.waitForExistence(timeout: 4) {
-            tapHittable(button, label: name)
+        let matches = app.buttons.matching(exact)
+        if matches.firstMatch.waitForExistence(timeout: 4) {
+            for index in 0..<matches.count {
+                let candidate = matches.element(boundBy: index)
+                if candidate.isHittable {
+                    candidate.tap()
+                    return
+                }
+            }
+            tapHittable(matches.firstMatch, label: name)
             return
         }
         failWithHierarchy("Tab \(name) was not on screen")
@@ -130,13 +153,14 @@ final class ScreenshotTour: XCTestCase {
     }
 
     private func goBack() {
-        let back = app.navigationBars.buttons["Back"]
+        let back = app.navigationBars.buttons.matching(NSPredicate(format: "label == %@", "Back")).firstMatch
         if back.waitForExistence(timeout: 3) {
             back.tap()
             return
         }
-        if app.buttons["Back"].exists {
-            app.buttons["Back"].tap()
+        let anyBack = app.buttons.matching(NSPredicate(format: "label == %@", "Back")).firstMatch
+        if anyBack.waitForExistence(timeout: 2) {
+            anyBack.tap()
             return
         }
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))

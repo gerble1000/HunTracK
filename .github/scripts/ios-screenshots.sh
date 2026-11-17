@@ -213,6 +213,7 @@ caption_for() {
     04-species) echo "UK species list and legal seasons" ;;
     05-red-deer) echo "Red deer identification and open seasons" ;;
     06-wind) echo "Wind direction and downwind scent plume" ;;
+    07-packs) echo "More, Packs: country pack purchase screen for IAP review" ;;
     *) echo "App screen" ;;
   esac
 }
@@ -221,6 +222,9 @@ flatten_and_record() {
   local folder="$1" device_name="$2" udid="$3" expect_w="$4" expect_h="$5"
   local dir="$SHOTS/$folder"
   local names=(01-home 02-map 03-weather 04-species 05-red-deer 06-wind)
+  if [ "$folder" = "iphone-6.9" ]; then
+    names+=(07-packs)
+  fi
   local name src tmp info
   {
     echo
@@ -337,6 +341,10 @@ main() {
     folder="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][int(sys.argv[3])]["folder"])' "$PLAN_JSON" "$chosen" "$s")"
     device_w="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][int(sys.argv[3])]["width"])' "$PLAN_JSON" "$chosen" "$s")"
     device_h="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plans"][int(sys.argv[2])]["slots"][int(sys.argv[3])]["height"])' "$PLAN_JSON" "$chosen" "$s")"
+    if [ "$folder" != "iphone-6.9" ] && [ "$folder" != "ipad-13" ]; then
+      echo "Skipping $folder"
+      continue
+    fi
     echo "==== $folder on $device_name ===="
     if ! run_slot "$device_udid" "$folder" "$device_name" "$device_w" "$device_h"; then
       failed=1
