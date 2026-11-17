@@ -12,14 +12,15 @@ final class AudioPackDownloader: ObservableObject {
     @Published private(set) var detail: String = ""
     @Published private(set) var errors: [String: String] = [:]
 
-    private let session: URLSession
+    private let sessionConfiguration: URLSessionConfiguration
+    private let gate = DownloadGate()
     private var cancelRequested = false
 
     private init() {
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
-        session = URLSession(configuration: configuration)
+        sessionConfiguration = configuration
     }
 
     func reconcileStoredPacks() {
@@ -80,9 +81,7 @@ final class AudioPackDownloader: ObservableObject {
     func remove(_ pack: AudioPack) {
         if activePackId == pack.id {
             cancelRequested = true
-            session.getAllTasks { tasks in
-                tasks.forEach { $0.cancel() }
-            }
+            gate.cancel()
         }
         AudioPackFiles.deletePack(pack.id)
         store(pack, downloaded: false, progress: 0)
@@ -94,38 +93,19 @@ final class AudioPackDownloader: ObservableObject {
     }
 
     private func fetch(_ remote: URL, to destination: URL, index: Int, total: Int) async throws {
-        let progress = TrackByteProgress { [weak self] written, expected in
-            Task { @MainActor in
-                self?.note(written: written, expected: expected, index: index, total: total)
-            }
-        }
         note(written: 0, expected: -1, index: index, total: total)
-        let (temporary, response) = try await session.download(from: remote, delegate: progress)
+        try await OneTrackDownload.fetch(
+            remote,
+            to: destination,
+            sessionConfiguration: sessionConfiguration,
+            gate: gate,
+            onBytes: { [weak self] written, expected in
+                Task { @MainActor in
+                    self?.note(written: written, expected: expected, index: index, total: total)
+                }
+            }
+        )
         if cancelRequested { throw AudioPackDownloadError.cancelled }
-        guard let http = response as? HTTPURLResponse else {
-            throw AudioPackDownloadError.badStatus(0, remote.host ?? remote.absoluteString)
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw AudioPackDownloadError.badStatus(http.statusCode, remote.host ?? remote.absoluteString)
-        }
-        if let type = http.value(forHTTPHeaderField: "Content-Type")?.lowercased(), type.contains("text/html") {
-            throw AudioPackDownloadError.notAudio(remote.host ?? remote.absoluteString)
-        }
-        let folder = destination.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        AudioPackFiles.excludeFromBackup(folder)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        do {
-            try FileManager.default.moveItem(at: temporary, to: destination)
-        } catch {
-            try FileManager.default.copyItem(at: temporary, to: destination)
-            try? FileManager.default.removeItem(at: temporary)
-        }
-        AudioPackFiles.excludeFromBackup(destination)
-        let size = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size > 0 else { throw AudioPackDownloadError.emptyFile(destination.lastPathComponent) }
     }
 
     private func note(written: Int64, expected: Int64, index: Int, total: Int) {
@@ -266,11 +246,42 @@ enum AudioPackFiles {
     }
 }
 
-private final class TrackByteProgress: NSObject, URLSessionDownloadDelegate {
-    private let onBytes: @Sendable (Int64, Int64) -> Void
+/// Owns one download task. `didFinishDownloadingTo` is required, and the
+/// temporary file is gone when that method returns, so the move happens there.
+private final class DownloadGate: @unchecked Sendable {
+    var session: URLSession?
+    func cancel() {
+        session?.invalidateAndCancel()
+    }
+}
 
-    init(onBytes: @escaping @Sendable (Int64, Int64) -> Void) {
+private final class OneTrackDownload: NSObject, URLSessionDownloadDelegate {
+    private let destination: URL
+    private let onBytes: @Sendable (Int64, Int64) -> Void
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var resumed = false
+    private var session: URLSession?
+
+    init(destination: URL, onBytes: @escaping @Sendable (Int64, Int64) -> Void) {
+        self.destination = destination
         self.onBytes = onBytes
+    }
+
+    static func fetch(
+        _ remote: URL,
+        to destination: URL,
+        sessionConfiguration: URLSessionConfiguration,
+        gate: DownloadGate,
+        onBytes: @escaping @Sendable (Int64, Int64) -> Void
+    ) async throws {
+        let downloader = OneTrackDownload(destination: destination, onBytes: onBytes)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            downloader.continuation = continuation
+            let session = URLSession(configuration: sessionConfiguration, delegate: downloader, delegateQueue: nil)
+            downloader.session = session
+            gate.session = session
+            session.downloadTask(with: remote).resume()
+        }
     }
 
     func urlSession(
@@ -281,5 +292,54 @@ private final class TrackByteProgress: NSObject, URLSessionDownloadDelegate {
         totalBytesExpectedToWrite: Int64
     ) {
         onBytes(totalBytesWritten, totalBytesExpectedToWrite)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        do {
+            if let http = downloadTask.response as? HTTPURLResponse {
+                let host = downloadTask.originalRequest?.url?.host ?? "The server"
+                guard (200..<300).contains(http.statusCode) else {
+                    throw AudioPackDownloadError.badStatus(http.statusCode, host)
+                }
+                if let type = http.value(forHTTPHeaderField: "Content-Type")?.lowercased(), type.contains("text/html") {
+                    throw AudioPackDownloadError.notAudio(host)
+                }
+            }
+            let folder = destination.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            AudioPackFiles.excludeFromBackup(folder)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: location, to: destination)
+            AudioPackFiles.excludeFromBackup(destination)
+            let size = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            guard size > 0 else { throw AudioPackDownloadError.emptyFile(destination.lastPathComponent) }
+            finish(nil)
+        } catch {
+            finish(error)
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(error)
+        }
+        session.finishTasksAndInvalidate()
+    }
+
+    private func finish(_ error: Error?) {
+        guard !resumed else { return }
+        resumed = true
+        if let error {
+            continuation?.resume(throwing: error)
+        } else {
+            continuation?.resume()
+        }
+        continuation = nil
     }
 }
