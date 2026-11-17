@@ -137,7 +137,23 @@ public struct PermissionsScreen: View {
                             db.focusMap(onBoundary: boundary.id)
                             NotificationCenter.default.post(name: .openMapTab, object: nil)
                         },
-                        onDelete: { db.deleteBoundary(id: boundary.id) }
+                        onDelete: { db.deleteBoundary(id: boundary.id) },
+                        onAddPermission: {
+                            editorDraft = HuntingPermission(
+                                label: "",
+                                farmName: "",
+                                permissionType: "Written permission",
+                                species: "",
+                                validFromEpochMs: PermissionFormatting.todayEpochMs(),
+                                validToEpochMs: PermissionFormatting.oneYearFromTodayEpochMs(),
+                                ownerName: "",
+                                ownerContact: "",
+                                notes: "",
+                                docType: .note,
+                                attachmentUri: nil,
+                                boundaryAreaId: nil
+                            )
+                        }
                     )
                 }
             }
@@ -320,6 +336,7 @@ private struct BoundaryCard: View {
     let permissions: [HuntingPermission]
     let onShowMap: () -> Void
     let onDelete: () -> Void
+    let onAddPermission: () -> Void
 
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var db = DatabaseService.shared
@@ -393,7 +410,7 @@ private struct BoundaryCard: View {
             HStack(spacing: 12) {
                 Menu {
                     if permissions.isEmpty {
-                        Button("Add a permission first") {}
+                        Button("Add a permission first", action: onAddPermission)
                     } else {
                         ForEach(permissions) { permission in
                             let isLinked = permission.boundaryAreaId == boundary.id
