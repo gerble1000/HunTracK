@@ -698,6 +698,7 @@ public struct ScreenBackground<Content: View>: View {
 
 /// Single source of truth for the version shown in About and Settings, so the
 /// displayed build tracks Info.plist instead of drifting from it.
+/// The fallbacks below apply only when the bundle has no version keys.
 public enum AppVersion {
     public static var short: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.31"
