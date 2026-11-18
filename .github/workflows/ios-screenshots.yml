@@ -1,0 +1,52 @@
+name: iOS App Store screenshots
+
+# Simulator screenshots only. This workflow does not sign a distribution
+# build and does not upload anything to App Store Connect.
+#
+# workflow_dispatch is supported. GitHub's automation token cannot create
+# that event (403), so a push to this branch also starts the macOS job.
+# Pushes to main do not.
+on:
+  workflow_dispatch:
+  push:
+    branches: [cursor/ios-screenshots]
+  pull_request:
+    types: [opened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-appstore-screenshots
+  cancel-in-progress: true
+
+jobs:
+  register:
+    if: github.event_name == 'pull_request'
+    name: Register workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Register for workflow_dispatch
+        run: echo "ios-screenshots.yml can now be started with workflow_dispatch."
+
+  screenshots:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    name: Capture App Store screenshots
+    runs-on: macos-15
+    timeout-minutes: 32
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Capture screenshots
+        run: bash .github/scripts/ios-screenshots.sh
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: huntrack-iap-review
+          path: screenshots
+          if-no-files-found: ignore
