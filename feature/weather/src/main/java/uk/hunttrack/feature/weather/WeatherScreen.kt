@@ -152,8 +152,20 @@ fun WeatherScreen(
                         if (w == null) {
                             Text(state.error ?: "Loading…")
                         } else {
+                            val nowMs = System.currentTimeMillis()
+                            val currentIsDay = Daylight.isDay(
+                                apiIsDay = null,
+                                latitude = w.latitude,
+                                longitude = w.longitude,
+                                epochMs = nowMs,
+                            )
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                WeatherIcon(w.weatherCode, Modifier.size(56.dp))
+                                WeatherIcon(
+                                    w.weatherCode,
+                                    Modifier.size(56.dp),
+                                    isDay = currentIsDay,
+                                    epochMs = nowMs,
+                                )
                                 Column {
                                     Text(weatherCodeLabel(w.weatherCode), style = MaterialTheme.typography.titleLarge)
                                     val temp = if (state.prefs.useCelsius) "${w.temperatureC.format1()}°C" else "${(w.temperatureC * 9 / 5 + 32).format1()}°F"

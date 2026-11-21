@@ -58,10 +58,17 @@ public struct WeatherScreen: View {
         GlassPanel {
             SectionLabel("Current Conditions")
             if let w = weatherService.weather {
+                let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+                let sun = AstronomyCalculator.calculate(latitude: w.latitude, longitude: w.longitude, epochMs: nowMs)
+                let currentIsDay = nowMs >= sun.sunriseEpochMs && nowMs <= sun.sunsetEpochMs
                 HStack(spacing: 16) {
-                    Image(systemName: Self.weatherSymbol(w.weatherCode))
-                        .font(.field(size: 48))
-                        .foregroundColor(theme.palette.gold)
+                    if currentIsDay {
+                        Image(systemName: Self.weatherSymbol(w.weatherCode))
+                            .font(.field(size: 48))
+                            .foregroundColor(theme.palette.gold)
+                    } else {
+                        CurrentNightSkyIcon(code: w.weatherCode, epochMs: nowMs)
+                    }
                     VStack(alignment: .leading) {
                         Text(Self.weatherCodeLabel(w.weatherCode))
                             .font(.field(size: 16, weight: .semibold))
@@ -238,6 +245,33 @@ public struct WeatherScreen: View {
         let next = calendar.date(byAdding: .hour, value: 1, to: start) ?? start
         let nextMs = Int64(next.timeIntervalSince1970 * 1000)
         return Array(hours.filter { $0.epochMs >= nextMs }.prefix(24))
+    }
+}
+
+private struct CurrentNightSkyIcon: View {
+    let code: Int
+    let epochMs: Int64
+    @ObservedObject private var theme = ThemeManager.shared
+
+    var body: some View {
+        let phaseName = MoonPhase.name(at: Date(timeIntervalSince1970: Double(epochMs) / 1000))
+        ZStack {
+            Image(systemName: "sparkles")
+                .font(.field(size: 40))
+                .foregroundColor(theme.palette.cream.opacity(0.9))
+            if phaseName != .new {
+                Image(systemName: phaseName.symbolName)
+                    .font(.field(size: 36))
+                    .foregroundColor(theme.palette.cream)
+            }
+            if code == 1 || code == 2 || code == 3 {
+                Image(systemName: "cloud.fill")
+                    .font(.field(size: code == 3 ? 34 : 26))
+                    .foregroundColor(theme.palette.mist.opacity(code == 3 ? 0.92 : 0.78))
+                    .offset(x: 14, y: 10)
+            }
+        }
+        .frame(width: 56, height: 56)
     }
 }
 
