@@ -201,10 +201,7 @@ public struct WindScreen: View {
                             let eval = evaluateRisk(for: marker)
                             let isSelected = selectedMarkerId == marker.id
                             
-                            Button(action: {
-                                selectedMarkerId = isSelected ? nil : marker.id
-                            }) {
-                                GlassPanel(compact: true) {
+                            GlassPanel(compact: true) {
                                     VStack(alignment: .leading, spacing: 8) {
                                         HStack {
                                             VStack(alignment: .leading, spacing: 2) {
@@ -275,11 +272,27 @@ public struct WindScreen: View {
                                                     .font(.field(size: 12))
                                                     .foregroundColor(theme.palette.mist)
                                             }
+                                            if scentWeather != nil && eval.risk != .unknown {
+                                                Button("Show approach on map") {
+                                                    db.scentApproachMarkerId = marker.id
+                                                    NotificationCenter.default.post(name: .openMapTab, object: nil)
+                                                }
+                                                .font(.field(size: 14, weight: .semibold))
+                                                .foregroundColor(theme.palette.bronzeBright)
+                                            }
                                         }
                                     }
                                 }
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .onTapGesture {
+                                if isSelected {
+                                    selectedMarkerId = nil
+                                    db.scentApproachMarkerId = nil
+                                } else {
+                                    selectedMarkerId = marker.id
+                                    db.scentApproachMarkerId = marker.id
+                                }
+                            }
                         }
                     }
                 }

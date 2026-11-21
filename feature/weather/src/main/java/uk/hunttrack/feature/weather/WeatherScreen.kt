@@ -32,6 +32,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -48,9 +51,12 @@ import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
 import uk.hunttrack.core.designsystem.theme.HuntColors
+import uk.hunttrack.domain.astronomy.MoonPhase
 import uk.hunttrack.domain.model.DailyForecast
 import uk.hunttrack.domain.model.HourlyForecast
 import uk.hunttrack.domain.model.WindUnit
+import uk.hunttrack.domain.weather.Daylight
+import uk.hunttrack.domain.weather.HourlyForecastLabels
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -146,8 +152,20 @@ fun WeatherScreen(
                         if (w == null) {
                             Text(state.error ?: "Loading…")
                         } else {
+                            val nowMs = System.currentTimeMillis()
+                            val currentIsDay = Daylight.isDay(
+                                apiIsDay = null,
+                                latitude = w.latitude,
+                                longitude = w.longitude,
+                                epochMs = nowMs,
+                            )
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                WeatherIcon(w.weatherCode, Modifier.size(56.dp))
+                                WeatherIcon(
+                                    w.weatherCode,
+                                    Modifier.size(56.dp),
+                                    isDay = currentIsDay,
+                                    epochMs = nowMs,
+                                )
                                 Column {
                                     Text(weatherCodeLabel(w.weatherCode), style = MaterialTheme.typography.titleLarge)
                                     val temp = if (state.prefs.useCelsius) "${w.temperatureC.format1()}°C" else "${(w.temperatureC * 9 / 5 + 32).format1()}°F"
@@ -163,9 +181,19 @@ fun WeatherScreen(
 
                 item {
                     SectionLabel("Next 24 hours")
+                    val hours = HourlyForecastLabels.upcoming(
+                        state.weather?.hourly.orEmpty(),
+                        System.currentTimeMillis(),
+                    )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(state.weather?.hourly.orEmpty()) { hour ->
-                            HourCard(hour, state.prefs.useCelsius, state.prefs.windUnit)
+                        items(hours, key = { it.epochMs }) { hour ->
+                            HourCard(
+                                hour,
+                                state.prefs.useCelsius,
+                                state.prefs.windUnit,
+                                latitude = state.weather?.latitude ?: 0.0,
+                                longitude = state.weather?.longitude ?: 0.0,
+                            )
                         }
                     }
                 }
@@ -180,10 +208,25 @@ fun WeatherScreen(
 }
 
 @Composable
-private fun HourCard(hour: HourlyForecast, useCelsius: Boolean, windUnit: WindUnit) {
+private fun HourCard(
+    hour: HourlyForecast,
+    useCelsius: Boolean,
+    windUnit: WindUnit,
+    latitude: Double,
+    longitude: Double,
+) {
+    val isDay = Daylight.isDay(hour.isDay, latitude, longitude, hour.epochMs)
     GlassPanel(Modifier.padding(vertical = 4.dp)) {
-        Text(SimpleDateFormat("HH:mm", Locale.UK).format(Date(hour.epochMs)), style = MaterialTheme.typography.labelMedium)
-        WeatherIcon(hour.weatherCode, Modifier.size(28.dp).padding(vertical = 4.dp))
+        Text(
+            HourlyForecastLabels.offsetLabel(hour.epochMs, System.currentTimeMillis()),
+            style = MaterialTheme.typography.labelMedium,
+        )
+        WeatherIcon(
+            hour.weatherCode,
+            Modifier.size(28.dp).padding(vertical = 4.dp),
+            isDay = isDay,
+            epochMs = hour.epochMs,
+        )
         val temp = if (useCelsius) "${hour.temperatureC.toInt()}°" else "${(hour.temperatureC * 9 / 5 + 32).toInt()}°"
         Text(temp, style = MaterialTheme.typography.titleMedium)
         Text("${hour.rainProbabilityPercent}%", style = MaterialTheme.typography.bodySmall)
@@ -214,7 +257,12 @@ private fun DayCard(day: DailyForecast, useCelsius: Boolean, windUnit: WindUnit)
 }
 
 @Composable
-fun WeatherIcon(code: Int, modifier: Modifier = Modifier) {
+fun WeatherIcon(
+    code: Int,
+    modifier: Modifier = Modifier,
+    isDay: Boolean = true,
+    epochMs: Long = 0L,
+) {
     val transition = rememberInfiniteTransition(label = "wx")
     val t by transition.animateFloat(
         0f, 1f,
@@ -238,6 +286,27 @@ fun WeatherIcon(code: Int, modifier: Modifier = Modifier) {
             code in 45..48 -> {
                 drawCircle(HuntColors.Mist.copy(alpha = 0.4f + 0.3f * t), radius = size.minDimension * 0.4f)
             }
+            !isDay && code in 71..77 || !isDay && code in 85..86 -> {
+                repeat(4) { i ->
+                    val x = center.x - 8f + (i % 2) * 12f
+                    val y = center.y - 6f + (i / 2) * 12f
+                    drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
+                }
+            }
+            !isDay && (code == 0 || code in 1..3) -> {
+                drawStars()
+                val phase = MoonPhase.fraction(epochMs)
+                if (MoonPhase.nameOf(phase) != MoonPhase.Name.NEW) {
+                    drawPhasedMoon(phase, MoonPhase.illumination(epochMs))
+                }
+                if (code in 1..3) {
+                    drawCircle(
+                        HuntColors.Mist.copy(alpha = if (code == 3) 0.88f else 0.78f),
+                        radius = size.minDimension * if (code == 3) 0.28f else 0.18f,
+                        center = Offset(center.x + size.minDimension * 0.12f, center.y + size.minDimension * 0.08f),
+                    )
+                }
+            }
             else -> {
                 drawCircle(HuntColors.Gold, radius = size.minDimension * 0.22f)
                 repeat(6) { i ->
@@ -251,6 +320,53 @@ fun WeatherIcon(code: Int, modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStars() {
+    val span = size.minDimension
+    listOf(
+        -0.55f to -0.48f,
+        0.52f to -0.42f,
+        0.58f to 0.22f,
+        -0.48f to 0.50f,
+        0.08f to -0.62f,
+    ).forEachIndexed { index, (x, y) ->
+        drawCircle(
+            HuntColors.Cream,
+            radius = span * if (index == 0) 0.045f else 0.032f,
+            center = Offset(center.x + x * span * 0.48f, center.y + y * span * 0.48f),
+        )
+    }
+}
+
+/** Northern hemisphere: waxing is lit on the right. Phase 0 is new, 0.5 is full. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPhasedMoon(phase: Double, illumination: Double) {
+    val r = size.minDimension * 0.16f
+    val wrapped = ((phase % 1.0) + 1.0) % 1.0
+    val litRight = wrapped <= 0.5
+    val disc = Path().apply {
+        addOval(Rect(center.x - r, center.y - r, center.x + r, center.y + r))
+    }
+    // A straight terminator is readable on a chip a few millimetres wide.
+    // The dark fraction follows illumination, with a small floor so a gibbous
+    // does not collapse into a featureless disc.
+    val darkFraction = ((1.0 - illumination) * 1.35).coerceIn(0.12, 0.92)
+    val darkWidth = (darkFraction * 2.0 * r).toFloat()
+    clipPath(disc) {
+        if (litRight) {
+            drawRect(
+                HuntColors.Cream,
+                topLeft = Offset(center.x - r + darkWidth, center.y - r),
+                size = androidx.compose.ui.geometry.Size(2f * r - darkWidth, 2f * r),
+            )
+        } else {
+            drawRect(
+                HuntColors.Cream,
+                topLeft = Offset(center.x - r, center.y - r),
+                size = androidx.compose.ui.geometry.Size(2f * r - darkWidth, 2f * r),
+            )
         }
     }
 }

@@ -8,14 +8,17 @@ public struct HourlyForecast: Identifiable, Codable, Equatable {
     public let windDirectionDeg: Double
     public let rainProbabilityPercent: Int
     public let weatherCode: Int
-    
+    /// Open-Meteo `is_day` when present. Nil on older saved forecasts.
+    public let isDay: Bool?
+
     public init(
         epochMs: Int64,
         temperatureC: Double,
         windSpeedKmh: Double,
         windDirectionDeg: Double,
         rainProbabilityPercent: Int,
-        weatherCode: Int
+        weatherCode: Int,
+        isDay: Bool? = nil
     ) {
         self.epochMs = epochMs
         self.temperatureC = temperatureC
@@ -23,6 +26,7 @@ public struct HourlyForecast: Identifiable, Codable, Equatable {
         self.windDirectionDeg = windDirectionDeg
         self.rainProbabilityPercent = rainProbabilityPercent
         self.weatherCode = weatherCode
+        self.isDay = isDay
     }
 }
 

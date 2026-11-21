@@ -143,7 +143,7 @@ object FieldGuides {
         ),
         FieldGuideSection(
             title = "Approach into the wind",
-            body = "After you choose a marker, open Map. HunTracK draws an orange approach line from downwind of the spot toward it — walk that line so wind hits the front of you and your scent blows behind.",
+            body = "After you choose a marker, open Map. HunTracK lays footprints from downwind of the spot toward it — walk that trail so wind hits the front of you and your scent blows behind. Prints you have already walked past fade grey and stay visible, so you can see the way back.",
         ),
         FieldGuideSection(
             title = "Need markers first",
