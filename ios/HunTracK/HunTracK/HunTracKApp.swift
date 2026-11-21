@@ -93,7 +93,11 @@ struct ContentView: View {
             selectedTab = boundaryReturnTab
         }
         .onReceive(NotificationCenter.default.publisher(for: .openMapTab)) { _ in
-            selectedTab = 1
+            // Defer so a NavigationStack push on More cannot swallow the tab change
+            // that Focus on map posts from inside that push.
+            DispatchQueue.main.async {
+                selectedTab = 1
+            }
         }
     }
     

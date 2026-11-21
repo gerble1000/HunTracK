@@ -24,6 +24,17 @@ object MapLibreStyleSupport {
     const val ESRI_HILLSHADE_TILE_URL =
         "https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
 
+    /**
+     * Highest World Hillshade level that still returns real terrain for UK ground.
+     *
+     * The service advertises LODs through 23, but from zoom 17 it answers HTTP 200
+     * with a JPEG whose text is "Map data not yet available" (Wasdale, and the other
+     * UK land samples checked). That is not an offline-pack message. Capping the
+     * raster source here makes MapLibre overscale the last real tiles instead of
+     * painting those placeholders across the whole map.
+     */
+    const val ESRI_HILLSHADE_MAX_ZOOM = 16
+
     /** True when the device currently has a network with internet capability. */
     fun isNetworkAvailable(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
