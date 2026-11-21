@@ -335,7 +335,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStars() {
     ).forEachIndexed { index, (x, y) ->
         drawCircle(
             HuntColors.Cream,
-            radius = if (index == 0) 1.8f else 1.2f,
+            radius = span * if (index == 0) 0.045f else 0.032f,
             center = Offset(center.x + x * span * 0.48f, center.y + y * span * 0.48f),
         )
     }
