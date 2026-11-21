@@ -849,7 +849,7 @@ private struct EmergencyBeaconCover: View {
                     holdStarted = nil
                     guard elapsed < 2.9 else { return }
                     holding = false
-                    var transaction = Transaction()
+                    var transaction = SwiftUI.Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) { progress = 0 }
                 }

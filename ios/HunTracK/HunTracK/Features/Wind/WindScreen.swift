@@ -283,7 +283,6 @@ public struct WindScreen: View {
                                         }
                                     }
                                 }
-                            }
                             .onTapGesture {
                                 if isSelected {
                                     selectedMarkerId = nil
