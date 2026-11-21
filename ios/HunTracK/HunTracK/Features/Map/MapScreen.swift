@@ -27,11 +27,78 @@ private func mapUIColor(hex: String) -> UIColor {
 
 // MARK: - Annotation kinds
 
+private func footprintImage(bearingDegrees: Double, walked: Bool) -> UIImage {
+    let size = CGSize(width: 28, height: 36)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    let upright = renderer.image { _ in
+        let color = walked
+            ? UIColor(red: 0.639, green: 0.639, blue: 0.639, alpha: 1)
+            : UIColor(red: 1, green: 0.416, blue: 0, alpha: 1)
+        color.setFill()
+        UIBezierPath(ovalIn: CGRect(x: 8, y: 14, width: 12, height: 20)).fill()
+        for toe in [CGRect(x: 4, y: 6, width: 6, height: 7),
+                    CGRect(x: 10, y: 2, width: 7, height: 8),
+                    CGRect(x: 17, y: 5, width: 6, height: 7),
+                    CGRect(x: 21, y: 11, width: 5, height: 6)] {
+            UIBezierPath(ovalIn: toe).fill()
+        }
+    }
+    let radians = -CGFloat(bearingDegrees * .pi / 180)
+    let rotated = CGRect(origin: .zero, size: upright.size).applying(CGAffineTransform(rotationAngle: radians)).integral
+    let canvas = CGSize(width: abs(rotated.width), height: abs(rotated.height))
+    return UIGraphicsImageRenderer(size: canvas).image { ctx in
+        ctx.cgContext.translateBy(x: canvas.width / 2, y: canvas.height / 2)
+        ctx.cgContext.rotate(by: radians)
+        upright.draw(in: CGRect(x: -upright.size.width / 2, y: -upright.size.height / 2, width: upright.size.width, height: upright.size.height))
+    }
+}
+
+private struct ApproachFootprint: Equatable {
+    var latitude: Double
+    var longitude: Double
+    var bearing: Double
+    var walked: Bool
+}
+
+/// Same corridor and pass margin as Android `ApproachTrail`.
+private func approachPrintWalked(
+    printLat: Double,
+    printLng: Double,
+    startLat: Double,
+    startLng: Double,
+    endLat: Double,
+    endLng: Double,
+    userLat: Double?,
+    userLng: Double?
+) -> Bool {
+    guard let userLat, let userLng else { return false }
+    let corridorM = 45.0
+    let passMarginM = 10.0
+    func north(_ lat: Double, _ origin: Double) -> Double { (lat - origin) * 110_540.0 }
+    func east(_ lng: Double, _ originLng: Double, _ originLat: Double) -> Double {
+        (lng - originLng) * 111_320.0 * cos(originLat * .pi / 180)
+    }
+    let routeEast = east(endLng, startLng, startLat)
+    let routeNorth = north(endLat, startLat)
+    let routeLen = hypot(routeEast, routeNorth)
+    guard routeLen >= 12 else { return false }
+    let userEast = east(userLng, startLng, startLat)
+    let userNorth = north(userLat, startLat)
+    let along = (userEast * routeEast + userNorth * routeNorth) / routeLen
+    let cross = abs(userEast * routeNorth - userNorth * routeEast) / routeLen
+    guard cross <= corridorM, along >= passMarginM else { return false }
+    let printEast = east(printLng, startLng, startLat)
+    let printNorth = north(printLat, startLat)
+    let printAlong = (printEast * routeEast + printNorth * routeNorth) / routeLen
+    return along > printAlong + passMarginM
+}
+
 private enum MapPinKind: String {
     case fieldMarker
     case cull
     case homing
     case boundaryPoint
+    case approachFootprint
 }
 
 private final class HuntAnnotation: NSObject, MKAnnotation {
@@ -41,6 +108,10 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
     let kind: MapPinKind
     let recordId: Int64
     let tint: UIColor
+    /// Clockwise degrees from north. Used by approach footprints.
+    let bearingDegrees: Double
+    /// True once the hunter has walked past this print.
+    let walked: Bool
 
     init(
         coordinate: CLLocationCoordinate2D,
@@ -48,7 +119,9 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
         subtitle: String?,
         kind: MapPinKind,
         recordId: Int64,
-        tint: UIColor
+        tint: UIColor,
+        bearingDegrees: Double = 0,
+        walked: Bool = false
     ) {
         self.coordinate = coordinate
         self.title = title
@@ -56,6 +129,8 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
         self.kind = kind
         self.recordId = recordId
         self.tint = tint
+        self.bearingDegrees = bearingDegrees
+        self.walked = walked
     }
 }
 
@@ -90,6 +165,7 @@ private struct MapContentSnapshot: Equatable {
     var linkedBoundaryIds: [Int64] = []
     var zoneFingerprints: [String] = []
     var showTracks: Bool = true
+    var approachKey: String = ""
 }
 
 // MARK: - The UIKit map host
@@ -340,6 +416,7 @@ private struct MapViewHost: UIViewRepresentable {
     var showSmoke: Bool
     var showTracks: Bool
     var showScale: Bool
+    var approachFootprints: [ApproachFootprint]
     var northUpToken: Int
     var windFix: GpsFix?
     var windWeather: WeatherSnapshot?
@@ -467,7 +544,10 @@ private struct MapViewHost: UIViewRepresentable {
             zoneFingerprints: boundaries.flatMap { boundary in
                 boundary.zones.map { "\($0.id):\($0.kind.rawValue):\($0.name):\($0.points.count):\($0.notes)" }
             },
-            showTracks: showTracks
+            showTracks: showTracks,
+            approachKey: approachFootprints.map {
+                "\($0.latitude),\($0.longitude),\($0.bearing),\($0.walked)"
+            }.joined(separator: "|")
         )
 
         if coordinator.lastSnapshot != snapshot {
@@ -562,6 +642,23 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
                 kind: .fieldMarker,
                 recordId: marker.id,
                 tint: host.bronze
+            )
+            mapView.addAnnotation(annotation)
+            appliedAnnotations.append(annotation)
+        }
+
+        for (index, step) in host.approachFootprints.enumerated() {
+            let annotation = HuntAnnotation(
+                coordinate: CLLocationCoordinate2D(latitude: step.latitude, longitude: step.longitude),
+                title: nil,
+                subtitle: nil,
+                kind: .approachFootprint,
+                recordId: Int64(index),
+                tint: step.walked
+                    ? UIColor(red: 0.639, green: 0.639, blue: 0.639, alpha: 1)
+                    : UIColor(red: 1, green: 0.416, blue: 0, alpha: 1),
+                bearingDegrees: step.bearing,
+                walked: step.walked
             )
             mapView.addAnnotation(annotation)
             appliedAnnotations.append(annotation)
@@ -812,6 +909,17 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         }
         guard let hunt = annotation as? HuntAnnotation else { return nil }
 
+        if hunt.kind == .approachFootprint {
+            let identifier = "hunt-approach-footprint"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            view.annotation = annotation
+            view.image = footprintImage(bearingDegrees: hunt.bearingDegrees, walked: hunt.walked)
+            view.centerOffset = .zero
+            view.canShowCallout = false
+            return view
+        }
+
         let identifier = "hunt-\(hunt.kind.rawValue)"
         if hunt.kind == .fieldMarker || hunt.kind == .cull {
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
@@ -1027,6 +1135,7 @@ public struct MapScreen: View {
                     showSmoke: showSmoke,
                     showTracks: showTracks,
                     showScale: showScale,
+                    approachFootprints: scentApproachFootprints(),
                     northUpToken: northUpToken,
                     windFix: location.latestFix,
                     windWeather: weatherService.weather ?? db.cachedWeather,
@@ -1055,6 +1164,10 @@ public struct MapScreen: View {
             .overlay(alignment: .top) {
                 VStack(spacing: 6) {
                     topBar
+                    if let approach = activeScentApproach {
+                        approachBanner(approach)
+                            .padding(.horizontal, 14)
+                    }
                     if !db.permissionMapFocus.isEmpty {
                         focusBanner
                             .padding(.horizontal, 14)
@@ -1189,6 +1302,90 @@ public struct MapScreen: View {
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             if UIApplication.shared.applicationState == .active { refreshWindIfNeeded() }
         }
+    }
+
+    private struct ActiveApproach {
+        var name: String
+        var walkHeading: Double
+    }
+
+    private var activeScentApproach: ActiveApproach? {
+        guard let id = db.scentApproachMarkerId,
+              let marker = db.markers.first(where: { $0.id == id }),
+              let weather = weatherService.weather ?? db.cachedWeather else { return nil }
+        return ActiveApproach(name: marker.name, walkHeading: weather.windDirectionDeg)
+    }
+
+    private func scentApproachFootprints() -> [ApproachFootprint] {
+        guard let id = db.scentApproachMarkerId,
+              let marker = db.markers.first(where: { $0.id == id }),
+              let weather = weatherService.weather ?? db.cachedWeather else { return [] }
+        let plume = ScentPlumeGeometry.forConditions(
+            speedKmh: weather.windSpeedKmh,
+            gustKmh: weather.windGustKmh,
+            humidityPercent: weather.humidityPercent,
+            temperatureC: weather.temperatureC
+        )
+        var downwind = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
+        if downwind < 0 { downwind += 360 }
+        let start = offsetMeters(lat: marker.latitude, lon: marker.longitude, bearing: downwind, meters: plume.approachStandoffM)
+        let bearing = bearingDegrees(fromLat: start.lat, fromLon: start.lon, toLat: marker.latitude, toLon: marker.longitude)
+        let distance = DatabaseService.haversineMeters(start.lat, start.lon, marker.latitude, marker.longitude)
+        guard distance >= 12 else { return [] }
+        let steps = min(40, max(4, Int(distance / 20)))
+        let user = location.latestFix
+        return (0..<steps).map { index in
+            let t = Double(index) / Double(steps)
+            let lat = start.lat + (marker.latitude - start.lat) * t
+            let lon = start.lon + (marker.longitude - start.lon) * t
+            return ApproachFootprint(
+                latitude: lat,
+                longitude: lon,
+                bearing: bearing,
+                walked: approachPrintWalked(
+                    printLat: lat,
+                    printLng: lon,
+                    startLat: start.lat,
+                    startLng: start.lon,
+                    endLat: marker.latitude,
+                    endLng: marker.longitude,
+                    userLat: user?.latitude,
+                    userLng: user?.longitude
+                )
+            )
+        }
+    }
+
+    private func offsetMeters(lat: Double, lon: Double, bearing: Double, meters: Double) -> (lat: Double, lon: Double) {
+        let radius = 6_371_000.0
+        let brng = bearing * .pi / 180
+        let lat1 = lat * .pi / 180
+        let lon1 = lon * .pi / 180
+        let ang = meters / radius
+        let lat2 = asin(sin(lat1) * cos(ang) + cos(lat1) * sin(ang) * cos(brng))
+        let lon2 = lon1 + atan2(sin(brng) * sin(ang) * cos(lat1), cos(ang) - sin(lat1) * sin(lat2))
+        return (lat2 * 180 / .pi, lon2 * 180 / .pi)
+    }
+
+    private func approachBanner(_ approach: ActiveApproach) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Into-wind approach")
+                .font(.field(size: 16, weight: .bold))
+                .foregroundColor(theme.palette.bronzeBright)
+            Text("Route to \(approach.name): walk \(cardinal(approach.walkHeading)) so the wind hits the front of you.")
+                .font(.field(size: 13))
+                .foregroundColor(theme.palette.cream)
+            Text("Footprints · start downwind → finish at marker. Walked prints fade grey.")
+                .font(.field(size: 12))
+                .foregroundColor(theme.palette.mist)
+            Button("Clear approach") { db.scentApproachMarkerId = nil }
+                .font(.field(size: 14, weight: .semibold))
+                .foregroundColor(theme.palette.bronzeBright)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.palette.forestMid.opacity(0.94))
+        .cornerRadius(12)
     }
 
     // MARK: - Top bar
