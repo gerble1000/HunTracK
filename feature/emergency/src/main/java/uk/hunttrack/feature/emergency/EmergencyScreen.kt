@@ -22,15 +22,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -44,13 +47,34 @@ import uk.hunttrack.core.designsystem.components.MetricRow
 import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
+import kotlinx.coroutines.launch
 import uk.hunttrack.core.designsystem.theme.HuntColors
 
 @Composable
 fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var textNotice by remember { mutableStateOf<String?>(null) }
     EmergencyScreen(
         state = state,
+        textNotice = textNotice,
+        onEmergencyText = {
+            scope.launch {
+                val draft = viewModel.prepareEmergencyText()
+                val phone = draft.phone
+                if (phone == null) {
+                    textNotice = context.getString(R.string.emergency_text_no_contact)
+                    return@launch
+                }
+                val opened = openEmergencySms(context, phone, draft.body)
+                textNotice = when {
+                    !opened -> context.getString(R.string.emergency_text_no_app)
+                    !draft.hasFix -> context.getString(R.string.emergency_text_no_gps)
+                    else -> context.getString(R.string.emergency_text_ready)
+                }
+            }
+        },
         onPinInput = viewModel::setPinInput,
         onUnlockPin = viewModel::tryUnlockWithPin,
         onUnlockBio = viewModel::unlockFromBiometric,
@@ -62,6 +86,8 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
 @Composable
 fun EmergencyScreen(
     state: EmergencyUiState,
+    textNotice: String? = null,
+    onEmergencyText: () -> Unit = {},
     onPinInput: (String) -> Unit,
     onUnlockPin: () -> Unit,
     onUnlockBio: () -> Unit,
@@ -121,6 +147,30 @@ fun EmergencyScreen(
                 }
                 if (profile.contacts.isEmpty()) {
                     item { Text("No contacts stored yet.", color = HuntColors.Mist) }
+                }
+                item {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            onClick = onEmergencyText,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = HuntColors.Danger,
+                                contentColor = HuntColors.Cream,
+                            ),
+                        ) { Text(stringResource(R.string.emergency_text_button)) }
+                        Text(
+                            stringResource(R.string.emergency_text_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = HuntColors.Mist,
+                        )
+                        if (textNotice != null) {
+                            Text(
+                                textNotice,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = HuntColors.Cream,
+                            )
+                        }
+                    }
                 }
                 item {
                     GlassPanel(Modifier.fillMaxWidth()) {

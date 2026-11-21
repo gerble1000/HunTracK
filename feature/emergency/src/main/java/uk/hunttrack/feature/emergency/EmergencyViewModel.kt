@@ -11,8 +11,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uk.hunttrack.core.data.phase2.EmergencyRepository
+import uk.hunttrack.core.location.LocationRepository
+import uk.hunttrack.domain.emergency.EmergencyText
 import uk.hunttrack.domain.model.EmergencyContact
 import uk.hunttrack.domain.model.EmergencyProfile
+
+data class EmergencyTextDraft(
+    val phone: String?,
+    val body: String,
+    val hasFix: Boolean,
+)
 
 data class EmergencyUiState(
     val profile: EmergencyProfile = EmergencyProfile(),
@@ -27,6 +35,7 @@ enum class EmergencyMode { PUBLIC, EDIT }
 @HiltViewModel
 class EmergencyViewModel @Inject constructor(
     private val repository: EmergencyRepository,
+    private val locationRepository: LocationRepository,
 ) : ViewModel() {
 
     private val mode = MutableStateFlow(EmergencyMode.PUBLIC)
@@ -79,6 +88,16 @@ class EmergencyViewModel @Inject constructor(
         unlocked.value = true
         mode.value = EmergencyMode.EDIT
         error.value = null
+    }
+
+    suspend fun prepareEmergencyText(): EmergencyTextDraft {
+        val profile = repository.getProfile()
+        val fix = locationRepository.bestFixOrNull()
+        return EmergencyTextDraft(
+            phone = EmergencyText.phoneNumber(profile.contacts),
+            body = EmergencyText.message(fix?.latitude, fix?.longitude),
+            hasFix = fix != null,
+        )
     }
 
     fun showPublic() {

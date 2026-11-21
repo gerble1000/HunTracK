@@ -10,10 +10,12 @@ import UIKit
 public struct EmergencyScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var db = DatabaseService.shared
+    @ObservedObject private var location = LocationManager.shared
 
     @State private var isUnlocked = false
     @State private var draft = EmergencyProfile()
     @State private var statusMessage: String?
+    @State private var textNotice: String?
 
     @State private var activeSheet: EmergencySheet?
     @State private var pinPurpose: PinPurpose = .unlock
@@ -144,6 +146,24 @@ public struct EmergencyScreen: View {
                 }
             }
 
+            Button(action: sendEmergencyText) {
+                Text("Emergency text")
+                    .font(.field(size: 16, weight: .bold))
+                    .foregroundColor(theme.palette.cream)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(theme.palette.danger)
+                    .cornerRadius(12)
+            }
+            Text("Opens your Messages app with your saved contact. You press Send. HunTracK does not send the text.")
+                .font(.field(size: 12))
+                .foregroundColor(theme.palette.mist)
+            if let textNotice {
+                Text(textNotice)
+                    .font(.field(size: 13))
+                    .foregroundColor(theme.palette.cream)
+            }
+
             HuntButton(
                 DatabaseService.hasPin(db.emergency.pinHash)
                     ? "Unlock to Edit"
@@ -164,6 +184,30 @@ public struct EmergencyScreen: View {
                 Text(statusMessage)
                     .font(.field(size: 13))
                     .foregroundColor(theme.palette.success)
+            }
+        }
+    }
+
+    /// Opens the phone's Messages app. The user presses Send.
+    private func sendEmergencyText() {
+        guard let phone = emergencySmsAddress(db.emergency.contacts) else {
+            textNotice = "Save an emergency contact phone number first."
+            return
+        }
+        let fix = location.latestFix
+        let body = emergencySmsBody(latitude: fix?.latitude, longitude: fix?.longitude)
+        guard let encoded = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "sms:\(phone)&body=\(encoded)") else {
+            textNotice = "No messaging app is available on this phone."
+            return
+        }
+        UIApplication.shared.open(url, options: [:]) { opened in
+            if opened {
+                textNotice = fix == nil
+                    ? "No GPS fix yet. The text says your location is unavailable. You still press Send yourself."
+                    : "Message ready in your Messages app. Press Send when you want it to go."
+            } else {
+                textNotice = "No messaging app is available on this phone."
             }
         }
     }
@@ -631,6 +675,33 @@ public struct EmergencyScreen: View {
         let digits = phone.filter { $0.isNumber || $0 == "+" }
         guard !digits.isEmpty, let url = URL(string: "tel://" + digits) else { return }
         UIApplication.shared.open(url)
+    }
+
+    /// Same wording as Android `EmergencyText`. Uses a live fix only, never the Midlands fallback.
+    private func emergencySmsAddress(_ contacts: [EmergencyContact]) -> String? {
+        guard let raw = contacts.first(where: { $0.phone.contains(where: { $0.isNumber }) })?.phone else { return nil }
+        var address = ""
+        for character in raw.trimmingCharacters(in: .whitespacesAndNewlines) {
+            if character == "+" && address.isEmpty {
+                address.append(character)
+            } else if character >= "0" && character <= "9" {
+                address.append(character)
+            }
+        }
+        return address.contains(where: { $0.isNumber }) ? address : nil
+    }
+
+    private func emergencySmsBody(latitude: Double?, longitude: Double?) -> String {
+        let grid: String
+        let coordinates: String
+        if let latitude, let longitude {
+            grid = OsGridRef.latLngToOsGrid(latitude: latitude, longitude: longitude) ?? "unavailable"
+            coordinates = String(format: "%.5f, %.5f", locale: Locale(identifier: "en_US_POSIX"), latitude, longitude)
+        } else {
+            grid = "unavailable"
+            coordinates = "unavailable"
+        }
+        return "Help! I need medical aid. My location is\nGrid reference: \(grid)\nCoordinates: \(coordinates)"
     }
 }
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="emergency_text_button">Emergency text</string>
+    <string name="emergency_text_hint">Opens your Messages app with your saved contact. You press Send. HunTracK does not send the text.</string>
+    <string name="emergency_text_no_contact">Save an emergency contact phone number first.</string>
+    <string name="emergency_text_no_gps">No GPS fix yet. The text says your location is unavailable. You still press Send yourself.</string>
+    <string name="emergency_text_no_app">No messaging app is available on this phone.</string>
+    <string name="emergency_text_ready">Message ready in your Messages app. Press Send when you want it to go.</string>
+</resources>
