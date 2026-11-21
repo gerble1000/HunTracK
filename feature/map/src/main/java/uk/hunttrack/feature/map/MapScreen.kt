@@ -2645,16 +2645,25 @@ private fun ensureSources(style: Style, context: Context) {
             ),
         )
     }
-    if (style.getSource("scent-approach-source") == null) {
-        style.addSource(GeoJsonSource("scent-approach-source", FeatureCollection.fromFeatures(emptyArray())))
+    if (style.getSource("scent-approach-line-source") == null) {
+        style.addSource(GeoJsonSource("scent-approach-line-source", FeatureCollection.fromFeatures(emptyArray())))
+    }
+    if (style.getLayer("scent-approach-line") == null && style.getSource("scent-approach-line-source") != null) {
+        // Its own source: a line layer sharing the label source does not draw.
         style.addLayer(
-            LineLayer("scent-approach-line", "scent-approach-source").withProperties(
+            LineLayer("scent-approach-line", "scent-approach-line-source").withProperties(
                 PropertyFactory.lineColor(ApproachLineColor),
-                PropertyFactory.lineWidth(6f),
+                PropertyFactory.lineWidth(7f),
                 PropertyFactory.lineOpacity(1f),
-                PropertyFactory.lineDasharray(arrayOf(1.4f, 0.8f)),
+                PropertyFactory.lineCap("round"),
+                PropertyFactory.lineJoin("round"),
             ),
         )
+    }
+    if (style.getSource("scent-approach-source") == null) {
+        style.addSource(GeoJsonSource("scent-approach-source", FeatureCollection.fromFeatures(emptyArray())))
+    }
+    if (style.getLayer("scent-approach-ends") == null && style.getSource("scent-approach-source") != null) {
         style.addLayer(
             CircleLayer("scent-approach-ends", "scent-approach-source").withProperties(
                 PropertyFactory.circleRadius(7f),
@@ -3042,14 +3051,16 @@ private fun updateUserLocation(style: Style, gps: GpsFix?) {
     (style.getSource("user-source") as? GeoJsonSource)?.setGeoJson(collection)
 }
 
-/** Orange dashed line: start downwind of target → walk into the wind to the marker. */
+/** Orange line: start downwind of target → walk into the wind to the marker. */
 private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
-    val source = style.getSource("scent-approach-source") as? GeoJsonSource ?: return
+    val lineSource = style.getSource("scent-approach-line-source") as? GeoJsonSource
+    val labelSource = style.getSource("scent-approach-source") as? GeoJsonSource
     val lineLayer = style.getLayer("scent-approach-line")
     val endsLayer = style.getLayer("scent-approach-ends")
     val labelLayer = style.getLayer("scent-approach-label")
     if (plan == null) {
-        source.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
+        lineSource?.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
+        labelSource?.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
         lineLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
         endsLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
         labelLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
@@ -3058,7 +3069,7 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
     lineLayer?.setProperties(
         PropertyFactory.visibility(Property.VISIBLE),
         PropertyFactory.lineColor(ApproachLineColor),
-        PropertyFactory.lineWidth(6f),
+        PropertyFactory.lineWidth(7f),
     )
     endsLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
     labelLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
@@ -3067,7 +3078,11 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
     val end = Point.fromLngLat(plan.targetLng, plan.targetLat)
     val midLat = (plan.startLat + plan.targetLat) / 2.0
     val midLng = (plan.startLng + plan.targetLng) / 2.0
-    val line = Feature.fromGeometry(LineString.fromLngLats(listOf(start, end)))
+    lineSource?.setGeoJson(
+        FeatureCollection.fromFeature(
+            Feature.fromGeometry(LineString.fromLngLats(listOf(start, end))),
+        ),
+    )
     val startDot = Feature.fromGeometry(start).also {
         it.addStringProperty("label", "Start · into wind")
     }
@@ -3077,9 +3092,8 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
     val midLabel = Feature.fromGeometry(Point.fromLngLat(midLng, midLat)).also {
         it.addStringProperty("label", "Wind on your front →")
     }
-    source.setGeoJson(FeatureCollection.fromFeatures(listOf(line, startDot, endDot, midLabel)))
-    // Smoke and the green GPS track are added around this layer. Lift the approach
-    // so the orange line stays on top of the plume on satellite imagery.
+    labelSource?.setGeoJson(FeatureCollection.fromFeatures(listOf(startDot, endDot, midLabel)))
+    // The pink plume is a circle layer underneath. Keep the orange stroke above it.
     listOf("scent-approach-line", "scent-approach-ends", "scent-approach-label").forEach { layerId ->
         val layer = style.getLayer(layerId) ?: return@forEach
         runCatching {
