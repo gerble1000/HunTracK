@@ -1,6 +1,7 @@
 package uk.hunttrack
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -24,6 +25,8 @@ import uk.hunttrack.core.designsystem.theme.HuntThemeMode
 import uk.hunttrack.core.designsystem.theme.HunTracKTheme
 import uk.hunttrack.core.location.LocationRepository
 import uk.hunttrack.domain.model.AppThemeMode
+import uk.hunttrack.feature.emergency.DistressMode
+import uk.hunttrack.feature.emergency.DistressNotifications
 import uk.hunttrack.ui.HunTracKRoot
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,6 +37,8 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var soundManager: SoundManager
     @Inject lateinit var locationRepository: LocationRepository
     @Inject lateinit var preferencesRepository: PreferencesRepository
+
+    private var leftWhileDistressArmed = false
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -48,6 +53,7 @@ class MainActivity : FragmentActivity() {
         hideSystemNavigationBar()
         locationRepository.refreshPermission()
         requestLocationIfNeeded()
+        if (shouldShowBeacon(intent)) DistressMode.showBeacon()
         lifecycleScope.launch {
             val prefs = preferencesRepository.preferences.first()
             soundManager.setSoundsEnabled(prefs.soundsEnabled)
@@ -70,10 +76,32 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (shouldShowBeacon(intent)) DistressMode.showBeacon()
+    }
+
+    override fun onPause() {
+        if (DistressNotifications.isArmed(this)) leftWhileDistressArmed = true
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
         hideSystemNavigationBar()
         locationRepository.refreshPermission()
+        // Back from Messages, or the hunter reopened HunTracK. Not a background launch.
+        if (leftWhileDistressArmed && DistressNotifications.isArmed(this)) {
+            leftWhileDistressArmed = false
+            DistressMode.showBeacon()
+        }
+    }
+
+    private fun shouldShowBeacon(intent: Intent?): Boolean {
+        val asked = intent?.getBooleanExtra(DistressMode.EXTRA_SHOW_BEACON, false) == true
+        if (asked) intent?.removeExtra(DistressMode.EXTRA_SHOW_BEACON)
+        return asked && DistressNotifications.isArmed(this)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

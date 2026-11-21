@@ -49,6 +49,7 @@
 		A30000062D00000100000001 /* TextFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062D00000100000001 /* TextFormats.swift */; };
 		A40000012D00000100000001 /* AudioPackDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000012D00000100000001 /* AudioPackDownload.swift */; };
 		A50000012D00000100000001 /* MoonPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000012D00000100000001 /* MoonPhase.swift */; };
+		A60000012D00000100000001 /* MessageUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B60000012D00000100000001 /* MessageUI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -96,6 +97,7 @@
 		B30000062D00000100000001 /* TextFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/TextFormats.swift; sourceTree = "<group>"; };
 		B40000012D00000100000001 /* AudioPackDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calls/AudioPackDownload.swift; sourceTree = "<group>"; };
 		B50000012D00000100000001 /* MoonPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Astronomy/MoonPhase.swift; sourceTree = "<group>"; };
+		B60000012D00000100000001 /* MessageUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MessageUI.framework; path = System/Library/Frameworks/MessageUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +105,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A60000012D00000100000001 /* MessageUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -113,8 +116,17 @@
 			isa = PBXGroup;
 			children = (
 				D10000022D00000100000001 /* HunTracK */,
+				D10000032D00000100000001 /* Frameworks */,
 				010000022D00000100000001 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		D10000032D00000100000001 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B60000012D00000100000001 /* MessageUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		010000022D00000100000001 /* Products */ = {
