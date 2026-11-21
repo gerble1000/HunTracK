@@ -473,6 +473,8 @@ fun MapScreen(
         showTrack,
         showMarkerPath,
         state.scentApproach?.targetName,
+        state.scentApproach?.startLat,
+        state.scentApproach?.startLng,
         state.boundaries.size,
         state.draftBoundaryPoints.size,
         state.boundaryMode,
@@ -2146,6 +2148,8 @@ private const val FenceLineColor = "#1A3A6E"
 private const val DraftFenceLineWidth = 1.75f
 /** Saved offline pack border: thin blue line with yellow dashes. */
 private const val OfflineRegionBlue = "#2E86DE"
+/** Matches the "Orange line" copy. The GPS track stays green (#5FD0A8). */
+private const val ApproachLineColor = "#FF6A00"
 private const val OfflineRegionYellow = "#FFD54F"
 private const val FocusBoundaryLineColor = "#E2B05C"
 private const val FenceLineWidth = 2.5f
@@ -2645,10 +2649,10 @@ private fun ensureSources(style: Style, context: Context) {
         style.addSource(GeoJsonSource("scent-approach-source", FeatureCollection.fromFeatures(emptyArray())))
         style.addLayer(
             LineLayer("scent-approach-line", "scent-approach-source").withProperties(
-                PropertyFactory.lineColor("#E2B05C"),
-                PropertyFactory.lineWidth(5f),
-                PropertyFactory.lineOpacity(0.95f),
-                PropertyFactory.lineDasharray(arrayOf(1.5f, 1.2f)),
+                PropertyFactory.lineColor(ApproachLineColor),
+                PropertyFactory.lineWidth(6f),
+                PropertyFactory.lineOpacity(1f),
+                PropertyFactory.lineDasharray(arrayOf(1.4f, 0.8f)),
             ),
         )
         style.addLayer(
@@ -2846,6 +2850,9 @@ private fun syncMapOverlays(
     updateGoToPin(style, state.goToTarget)
     updateOfflineRegionsOverlay(style, state.offlineRegions)
     if (markersOnly) {
+        // The marker refresh is the effect that runs when an approach is chosen.
+        // Drawing it here is what puts the orange line on a map that is already open.
+        updateScentApproach(style, state.scentApproach)
         updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
         updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
         return
@@ -3048,7 +3055,11 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
         labelLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
         return
     }
-    lineLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
+    lineLayer?.setProperties(
+        PropertyFactory.visibility(Property.VISIBLE),
+        PropertyFactory.lineColor(ApproachLineColor),
+        PropertyFactory.lineWidth(6f),
+    )
     endsLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
     labelLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
 
@@ -3067,6 +3078,15 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
         it.addStringProperty("label", "Wind on your front →")
     }
     source.setGeoJson(FeatureCollection.fromFeatures(listOf(line, startDot, endDot, midLabel)))
+    // Smoke and the green GPS track are added around this layer. Lift the approach
+    // so the orange line stays on top of the plume on satellite imagery.
+    listOf("scent-approach-line", "scent-approach-ends", "scent-approach-label").forEach { layerId ->
+        val layer = style.getLayer(layerId) ?: return@forEach
+        runCatching {
+            style.removeLayer(layer)
+            style.addLayer(layer)
+        }
+    }
 }
 
 /**
