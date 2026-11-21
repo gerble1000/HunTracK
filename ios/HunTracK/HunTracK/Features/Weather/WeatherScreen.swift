@@ -230,14 +230,14 @@ public struct WeatherScreen: View {
         }
     }
 
-    /// Drops hours before the current London hour, then keeps the next 24.
+    /// Drops the current London hour and everything before it. The first chip is +1.
     private static func upcomingHours(_ hours: [HourlyForecast]) -> [HourlyForecast] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .current
         let start = calendar.dateInterval(of: .hour, for: Date())?.start ?? Date()
-        let startMs = Int64(start.timeIntervalSince1970 * 1000)
-        let upcoming = hours.filter { $0.epochMs >= startMs }
-        return Array((upcoming.isEmpty ? hours : upcoming).prefix(24))
+        let next = calendar.date(byAdding: .hour, value: 1, to: start) ?? start
+        let nextMs = Int64(next.timeIntervalSince1970 * 1000)
+        return Array(hours.filter { $0.epochMs >= nextMs }.prefix(24))
     }
 }
 
@@ -264,7 +264,10 @@ public struct HourCard: View {
                         latitude: latitude,
                         longitude: longitude,
                         epochMs: hour.epochMs
-                    )
+                    ),
+                    latitude: latitude,
+                    longitude: longitude,
+                    epochMs: hour.epochMs
                 ))
                     .font(.field(size: 20))
                     .foregroundColor(theme.palette.gold)
@@ -322,10 +325,27 @@ public struct HourCard: View {
         return epochMs >= sun.sunriseEpochMs && epochMs <= sun.sunsetEpochMs
     }
 
-    private static func symbol(_ code: Int, isDay: Bool = true) -> String {
+    private static func symbol(
+        _ code: Int,
+        isDay: Bool = true,
+        latitude: Double = 0,
+        longitude: Double = 0,
+        epochMs: Int64 = 0
+    ) -> String {
+        if !isDay, code == 0 || code == 1 || code == 2 || code == 3 {
+            let sky = AstronomyCalculator.nightSky(latitude: latitude, longitude: longitude, epochMs: epochMs)
+            switch code {
+            case 0:
+                return sky.showMoon ? moonPhaseSymbol(sky.phase) : "sparkles"
+            case 3:
+                return "cloud.fill"
+            default:
+                return sky.showMoon ? "cloud.moon.fill" : "cloud.fill"
+            }
+        }
         switch code {
-        case 0: return isDay ? "sun.max.fill" : "moon.stars.fill"
-        case 1, 2: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
+        case 0: return "sun.max.fill"
+        case 1, 2: return "cloud.sun.fill"
         case 3: return "cloud.fill"
         case 45, 48: return "cloud.fog.fill"
         case 51...57: return "cloud.drizzle.fill"
@@ -335,6 +355,21 @@ public struct HourCard: View {
         case 85, 86: return "cloud.snow.fill"
         case 95...99: return "cloud.bolt.rain.fill"
         default: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
+        }
+    }
+
+    /// Northern-hemisphere symbols. 0 is new, 0.5 is full.
+    private static func moonPhaseSymbol(_ phase: Double) -> String {
+        let wrapped = phase - floor(phase)
+        switch wrapped {
+        case ..<0.0625, 0.9375...: return "moonphase.new.moon"
+        case ..<0.1875: return "moonphase.waxing.crescent"
+        case ..<0.3125: return "moonphase.first.quarter"
+        case ..<0.4375: return "moonphase.waxing.gibbous"
+        case ..<0.5625: return "moonphase.full.moon"
+        case ..<0.6875: return "moonphase.waning.gibbous"
+        case ..<0.8125: return "moonphase.last.quarter"
+        default: return "moonphase.waning.crescent"
         }
     }
 

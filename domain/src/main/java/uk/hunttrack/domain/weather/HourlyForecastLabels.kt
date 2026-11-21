@@ -8,16 +8,19 @@ import java.time.temporal.ChronoUnit
 /**
  * Labels for the "Next 24 hours" row.
  *
- * Open-Meteo hours are requested in Europe/London and begin at midnight, so a
- * clock format such as 00:00 reads as the start of the day. These labels are
- * offsets from the current London hour instead: the matching hour is "Now",
- * and later hours are "+1", "+2", and so on.
+ * Open-Meteo is asked for Europe/London and returns the whole local day from
+ * midnight. The row keeps hours that start after the current London hour, so
+ * the first chip is the next hour and reads "+1", then "+2", "+3".
  */
 object HourlyForecastLabels {
     val london: ZoneId = ZoneId.of("Europe/London")
 
     fun hourStartEpochMs(epochMs: Long, zone: ZoneId = london): Long =
         Instant.ofEpochMilli(epochMs).atZone(zone).truncatedTo(ChronoUnit.HOURS).toInstant().toEpochMilli()
+
+    /** Start of the clock hour after the one that contains [nowEpochMs]. */
+    fun nextHourEpochMs(nowEpochMs: Long, zone: ZoneId = london): Long =
+        Instant.ofEpochMilli(hourStartEpochMs(nowEpochMs, zone)).plus(1, ChronoUnit.HOURS).toEpochMilli()
 
     fun offsetLabel(slotEpochMs: Long, nowEpochMs: Long, zone: ZoneId = london): String {
         val ahead = ChronoUnit.HOURS.between(
@@ -32,7 +35,7 @@ object HourlyForecastLabels {
     }
 
     fun upcoming(hours: List<HourlyForecast>, nowEpochMs: Long, limit: Int = 24, zone: ZoneId = london): List<HourlyForecast> {
-        val start = hourStartEpochMs(nowEpochMs, zone)
+        val start = nextHourEpochMs(nowEpochMs, zone)
         return hours.asSequence().filter { it.epochMs >= start }.take(limit).toList()
     }
 }

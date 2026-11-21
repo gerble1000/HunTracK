@@ -151,7 +151,6 @@ public class WeatherService: ObservableObject {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .current
         let hourStart = calendar.dateInterval(of: .hour, for: Date())?.start ?? Date()
-        let hourStartMs = Int64(hourStart.timeIntervalSince1970 * 1000)
 
         var result: [HourlyForecast] = []
         for index in 0..<times.count {
@@ -176,11 +175,11 @@ public class WeatherService: ObservableObject {
             ))
         }
 
-        // The API returns whole days from midnight. Keep the current London hour
-        // and the following hours, which the forecast row labels "Now", "+1", "+2".
-        let upcoming = result.filter { $0.epochMs >= hourStartMs }
-        let selected = upcoming.isEmpty ? result : upcoming
-        return Array(selected.prefix(24))
+        // The API day starts at local midnight. Keep the clock hour after the
+        // current London hour so the row begins at +1, not 00:00.
+        let nextHour = calendar.date(byAdding: .hour, value: 1, to: hourStart) ?? hourStart
+        let nextHourMs = Int64(nextHour.timeIntervalSince1970 * 1000)
+        return Array(result.filter { $0.epochMs >= nextHourMs }.prefix(24))
     }
 
     private static func parseDaily(_ daily: [String: Any]?) -> [DailyForecast] {

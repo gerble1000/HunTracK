@@ -4,6 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uk.hunttrack.domain.astronomy.AstronomyCalculator
+import java.time.Instant
 
 class DaylightTest {
     private val latitude = 52.4862
@@ -27,5 +28,14 @@ class DaylightTest {
         assertTrue(Daylight.isDay(apiIsDay = null, latitude, longitude, day))
         val night = sun.sunsetEpochMs + 2 * 60 * 60 * 1000L
         assertFalse(Daylight.isDay(apiIsDay = null, latitude, longitude, night))
+    }
+
+    @Test
+    fun eveningSkyIsEitherALitMoonOrStars() {
+        val epoch = Instant.parse("2026-11-21T20:00:00Z").toEpochMilli()
+        val sky = AstronomyCalculator.nightSky(latitude, longitude, epoch)
+        assertTrue(sky.phase in 0.0..1.0)
+        assertTrue(sky.illumination in 0.0..1.0)
+        assertTrue(sky.showMoon == (sky.moonUp && sky.illumination >= 0.04))
     }
 }
