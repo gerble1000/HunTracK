@@ -2352,8 +2352,13 @@ private fun addHillshadeOverlay(style: Style) {
     val layerId = "hillshade-layer"
     if (style.getSource(sourceId) != null || style.getLayer(layerId) != null) return
     val tileSet = TileSet("2.2.0", MapLibreStyleSupport.ESRI_HILLSHADE_TILE_URL)
+    // Past this level Esri returns a 200 JPEG that says "Map data not yet available".
+    // Source maxzoom makes MapLibre reuse the last real tiles when the hunter pinches in.
+    tileSet.setMinZoom(0f)
+    tileSet.setMaxZoom(MapLibreStyleSupport.ESRI_HILLSHADE_MAX_ZOOM.toFloat())
     tileSet.attribution = "Sources: Esri, HERE, Garmin, USGS, NGA"
     style.addSource(RasterSource(sourceId, tileSet, 256))
+    (style.getSource(sourceId) as? RasterSource)?.setMaxOverscaleFactorForParentTiles(16)
     val layer = RasterLayer(layerId, sourceId).withProperties(
         PropertyFactory.rasterOpacity(0.45f),
     )

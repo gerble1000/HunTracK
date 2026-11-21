@@ -303,6 +303,24 @@ private enum MapZoom {
     }
 }
 
+/// Retries a camera move once the map is actually on screen. SwiftUI's map tab
+/// often has no window until the hunter switches to it.
+private final class HuntMapView: MKMapView {
+    var onReadyForCamera: (() -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { onReadyForCamera?() }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if window != nil, bounds.width > 1, bounds.height > 1 {
+            onReadyForCamera?()
+        }
+    }
+}
+
 private struct MapViewHost: UIViewRepresentable {
     var centre: CLLocationCoordinate2D
     var spanMeters: Double
@@ -349,8 +367,13 @@ private struct MapViewHost: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView(frame: .zero)
-        mapView.delegate = context.coordinator
+        let mapView = HuntMapView(frame: .zero)
+        let coordinator = context.coordinator
+        mapView.onReadyForCamera = { [weak mapView, weak coordinator] in
+            guard let mapView, let coordinator else { return }
+            coordinator.applyRequestedRegion(mapView)
+        }
+        mapView.delegate = coordinator
         mapView.showsUserLocation = true
         mapView.showsCompass = true
         mapView.showsScale = true
@@ -395,6 +418,7 @@ private struct MapViewHost: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
+        (mapView as? HuntMapView)?.onReadyForCamera = nil
         coordinator.stopSmokeAnimation()
         mapView.delegate = nil
     }
@@ -416,15 +440,7 @@ private struct MapViewHost: UIViewRepresentable {
         mapView.isZoomEnabled = !isDrawing
         mapView.isRotateEnabled = !isDrawing
 
-        if coordinator.lastRegionToken != regionRequestToken {
-            coordinator.lastRegionToken = regionRequestToken
-            let region = MKCoordinateRegion(
-                center: centre,
-                latitudinalMeters: spanMeters,
-                longitudinalMeters: spanMeters
-            )
-            mapView.setRegion(region, animated: true)
-        }
+        coordinator.applyRequestedRegion(mapView)
 
         let snapshot = MapContentSnapshot(
             markers: markers,
@@ -889,6 +905,22 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         }
     }
 
+    /// Applies a pending camera only once the map has a real size. A focus requested
+    /// from the Permissions tab arrives while this map is off-screen; MapKit drops
+    /// `setRegion` on a view with no window, and consuming the token there meant the
+    /// move was never retried when the Map tab appeared.
+    func applyRequestedRegion(_ mapView: MKMapView) {
+        guard lastRegionToken != parent.regionRequestToken else { return }
+        guard mapView.window != nil, mapView.bounds.width > 1, mapView.bounds.height > 1 else { return }
+        lastRegionToken = parent.regionRequestToken
+        let region = MKCoordinateRegion(
+            center: parent.centre,
+            latitudinalMeters: parent.spanMeters,
+            longitudinalMeters: parent.spanMeters
+        )
+        mapView.setRegion(region, animated: true)
+    }
+
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
         let centre = mapView.centerCoordinate
         let height = mapView.region.span.latitudeDelta * 111_000
@@ -1084,7 +1116,11 @@ public struct MapScreen: View {
         .onAppear {
             location.requestPermission()
             location.startUpdating()
-            if let fix = location.latestFix {
+            if !db.permissionMapFocus.isEmpty {
+                // Opening the Map tab used to snap to GPS after the wallet had already
+                // asked for a boundary, so Focus on map looked like it did nothing.
+                frameBoundaries(db.permissionMapFocus.map { $0.boundaryAreaId })
+            } else if let fix = location.latestFix {
                 centre = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
                 regionRequestToken += 1
             }
@@ -1112,8 +1148,8 @@ public struct MapScreen: View {
         .onChange(of: db.pendingZone) { _ in
             syncZoneCapture()
         }
-        .onChange(of: db.permissionMapFocus) { focus in
-            frameBoundaries(focus.map { $0.boundaryAreaId })
+        .onChange(of: db.permissionFocusRequest) { _ in
+            frameBoundaries(db.permissionMapFocus.map { $0.boundaryAreaId })
         }
         .onChange(of: db.preferences.showOsGridRef) { _ in updateGridRef(centre) }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
@@ -1491,9 +1527,12 @@ public struct MapScreen: View {
             maxLon = max(maxLon, point.longitude)
         }
         followUser = false
-        centre = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
-        let height = max(MapZoom.minMeters, (maxLat - minLat) * 111_000 * 1.8)
-        spanMeters = MapZoom.clamp(height)
+        let midLat = (minLat + maxLat) / 2
+        centre = CLLocationCoordinate2D(latitude: midLat, longitude: (minLon + maxLon) / 2)
+        let latMeters = (maxLat - minLat) * 111_000
+        let lonMeters = (maxLon - minLon) * 111_000 * max(0.2, cos(midLat * .pi / 180))
+        let height = max(latMeters, lonMeters) * 1.8
+        spanMeters = MapZoom.clamp(max(MapZoom.minMeters, height))
         regionRequestToken += 1
     }
 

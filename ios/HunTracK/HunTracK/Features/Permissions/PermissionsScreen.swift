@@ -48,6 +48,14 @@ public struct PermissionsScreen: View {
         }
     }
 
+    /// Frames the boundary, reveals the Map tab, and pops this screen when it was
+    /// pushed (More → Permissions, or the map menu) so the centred map is visible.
+    private func showPermissionOnMap(_ focus: () -> Void) {
+        focus()
+        NotificationCenter.default.post(name: .openMapTab, object: nil)
+        dismiss()
+    }
+
     // MARK: - Header
 
     private var header: some View {
@@ -86,8 +94,7 @@ public struct PermissionsScreen: View {
                         onEdit: { editorDraft = permission },
                         onLink: { linkTarget = permission },
                         onShowMap: {
-                            db.focusMap(on: [permission.id])
-                            NotificationCenter.default.post(name: .openMapTab, object: nil)
+                            showPermissionOnMap { db.focusMap(on: [permission.id]) }
                         },
                         onDelete: { db.deletePermission(id: permission.id) }
                     )
@@ -134,8 +141,7 @@ public struct PermissionsScreen: View {
                         boundary: boundary,
                         permissions: db.permissions,
                         onShowMap: {
-                            db.focusMap(onBoundary: boundary.id)
-                            NotificationCenter.default.post(name: .openMapTab, object: nil)
+                            showPermissionOnMap { db.focusMap(onBoundary: boundary.id) }
                         },
                         onDelete: { db.deleteBoundary(id: boundary.id) },
                         onAddPermission: {

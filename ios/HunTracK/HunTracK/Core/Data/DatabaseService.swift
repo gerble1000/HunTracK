@@ -77,6 +77,10 @@ public class DatabaseService: ObservableObject {
     /// Boundaries the wallet asked the map to frame. Not persisted — the link itself is.
     @Published public var permissionMapFocus: [PermissionMapFocusItem] = []
 
+    /// Bumps on every successful focus request, including a repeat tap of the same permission.
+    /// The map watches this rather than array equality, which would ignore that second tap.
+    @Published public var permissionFocusRequest: Int = 0
+
     // MARK: - Keys
 
     private static let kMarkers = "hunttrack_markers_v2"
@@ -453,7 +457,7 @@ public class DatabaseService: ObservableObject {
     }
 
     public func focusMap(on permissionIds: [Int64]) {
-        permissionMapFocus = permissionIds.compactMap { id in
+        let items: [PermissionMapFocusItem] = permissionIds.compactMap { id in
             guard let permission = permissions.first(where: { $0.id == id }),
                   let boundaryId = permission.boundaryAreaId,
                   boundaries.contains(where: { $0.id == boundaryId }) else { return nil }
@@ -463,15 +467,25 @@ public class DatabaseService: ObservableObject {
                 boundaryAreaId: boundaryId
             )
         }
+        publishFocus(items)
     }
 
     public func focusMap(onBoundary boundaryId: Int64) {
         let linked = permissionsLinked(to: boundaryId)
         if linked.isEmpty {
             let name = boundaries.first { $0.id == boundaryId }?.name ?? "Boundary"
-            permissionMapFocus = [PermissionMapFocusItem(permissionId: 0, label: name, boundaryAreaId: boundaryId)]
+            publishFocus([PermissionMapFocusItem(permissionId: 0, label: name, boundaryAreaId: boundaryId)])
         } else {
             focusMap(on: linked.map { $0.id })
+        }
+    }
+
+    /// Publishes the framed boundaries and a new request id so the map recentres
+    /// even when the ids match the focus already on screen.
+    private func publishFocus(_ items: [PermissionMapFocusItem]) {
+        permissionMapFocus = items
+        if !items.isEmpty {
+            permissionFocusRequest += 1
         }
     }
 
