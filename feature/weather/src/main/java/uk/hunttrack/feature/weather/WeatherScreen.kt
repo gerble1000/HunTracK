@@ -51,7 +51,7 @@ import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
 import uk.hunttrack.core.designsystem.theme.HuntColors
-import uk.hunttrack.domain.astronomy.AstronomyCalculator
+import uk.hunttrack.domain.astronomy.MoonPhase
 import uk.hunttrack.domain.model.DailyForecast
 import uk.hunttrack.domain.model.HourlyForecast
 import uk.hunttrack.domain.model.WindUnit
@@ -213,8 +213,6 @@ private fun HourCard(
             hour.weatherCode,
             Modifier.size(28.dp).padding(vertical = 4.dp),
             isDay = isDay,
-            latitude = latitude,
-            longitude = longitude,
             epochMs = hour.epochMs,
         )
         val temp = if (useCelsius) "${hour.temperatureC.toInt()}°" else "${(hour.temperatureC * 9 / 5 + 32).toInt()}°"
@@ -251,8 +249,6 @@ fun WeatherIcon(
     code: Int,
     modifier: Modifier = Modifier,
     isDay: Boolean = true,
-    latitude: Double = 54.0,
-    longitude: Double = -2.0,
     epochMs: Long = 0L,
 ) {
     val transition = rememberInfiniteTransition(label = "wx")
@@ -275,7 +271,7 @@ fun WeatherIcon(
                     drawLine(HuntColors.Bronze, Offset(x, y), Offset(x, y + 8f), 2f)
                 }
             }
-            isDay && code in 45..48 -> {
+            code in 45..48 -> {
                 drawCircle(HuntColors.Mist.copy(alpha = 0.4f + 0.3f * t), radius = size.minDimension * 0.4f)
             }
             !isDay && code in 71..77 || !isDay && code in 85..86 -> {
@@ -285,14 +281,17 @@ fun WeatherIcon(
                     drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
                 }
             }
-            !isDay && (code == 0 || code in 1..3 || code in 45..48) -> {
-                val sky = AstronomyCalculator.nightSky(latitude, longitude, epochMs)
-                if (sky.showMoon) drawPhasedMoon(sky.phase, sky.illumination) else drawStars()
-                if (code != 0) {
+            !isDay && (code == 0 || code in 1..3) -> {
+                drawStars()
+                val phase = MoonPhase.fraction(epochMs)
+                if (MoonPhase.nameOf(phase) != MoonPhase.Name.NEW) {
+                    drawPhasedMoon(phase, MoonPhase.illumination(epochMs))
+                }
+                if (code in 1..3) {
                     drawCircle(
-                        HuntColors.Mist.copy(alpha = if (code == 3 || code in 45..48) 0.9f else 0.72f),
-                        radius = size.minDimension * if (code == 3 || code in 45..48) 0.30f else 0.16f,
-                        center = Offset(center.x + size.minDimension * 0.08f, center.y + size.minDimension * 0.06f),
+                        HuntColors.Mist.copy(alpha = if (code == 3) 0.88f else 0.78f),
+                        radius = size.minDimension * if (code == 3) 0.28f else 0.18f,
+                        center = Offset(center.x + size.minDimension * 0.12f, center.y + size.minDimension * 0.08f),
                     )
                 }
             }
@@ -316,23 +315,23 @@ fun WeatherIcon(
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawStars() {
     val span = size.minDimension
     listOf(
-        -0.42f to -0.36f,
-        0.34f to -0.46f,
-        0.46f to 0.16f,
-        -0.16f to 0.44f,
-        0.02f to -0.04f,
+        -0.55f to -0.48f,
+        0.52f to -0.42f,
+        0.58f to 0.22f,
+        -0.48f to 0.50f,
+        0.08f to -0.62f,
     ).forEachIndexed { index, (x, y) ->
         drawCircle(
             HuntColors.Cream,
-            radius = if (index == 4) 1.7f else 1.15f,
-            center = Offset(center.x + x * span * 0.72f, center.y + y * span * 0.72f),
+            radius = if (index == 0) 1.8f else 1.2f,
+            center = Offset(center.x + x * span * 0.48f, center.y + y * span * 0.48f),
         )
     }
 }
 
 /** Northern hemisphere: waxing is lit on the right. Phase 0 is new, 0.5 is full. */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPhasedMoon(phase: Double, illumination: Double) {
-    val r = size.minDimension * 0.34f
+    val r = size.minDimension * 0.16f
     val wrapped = ((phase % 1.0) + 1.0) % 1.0
     val litRight = wrapped <= 0.5
     val disc = Path().apply {

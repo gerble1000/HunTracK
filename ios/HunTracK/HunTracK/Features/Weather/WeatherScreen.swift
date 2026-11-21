@@ -257,20 +257,8 @@ public struct HourCard: View {
                 Text(Self.offsetLabel(hour.epochMs))
                     .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
-                Image(systemName: Self.symbol(
-                    hour.weatherCode,
-                    isDay: Self.isDaytime(
-                        flag: hour.isDay,
-                        latitude: latitude,
-                        longitude: longitude,
-                        epochMs: hour.epochMs
-                    ),
-                    latitude: latitude,
-                    longitude: longitude,
-                    epochMs: hour.epochMs
-                ))
-                    .font(.field(size: 20))
-                    .foregroundColor(theme.palette.gold)
+                nightOrDayIcon
+                    .frame(height: 22)
                 Text(Self.temp(hour.temperatureC, useCelsius: useCelsius))
                     .font(.field(size: 16, weight: .bold))
                     .foregroundColor(theme.palette.bronze)
@@ -285,6 +273,44 @@ public struct HourCard: View {
                     .foregroundColor(theme.palette.mist)
             }
             .frame(width: 62)
+        }
+    }
+
+    private var isNightClearOrCloudy: Bool {
+        let day = Self.isDaytime(
+            flag: hour.isDay,
+            latitude: latitude,
+            longitude: longitude,
+            epochMs: hour.epochMs
+        )
+        return !day && (hour.weatherCode == 0 || (1...3).contains(hour.weatherCode))
+    }
+
+    @ViewBuilder
+    private var nightOrDayIcon: some View {
+        if isNightClearOrCloudy {
+            let phase = MoonPhase.fraction(epochMs: hour.epochMs)
+            let phaseName = MoonPhase.name(of: phase)
+            ZStack {
+                Image(systemName: "sparkles")
+                    .font(.field(size: 16))
+                    .foregroundColor(theme.palette.cream.opacity(0.9))
+                if phaseName != .new {
+                    Image(systemName: phaseName.symbolName)
+                        .font(.field(size: 15))
+                        .foregroundColor(theme.palette.cream)
+                }
+                if hour.weatherCode == 1 || hour.weatherCode == 2 || hour.weatherCode == 3 {
+                    Image(systemName: "cloud.fill")
+                        .font(.field(size: hour.weatherCode == 3 ? 16 : 12))
+                        .foregroundColor(theme.palette.mist.opacity(hour.weatherCode == 3 ? 0.92 : 0.78))
+                        .offset(x: 7, y: 5)
+                }
+            }
+        } else {
+            Image(systemName: Self.symbol(hour.weatherCode))
+                .font(.field(size: 20))
+                .foregroundColor(theme.palette.gold)
         }
     }
 
@@ -325,24 +351,7 @@ public struct HourCard: View {
         return epochMs >= sun.sunriseEpochMs && epochMs <= sun.sunsetEpochMs
     }
 
-    private static func symbol(
-        _ code: Int,
-        isDay: Bool = true,
-        latitude: Double = 0,
-        longitude: Double = 0,
-        epochMs: Int64 = 0
-    ) -> String {
-        if !isDay, code == 0 || code == 1 || code == 2 || code == 3 {
-            let sky = AstronomyCalculator.nightSky(latitude: latitude, longitude: longitude, epochMs: epochMs)
-            switch code {
-            case 0:
-                return sky.showMoon ? moonPhaseSymbol(sky.phase) : "sparkles"
-            case 3:
-                return "cloud.fill"
-            default:
-                return sky.showMoon ? "cloud.moon.fill" : "cloud.fill"
-            }
-        }
+    private static func symbol(_ code: Int, isDay: Bool = true) -> String {
         switch code {
         case 0: return "sun.max.fill"
         case 1, 2: return "cloud.sun.fill"
@@ -355,21 +364,6 @@ public struct HourCard: View {
         case 85, 86: return "cloud.snow.fill"
         case 95...99: return "cloud.bolt.rain.fill"
         default: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
-        }
-    }
-
-    /// Northern-hemisphere symbols. 0 is new, 0.5 is full.
-    private static func moonPhaseSymbol(_ phase: Double) -> String {
-        let wrapped = phase - floor(phase)
-        switch wrapped {
-        case ..<0.0625, 0.9375...: return "moonphase.new.moon"
-        case ..<0.1875: return "moonphase.waxing.crescent"
-        case ..<0.3125: return "moonphase.first.quarter"
-        case ..<0.4375: return "moonphase.waxing.gibbous"
-        case ..<0.5625: return "moonphase.full.moon"
-        case ..<0.6875: return "moonphase.waning.gibbous"
-        case ..<0.8125: return "moonphase.last.quarter"
-        default: return "moonphase.waning.crescent"
         }
     }
 
