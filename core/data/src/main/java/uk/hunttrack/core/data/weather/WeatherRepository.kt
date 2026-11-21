@@ -7,6 +7,7 @@ import uk.hunttrack.core.data.db.WeatherCacheEntity
 import uk.hunttrack.domain.model.DailyForecast
 import uk.hunttrack.domain.model.HourlyForecast
 import uk.hunttrack.domain.model.WeatherSnapshot
+import uk.hunttrack.domain.weather.HourlyForecastLabels
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -100,6 +101,7 @@ data class HourlyDto(
     val windDirectionDeg: Double,
     val rainProbabilityPercent: Int,
     val weatherCode: Int,
+    val isDay: Boolean? = null,
 )
 
 @kotlinx.serialization.Serializable
@@ -119,7 +121,12 @@ private fun WeatherSnapshot.toDto() = WeatherSnapshotDto(
     latitude, longitude, fetchedAtEpochMs, temperatureC, feelsLikeC, humidityPercent, pressureHpa,
     windSpeedKmh, windDirectionDeg, windGustKmh, rainProbabilityPercent, visibilityKm, weatherCode,
     cloudCoverPercent,
-    hourly.map { HourlyDto(it.epochMs, it.temperatureC, it.windSpeedKmh, it.windDirectionDeg, it.rainProbabilityPercent, it.weatherCode) },
+    hourly.map {
+        HourlyDto(
+            it.epochMs, it.temperatureC, it.windSpeedKmh, it.windDirectionDeg,
+            it.rainProbabilityPercent, it.weatherCode, it.isDay,
+        )
+    },
     daily.map {
         DailyDto(
             it.epochMs, it.tempMinC, it.tempMaxC, it.rainProbabilityPercent, it.weatherCode,
@@ -132,7 +139,12 @@ private fun WeatherSnapshotDto.toDomain() = WeatherSnapshot(
     latitude, longitude, fetchedAtEpochMs, temperatureC, feelsLikeC, humidityPercent, pressureHpa,
     windSpeedKmh, windDirectionDeg, windGustKmh, rainProbabilityPercent, visibilityKm, weatherCode,
     cloudCoverPercent,
-    hourly.map { HourlyForecast(it.epochMs, it.temperatureC, it.windSpeedKmh, it.windDirectionDeg, it.rainProbabilityPercent, it.weatherCode) },
+    hourly.map {
+        HourlyForecast(
+            it.epochMs, it.temperatureC, it.windSpeedKmh, it.windDirectionDeg,
+            it.rainProbabilityPercent, it.weatherCode, it.isDay,
+        )
+    },
     daily.map {
         DailyForecast(
             it.epochMs, it.tempMinC, it.tempMaxC, it.rainProbabilityPercent, it.weatherCode,
@@ -155,8 +167,9 @@ private fun OpenMeteoResponse.toDomain(fetchedAt: Long): WeatherSnapshot {
             windDirectionDeg = hourly.windDirection10m.getOrNull(i) ?: 0.0,
             rainProbabilityPercent = hourly.precipitationProbability.getOrNull(i) ?: 0,
             weatherCode = hourly.weatherCode.getOrNull(i) ?: 0,
+            isDay = hourly.isDay.getOrNull(i)?.let { it != 0 },
         )
-    }?.take(24).orEmpty()
+    }?.let { parsed -> HourlyForecastLabels.upcoming(parsed, fetchedAt) }.orEmpty()
 
     val dailyList = daily?.time?.indices?.mapNotNull { i ->
         val day = daily.time.getOrNull(i) ?: return@mapNotNull null

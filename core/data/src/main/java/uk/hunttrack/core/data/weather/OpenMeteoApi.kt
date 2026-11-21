@@ -22,7 +22,7 @@ interface OpenMeteoApi {
         private const val CURRENT =
             "temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,cloud_cover,visibility"
         private const val HOURLY =
-            "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation_probability,weather_code"
+            "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation_probability,weather_code,is_day"
         private const val DAILY =
             "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,wind_speed_10m_max"
     }
@@ -60,6 +60,7 @@ data class HourlyWeather(
     @SerialName("wind_direction_10m") val windDirection10m: List<Double?> = emptyList(),
     @SerialName("precipitation_probability") val precipitationProbability: List<Int?> = emptyList(),
     @SerialName("weather_code") val weatherCode: List<Int?> = emptyList(),
+    @SerialName("is_day") val isDay: List<Int?> = emptyList(),
 )
 
 @Serializable

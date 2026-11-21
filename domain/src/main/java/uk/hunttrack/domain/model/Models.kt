@@ -124,6 +124,8 @@ data class HourlyForecast(
     val windDirectionDeg: Double,
     val rainProbabilityPercent: Int,
     val weatherCode: Int,
+    /** Open-Meteo `is_day` when the forecast included it. Null on older cached hours. */
+    val isDay: Boolean? = null,
 )
 
 data class DailyForecast(

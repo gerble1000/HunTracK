@@ -103,5 +103,5 @@ object MapTips {
     val delete = "Trash: Delete last removes the newest marker. Delete all clears every field marker (not the Home pin — use End home for that)."
     val clearTrail = "Deletes all field markers and the connecting path."
     val smoke = "Light magenta scent smoke drifts downwind from you (uses a default west wind until weather loads). Speed matches wind bands from calm to gale."
-    val overlays = "Turn map overlays on or off: scent smoke, GPS track, marker path."
+    val overlays = "Turn map overlays on or off: scent smoke, GPS track, string markers."
 }

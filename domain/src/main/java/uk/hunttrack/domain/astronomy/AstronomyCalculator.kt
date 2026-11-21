@@ -161,4 +161,27 @@ object AstronomyCalculator {
     }
 
     private fun rad(d: Double): Double = d * PI / 180.0
+
+    /**
+     * Moon at one instant. Altitude is the up/down test: the rise/set sampler only
+     * records the next crossings, so it is a poor bracket for "is it up this hour".
+     * Phase 0 is new, 0.5 is full. Illumination below 0.04 is treated as a new moon.
+     */
+    fun nightSky(latitude: Double, longitude: Double, epochMs: Long): NightSky {
+        val d = toDays(epochMs)
+        val moon = moonData(d, latitude, longitude)
+        return NightSky(
+            moonUp = moonAltitude(d, latitude, longitude) >= 0.0,
+            phase = moon.phase,
+            illumination = moon.illumination,
+        )
+    }
+}
+
+data class NightSky(
+    val moonUp: Boolean,
+    val phase: Double,
+    val illumination: Double,
+) {
+    val showMoon: Boolean get() = moonUp && illumination >= 0.04
 }

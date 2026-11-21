@@ -1,8 +1,14 @@
 package uk.hunttrack.feature.emergency
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,15 +28,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -38,30 +50,108 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uk.hunttrack.core.designsystem.components.GlassPanel
 import uk.hunttrack.core.designsystem.components.MetricRow
 import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import uk.hunttrack.core.designsystem.theme.HuntColors
 
 @Composable
 fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var textNotice by remember { mutableStateOf<String?>(null) }
+    var beaconArmed by remember { mutableStateOf(false) }
+    var leftForMessages by remember { mutableStateOf(false) }
+    var pendingSms by remember { mutableStateOf<EmergencyTextDraft?>(null) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        val draft = pendingSms
+        pendingSms = null
+        if (draft != null) launchEmergencyText(context, draft) { textNotice = it }
+    }
+    DisposableEffect(beaconArmed, lifecycle) {
+        if (!beaconArmed) return@DisposableEffect onDispose {}
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                leftForMessages = true
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(beaconArmed) {
+        if (!beaconArmed) return@LaunchedEffect
+        delay(1_200)
+        if (beaconArmed && !leftForMessages && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            DistressMode.showBeacon()
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
     EmergencyScreen(
         state = state,
+        textNotice = textNotice,
+        onEmergencyText = {
+            scope.launch {
+                val draft = viewModel.prepareEmergencyText()
+                val phone = draft.phone
+                if (phone == null) {
+                    textNotice = context.getString(R.string.emergency_text_no_contact)
+                    return@launch
+                }
+                // Armed the moment the text flow starts, before Messages opens.
+                leftForMessages = false
+                beaconArmed = true
+                val needsNotificationPermission = Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED
+                if (needsNotificationPermission) {
+                    pendingSms = draft
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    launchEmergencyText(context, draft) { textNotice = it }
+                }
+            }
+        },
         onPinInput = viewModel::setPinInput,
         onUnlockPin = viewModel::tryUnlockWithPin,
         onUnlockBio = viewModel::unlockFromBiometric,
         onShowPublic = viewModel::showPublic,
         onSave = viewModel::save,
     )
+    }
+}
+
+private fun launchEmergencyText(
+    context: android.content.Context,
+    draft: EmergencyTextDraft,
+    onNotice: (String) -> Unit,
+) {
+    DistressNotifications.arm(context)
+    val opened = openEmergencySms(context, draft.phone.orEmpty(), draft.body)
+    onNotice(
+        when {
+            !opened -> context.getString(R.string.emergency_text_no_app)
+            !draft.hasFix -> context.getString(R.string.emergency_text_no_gps)
+            else -> context.getString(R.string.emergency_text_ready)
+        },
+    )
 }
 
 @Composable
 fun EmergencyScreen(
     state: EmergencyUiState,
+    textNotice: String? = null,
+    onEmergencyText: () -> Unit = {},
     onPinInput: (String) -> Unit,
     onUnlockPin: () -> Unit,
     onUnlockBio: () -> Unit,
@@ -121,6 +211,30 @@ fun EmergencyScreen(
                 }
                 if (profile.contacts.isEmpty()) {
                     item { Text("No contacts stored yet.", color = HuntColors.Mist) }
+                }
+                item {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            onClick = onEmergencyText,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = HuntColors.Danger,
+                                contentColor = HuntColors.Cream,
+                            ),
+                        ) { Text(stringResource(R.string.emergency_text_button)) }
+                        Text(
+                            stringResource(R.string.emergency_text_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = HuntColors.Mist,
+                        )
+                        if (textNotice != null) {
+                            Text(
+                                textNotice,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = HuntColors.Cream,
+                            )
+                        }
+                    }
                 }
                 item {
                     GlassPanel(Modifier.fillMaxWidth()) {

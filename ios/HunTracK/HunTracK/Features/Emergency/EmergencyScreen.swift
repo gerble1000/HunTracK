@@ -1,6 +1,7 @@
 import SwiftUI
 import LocalAuthentication
 import UIKit
+import MessageUI
 
 /// Public In Case of Emergency (ICE) profile.
 ///
@@ -10,10 +11,18 @@ import UIKit
 public struct EmergencyScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var db = DatabaseService.shared
+    @ObservedObject private var location = LocationManager.shared
 
     @State private var isUnlocked = false
     @State private var draft = EmergencyProfile()
     @State private var statusMessage: String?
+    @State private var textNotice: String?
+    @State private var beaconArmed = false
+    @State private var leftForMessages = false
+    @State private var cover: EmergencyCover?
+    @State private var composerPhone = ""
+    @State private var composerBody = ""
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var activeSheet: EmergencySheet?
     @State private var pinPurpose: PinPurpose = .unlock
@@ -70,6 +79,28 @@ public struct EmergencyScreen: View {
                 pinSheet(purpose)
             case .contact:
                 contactSheet
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            guard beaconArmed, cover != .composer else { return }
+            if phase != .active {
+                leftForMessages = true
+            } else if leftForMessages {
+                cover = .beacon
+            }
+        }
+        .fullScreenCover(item: $cover) { item in
+            switch item {
+            case .composer:
+                MessageComposeSheet(phone: composerPhone, body: composerBody) {
+                    cover = .beacon
+                }
+            case .beacon:
+                EmergencyBeaconCover {
+                    cover = nil
+                    beaconArmed = false
+                }
+                .interactiveDismissDisabled(true)
             }
         }
     }
@@ -144,6 +175,24 @@ public struct EmergencyScreen: View {
                 }
             }
 
+            Button(action: sendEmergencyText) {
+                Text("Emergency text")
+                    .font(.field(size: 16, weight: .bold))
+                    .foregroundColor(theme.palette.cream)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(theme.palette.danger)
+                    .cornerRadius(12)
+            }
+            Text("Opens your Messages app with your saved contact. You press Send. HunTracK does not send the text.")
+                .font(.field(size: 12))
+                .foregroundColor(theme.palette.mist)
+            if let textNotice {
+                Text(textNotice)
+                    .font(.field(size: 13))
+                    .foregroundColor(theme.palette.cream)
+            }
+
             HuntButton(
                 DatabaseService.hasPin(db.emergency.pinHash)
                     ? "Unlock to Edit"
@@ -164,6 +213,44 @@ public struct EmergencyScreen: View {
                 Text(statusMessage)
                     .font(.field(size: 13))
                     .foregroundColor(theme.palette.success)
+            }
+        }
+    }
+
+    /// Opens the phone's Messages app. The user presses Send.
+    private func sendEmergencyText() {
+        guard let phone = emergencySmsAddress(db.emergency.contacts) else {
+            textNotice = "Save an emergency contact phone number first."
+            return
+        }
+        let fix = location.latestFix
+        let body = emergencySmsBody(latitude: fix?.latitude, longitude: fix?.longitude)
+        // Armed as soon as Emergency text is tapped, before Messages opens.
+        leftForMessages = false
+        beaconArmed = true
+        textNotice = fix == nil
+            ? "No GPS fix yet. The text says your location is unavailable. You still press Send yourself."
+            : "Message ready in your Messages app. Press Send when you want it to go."
+        if MFMessageComposeViewController.canSendText() {
+            composerPhone = phone
+            composerBody = body
+            cover = .composer
+            return
+        }
+        guard let encoded = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "sms:\(phone)&body=\(encoded)") else {
+            textNotice = "No messaging app is available on this phone."
+            return
+        }
+        UIApplication.shared.open(url, options: [:]) { opened in
+            if opened {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    if beaconArmed && !leftForMessages && UIApplication.shared.applicationState == .active {
+                        cover = .beacon
+                    }
+                }
+            } else {
+                textNotice = "No messaging app is available on this phone."
             }
         }
     }
@@ -631,6 +718,150 @@ public struct EmergencyScreen: View {
         let digits = phone.filter { $0.isNumber || $0 == "+" }
         guard !digits.isEmpty, let url = URL(string: "tel://" + digits) else { return }
         UIApplication.shared.open(url)
+    }
+
+    /// Same wording as Android `EmergencyText`. Uses a live fix only, never the Midlands fallback.
+    private func emergencySmsAddress(_ contacts: [EmergencyContact]) -> String? {
+        guard let raw = contacts.first(where: { $0.phone.contains(where: { $0.isNumber }) })?.phone else { return nil }
+        var address = ""
+        for character in raw.trimmingCharacters(in: .whitespacesAndNewlines) {
+            if character == "+" && address.isEmpty {
+                address.append(character)
+            } else if character >= "0" && character <= "9" {
+                address.append(character)
+            }
+        }
+        return address.contains(where: { $0.isNumber }) ? address : nil
+    }
+
+    private func emergencySmsBody(latitude: Double?, longitude: Double?) -> String {
+        let grid: String
+        let coordinates: String
+        if let latitude, let longitude {
+            grid = OsGridRef.latLngToOsGrid(latitude: latitude, longitude: longitude) ?? "unavailable"
+            coordinates = String(format: "%.5f, %.5f", locale: Locale(identifier: "en_US_POSIX"), latitude, longitude)
+        } else {
+            grid = "unavailable"
+            coordinates = "unavailable"
+        }
+        return "Help! I need medical aid. My location is\nGrid reference: \(grid)\nCoordinates: \(coordinates)"
+    }
+}
+
+private enum EmergencyCover: String, Identifiable {
+    case composer
+    case beacon
+    var id: String { rawValue }
+}
+
+/// In-app Messages sheet. After Send or Cancel, HunTracK is showing again and the beacon starts.
+private struct MessageComposeSheet: UIViewControllerRepresentable {
+    let phone: String
+    let body: String
+    let onFinish: () -> Void
+
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        let controller = MFMessageComposeViewController()
+        controller.recipients = [phone]
+        controller.body = body
+        controller.messageComposeDelegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFinish: onFinish)
+    }
+
+    final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let onFinish: () -> Void
+        init(onFinish: @escaping () -> Void) { self.onFinish = onFinish }
+
+        func messageComposeViewController(
+            _ controller: MFMessageComposeViewController,
+            didFinishWith result: MessageComposeResult
+        ) {
+            onFinish()
+        }
+    }
+}
+
+/// Full-screen red/white flash. Each colour is held for about 2 seconds. Hold the stop control for 3 seconds.
+private struct EmergencyBeaconCover: View {
+    var onStop: () -> Void
+    @State private var red = true
+    @State private var holding = false
+    @State private var progress: CGFloat = 0
+    @State private var holdStarted: Date?
+    @State private var savedBrightness: CGFloat = 0.5
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            (red ? Color(red: 1, green: 0, blue: 0) : Color.white)
+                .ignoresSafeArea()
+            holdControl
+                .padding(.horizontal, 24)
+                .padding(.bottom, 36)
+        }
+        .statusBarHidden(true)
+        .onAppear {
+            savedBrightness = UIScreen.main.brightness
+            UIScreen.main.brightness = 1
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            UIScreen.main.brightness = savedBrightness
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .onReceive(Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()) { _ in
+            red.toggle()
+        }
+    }
+
+    private var holdControl: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.white)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .trim(from: 0, to: progress)
+                .stroke(Color.black, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(5)
+            Text("Hold to stop")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.black)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 84)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard holdStarted == nil else { return }
+                    holdStarted = Date()
+                    holding = true
+                    progress = 0
+                    withAnimation(.linear(duration: 3)) { progress = 1 }
+                }
+                .onEnded { _ in
+                    let elapsed = holdStarted.map { Date().timeIntervalSince($0) } ?? 0
+                    holdStarted = nil
+                    guard elapsed < 2.9 else { return }
+                    holding = false
+                    var transaction = SwiftUI.Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { progress = 0 }
+                }
+        )
+        .onChange(of: holding) { isHolding in
+            guard isHolding else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if holding { onStop() }
+            }
+        }
+        .accessibilityLabel("Hold to stop")
+        .accessibilityHint("Press and hold for three seconds")
     }
 }
 

@@ -701,11 +701,11 @@ public struct ScreenBackground<Content: View>: View {
 /// The fallbacks below apply only when the bundle has no version keys.
 public enum AppVersion {
     public static var short: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.32"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.33"
     }
 
     public static var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "46"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "47"
     }
 
     public static var display: String {

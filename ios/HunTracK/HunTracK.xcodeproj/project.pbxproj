@@ -48,6 +48,8 @@
 		A30000052D00000100000001 /* YourDataScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000052D00000100000001 /* YourDataScreen.swift */; };
 		A30000062D00000100000001 /* TextFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062D00000100000001 /* TextFormats.swift */; };
 		A40000012D00000100000001 /* AudioPackDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000012D00000100000001 /* AudioPackDownload.swift */; };
+		A50000012D00000100000001 /* MoonPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000012D00000100000001 /* MoonPhase.swift */; };
+		A60000012D00000100000001 /* MessageUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B60000012D00000100000001 /* MessageUI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -94,6 +96,8 @@
 		B30000052D00000100000001 /* YourDataScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/YourDataScreen.swift; sourceTree = "<group>"; };
 		B30000062D00000100000001 /* TextFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/TextFormats.swift; sourceTree = "<group>"; };
 		B40000012D00000100000001 /* AudioPackDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calls/AudioPackDownload.swift; sourceTree = "<group>"; };
+		B50000012D00000100000001 /* MoonPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Astronomy/MoonPhase.swift; sourceTree = "<group>"; };
+		B60000012D00000100000001 /* MessageUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MessageUI.framework; path = System/Library/Frameworks/MessageUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -101,6 +105,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A60000012D00000100000001 /* MessageUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -111,8 +116,17 @@
 			isa = PBXGroup;
 			children = (
 				D10000022D00000100000001 /* HunTracK */,
+				D10000032D00000100000001 /* Frameworks */,
 				010000022D00000100000001 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		D10000032D00000100000001 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B60000012D00000100000001 /* MessageUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		010000022D00000100000001 /* Products */ = {
@@ -136,6 +150,7 @@
 				B10000122D00000100000001 /* CompassManager.swift */,
 				B10000132D00000100000001 /* LocationManager.swift */,
 				B10000142D00000100000001 /* AstronomyCalculator.swift */,
+				B50000012D00000100000001 /* MoonPhase.swift */,
 				B10000152D00000100000001 /* UkFieldCatalog.swift */,
 				B10000162D00000100000001 /* OsGridRef.swift */,
 				B10000172D00000100000001 /* Models.swift */,
@@ -262,6 +277,7 @@
 				A10000112D00000100000001 /* CompassManager.swift in Sources */,
 				A10000122D00000100000001 /* LocationManager.swift in Sources */,
 				A10000132D00000100000001 /* AstronomyCalculator.swift in Sources */,
+				A50000012D00000100000001 /* MoonPhase.swift in Sources */,
 				A10000142D00000100000001 /* UkFieldCatalog.swift in Sources */,
 				A10000152D00000100000001 /* OsGridRef.swift in Sources */,
 				A10000162D00000100000001 /* Models.swift in Sources */,
@@ -306,7 +322,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 46;
+				CURRENT_PROJECT_VERSION = 47;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -331,7 +347,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.32;
+				MARKETING_VERSION = 1.1.33;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -355,7 +371,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 46;
+				CURRENT_PROJECT_VERSION = 47;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -374,7 +390,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.32;
+				MARKETING_VERSION = 1.1.33;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.hunttrack.app;

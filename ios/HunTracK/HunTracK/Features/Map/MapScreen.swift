@@ -27,11 +27,78 @@ private func mapUIColor(hex: String) -> UIColor {
 
 // MARK: - Annotation kinds
 
+private func footprintImage(bearingDegrees: Double, walked: Bool) -> UIImage {
+    let size = CGSize(width: 28, height: 36)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    let upright = renderer.image { _ in
+        let color = walked
+            ? UIColor(red: 0.639, green: 0.639, blue: 0.639, alpha: 1)
+            : UIColor(red: 1, green: 0.416, blue: 0, alpha: 1)
+        color.setFill()
+        UIBezierPath(ovalIn: CGRect(x: 8, y: 14, width: 12, height: 20)).fill()
+        for toe in [CGRect(x: 4, y: 6, width: 6, height: 7),
+                    CGRect(x: 10, y: 2, width: 7, height: 8),
+                    CGRect(x: 17, y: 5, width: 6, height: 7),
+                    CGRect(x: 21, y: 11, width: 5, height: 6)] {
+            UIBezierPath(ovalIn: toe).fill()
+        }
+    }
+    let radians = -CGFloat(bearingDegrees * .pi / 180)
+    let rotated = CGRect(origin: .zero, size: upright.size).applying(CGAffineTransform(rotationAngle: radians)).integral
+    let canvas = CGSize(width: abs(rotated.width), height: abs(rotated.height))
+    return UIGraphicsImageRenderer(size: canvas).image { ctx in
+        ctx.cgContext.translateBy(x: canvas.width / 2, y: canvas.height / 2)
+        ctx.cgContext.rotate(by: radians)
+        upright.draw(in: CGRect(x: -upright.size.width / 2, y: -upright.size.height / 2, width: upright.size.width, height: upright.size.height))
+    }
+}
+
+private struct ApproachFootprint: Equatable {
+    var latitude: Double
+    var longitude: Double
+    var bearing: Double
+    var walked: Bool
+}
+
+/// Same corridor and pass margin as Android `ApproachTrail`.
+private func approachPrintWalked(
+    printLat: Double,
+    printLng: Double,
+    startLat: Double,
+    startLng: Double,
+    endLat: Double,
+    endLng: Double,
+    userLat: Double?,
+    userLng: Double?
+) -> Bool {
+    guard let userLat, let userLng else { return false }
+    let corridorM = 45.0
+    let passMarginM = 10.0
+    func north(_ lat: Double, _ origin: Double) -> Double { (lat - origin) * 110_540.0 }
+    func east(_ lng: Double, _ originLng: Double, _ originLat: Double) -> Double {
+        (lng - originLng) * 111_320.0 * cos(originLat * .pi / 180)
+    }
+    let routeEast = east(endLng, startLng, startLat)
+    let routeNorth = north(endLat, startLat)
+    let routeLen = hypot(routeEast, routeNorth)
+    guard routeLen >= 12 else { return false }
+    let userEast = east(userLng, startLng, startLat)
+    let userNorth = north(userLat, startLat)
+    let along = (userEast * routeEast + userNorth * routeNorth) / routeLen
+    let cross = abs(userEast * routeNorth - userNorth * routeEast) / routeLen
+    guard cross <= corridorM, along >= passMarginM else { return false }
+    let printEast = east(printLng, startLng, startLat)
+    let printNorth = north(printLat, startLat)
+    let printAlong = (printEast * routeEast + printNorth * routeNorth) / routeLen
+    return along > printAlong + passMarginM
+}
+
 private enum MapPinKind: String {
     case fieldMarker
     case cull
     case homing
     case boundaryPoint
+    case approachFootprint
 }
 
 private final class HuntAnnotation: NSObject, MKAnnotation {
@@ -41,6 +108,10 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
     let kind: MapPinKind
     let recordId: Int64
     let tint: UIColor
+    /// Clockwise degrees from north. Used by approach footprints.
+    let bearingDegrees: Double
+    /// True once the hunter has walked past this print.
+    let walked: Bool
 
     init(
         coordinate: CLLocationCoordinate2D,
@@ -48,7 +119,9 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
         subtitle: String?,
         kind: MapPinKind,
         recordId: Int64,
-        tint: UIColor
+        tint: UIColor,
+        bearingDegrees: Double = 0,
+        walked: Bool = false
     ) {
         self.coordinate = coordinate
         self.title = title
@@ -56,6 +129,8 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
         self.kind = kind
         self.recordId = recordId
         self.tint = tint
+        self.bearingDegrees = bearingDegrees
+        self.walked = walked
     }
 }
 
@@ -89,6 +164,8 @@ private struct MapContentSnapshot: Equatable {
     var focusedBoundaryIds: [Int64] = []
     var linkedBoundaryIds: [Int64] = []
     var zoneFingerprints: [String] = []
+    var showTracks: Bool = true
+    var approachKey: String = ""
 }
 
 // MARK: - The UIKit map host
@@ -336,6 +413,10 @@ private struct MapViewHost: UIViewRepresentable {
     var pendingPoints: [BoundaryPoint]
     var mapStyle: MapLayerStyle
     var showGrid: Bool
+    var showSmoke: Bool
+    var showTracks: Bool
+    var showScale: Bool
+    var approachFootprints: [ApproachFootprint]
     var northUpToken: Int
     var windFix: GpsFix?
     var windWeather: WeatherSnapshot?
@@ -376,7 +457,7 @@ private struct MapViewHost: UIViewRepresentable {
         mapView.delegate = coordinator
         mapView.showsUserLocation = true
         mapView.showsCompass = true
-        mapView.showsScale = true
+        mapView.showsScale = showScale
         mapView.isRotateEnabled = true
         mapView.isPitchEnabled = false
         mapView.pointOfInterestFilter = .excludingAll
@@ -428,6 +509,9 @@ private struct MapViewHost: UIViewRepresentable {
         coordinator.parent = self
 
         coordinator.applyStyle(mapView, style: mapStyle)
+        if mapView.showsScale != showScale {
+            mapView.showsScale = showScale
+        }
         if coordinator.lastNorthUpToken != northUpToken {
             coordinator.lastNorthUpToken = northUpToken
             let camera = mapView.camera.copy() as! MKMapCamera
@@ -459,7 +543,11 @@ private struct MapViewHost: UIViewRepresentable {
             linkedBoundaryIds: linkedBoundaryIds.sorted(),
             zoneFingerprints: boundaries.flatMap { boundary in
                 boundary.zones.map { "\($0.id):\($0.kind.rawValue):\($0.name):\($0.points.count):\($0.notes)" }
-            }
+            },
+            showTracks: showTracks,
+            approachKey: approachFootprints.map {
+                "\($0.latitude),\($0.longitude),\($0.bearing),\($0.walked)"
+            }.joined(separator: "|")
         )
 
         if coordinator.lastSnapshot != snapshot {
@@ -559,6 +647,23 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             appliedAnnotations.append(annotation)
         }
 
+        for (index, step) in host.approachFootprints.enumerated() {
+            let annotation = HuntAnnotation(
+                coordinate: CLLocationCoordinate2D(latitude: step.latitude, longitude: step.longitude),
+                title: nil,
+                subtitle: nil,
+                kind: .approachFootprint,
+                recordId: Int64(index),
+                tint: step.walked
+                    ? UIColor(red: 0.639, green: 0.639, blue: 0.639, alpha: 1)
+                    : UIColor(red: 1, green: 0.416, blue: 0, alpha: 1),
+                bearingDegrees: step.bearing,
+                walked: step.walked
+            )
+            mapView.addAnnotation(annotation)
+            appliedAnnotations.append(annotation)
+        }
+
         // --- Cull pins (only when the preference is on) ---
         if host.showCulls {
             for record in host.culls {
@@ -629,6 +734,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
         }
 
         // --- Tracks ---
+        if host.showTracks {
         for route in host.routes {
             let points = host.trackPoints
                 .filter { $0.routeId == route.id }
@@ -640,6 +746,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             let line = MKPolyline(coordinates: &coordinates, count: coordinates.count)
             overlayKinds[ObjectIdentifier(line)] = .route
             mapView.addOverlay(line)
+        }
         }
 
         // --- In-progress boundary capture ---
@@ -721,7 +828,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     }
 
     func updatePlume(_ mapView: MKMapView) {
-        let fresh = ScentPlumeGeometry.usableWeather(parent.windWeather, for: parent.windFix) != nil
+        let fresh = parent.showSmoke && ScentPlumeGeometry.usableWeather(parent.windWeather, for: parent.windFix) != nil
         let moved: Bool
         if let last = lastPlumeFix, let fix = parent.windFix {
             moved = DatabaseService.haversineMeters(last.latitude, last.longitude, fix.latitude, fix.longitude) > 20
@@ -801,6 +908,17 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             return view
         }
         guard let hunt = annotation as? HuntAnnotation else { return nil }
+
+        if hunt.kind == .approachFootprint {
+            let identifier = "hunt-approach-footprint"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            view.annotation = annotation
+            view.image = footprintImage(bearingDegrees: hunt.bearingDegrees, walked: hunt.walked)
+            view.centerOffset = .zero
+            view.canShowCallout = false
+            return view
+        }
 
         let identifier = "hunt-\(hunt.kind.rawValue)"
         if hunt.kind == .fieldMarker || hunt.kind == .cull {
@@ -962,6 +1080,12 @@ public struct MapScreen: View {
     @State private var showingGridInput = false
     @State private var showingHoming = false
     @State private var showingBoundarySetup = false
+    @State private var showingOffline = false
+    @State private var showingOverlays = false
+    @State private var showMapGuide = false
+    @State private var showSmoke = true
+    @State private var showTracks = true
+    @State private var showScale = true
     @State private var northUpToken = 0
     @State private var markerCoordinate: CLLocationCoordinate2D?
     @State private var followUser = true
@@ -1008,6 +1132,10 @@ public struct MapScreen: View {
                     pendingPoints: pendingPoints,
                     mapStyle: db.preferences.mapLayerStyle,
                     showGrid: db.preferences.showOsGridRef,
+                    showSmoke: showSmoke,
+                    showTracks: showTracks,
+                    showScale: showScale,
+                    approachFootprints: scentApproachFootprints(),
                     northUpToken: northUpToken,
                     windFix: location.latestFix,
                     windWeather: weatherService.weather ?? db.cachedWeather,
@@ -1036,6 +1164,10 @@ public struct MapScreen: View {
             .overlay(alignment: .top) {
                 VStack(spacing: 6) {
                     topBar
+                    if let approach = activeScentApproach {
+                        approachBanner(approach)
+                            .padding(.horizontal, 14)
+                    }
                     if !db.permissionMapFocus.isEmpty {
                         focusBanner
                             .padding(.horizontal, 14)
@@ -1073,7 +1205,19 @@ public struct MapScreen: View {
             )
         }
         .sheet(isPresented: $showingLayers) {
-            MapLayersSheet()
+            MapLayersSheet(onGoToGrid: {
+                showingLayers = false
+                showingGridInput = true
+            })
+        }
+        .sheet(isPresented: $showingOffline) {
+            MapLayersSheet(offlineOnly: true)
+        }
+        .sheet(isPresented: $showingOverlays) {
+            mapOverlaysSheet
+        }
+        .sheet(isPresented: $showMapGuide) {
+            MapTrainingGuideSheet(isPresented: $showMapGuide)
         }
         .sheet(isPresented: $showingHoming) {
             homingSheet
@@ -1160,6 +1304,90 @@ public struct MapScreen: View {
         }
     }
 
+    private struct ActiveApproach {
+        var name: String
+        var walkHeading: Double
+    }
+
+    private var activeScentApproach: ActiveApproach? {
+        guard let id = db.scentApproachMarkerId,
+              let marker = db.markers.first(where: { $0.id == id }),
+              let weather = weatherService.weather ?? db.cachedWeather else { return nil }
+        return ActiveApproach(name: marker.name, walkHeading: weather.windDirectionDeg)
+    }
+
+    private func scentApproachFootprints() -> [ApproachFootprint] {
+        guard let id = db.scentApproachMarkerId,
+              let marker = db.markers.first(where: { $0.id == id }),
+              let weather = weatherService.weather ?? db.cachedWeather else { return [] }
+        let plume = ScentPlumeGeometry.forConditions(
+            speedKmh: weather.windSpeedKmh,
+            gustKmh: weather.windGustKmh,
+            humidityPercent: weather.humidityPercent,
+            temperatureC: weather.temperatureC
+        )
+        var downwind = (weather.windDirectionDeg + 180).truncatingRemainder(dividingBy: 360)
+        if downwind < 0 { downwind += 360 }
+        let start = offsetMeters(lat: marker.latitude, lon: marker.longitude, bearing: downwind, meters: plume.approachStandoffM)
+        let bearing = bearingDegrees(fromLat: start.lat, fromLon: start.lon, toLat: marker.latitude, toLon: marker.longitude)
+        let distance = DatabaseService.haversineMeters(start.lat, start.lon, marker.latitude, marker.longitude)
+        guard distance >= 12 else { return [] }
+        let steps = min(40, max(4, Int(distance / 20)))
+        let user = location.latestFix
+        return (0..<steps).map { index in
+            let t = Double(index) / Double(steps)
+            let lat = start.lat + (marker.latitude - start.lat) * t
+            let lon = start.lon + (marker.longitude - start.lon) * t
+            return ApproachFootprint(
+                latitude: lat,
+                longitude: lon,
+                bearing: bearing,
+                walked: approachPrintWalked(
+                    printLat: lat,
+                    printLng: lon,
+                    startLat: start.lat,
+                    startLng: start.lon,
+                    endLat: marker.latitude,
+                    endLng: marker.longitude,
+                    userLat: user?.latitude,
+                    userLng: user?.longitude
+                )
+            )
+        }
+    }
+
+    private func offsetMeters(lat: Double, lon: Double, bearing: Double, meters: Double) -> (lat: Double, lon: Double) {
+        let radius = 6_371_000.0
+        let brng = bearing * .pi / 180
+        let lat1 = lat * .pi / 180
+        let lon1 = lon * .pi / 180
+        let ang = meters / radius
+        let lat2 = asin(sin(lat1) * cos(ang) + cos(lat1) * sin(ang) * cos(brng))
+        let lon2 = lon1 + atan2(sin(brng) * sin(ang) * cos(lat1), cos(ang) - sin(lat1) * sin(lat2))
+        return (lat2 * 180 / .pi, lon2 * 180 / .pi)
+    }
+
+    private func approachBanner(_ approach: ActiveApproach) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Into-wind approach")
+                .font(.field(size: 16, weight: .bold))
+                .foregroundColor(theme.palette.bronzeBright)
+            Text("Route to \(approach.name): walk \(cardinal(approach.walkHeading)) so the wind hits the front of you.")
+                .font(.field(size: 13))
+                .foregroundColor(theme.palette.cream)
+            Text("Footprints · start downwind → finish at marker. Walked prints fade grey.")
+                .font(.field(size: 12))
+                .foregroundColor(theme.palette.mist)
+            Button("Clear approach") { db.scentApproachMarkerId = nil }
+                .font(.field(size: 14, weight: .semibold))
+                .foregroundColor(theme.palette.bronzeBright)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.palette.forestMid.opacity(0.94))
+        .cornerRadius(12)
+    }
+
     // MARK: - Top bar
 
     private var topBar: some View {
@@ -1180,56 +1408,46 @@ public struct MapScreen: View {
                         .cornerRadius(6)
                         .onTapGesture { showingGridInput = true }
                 }
-
-                Button {
-                    showingLayers = true
-                } label: {
-                    Image(systemName: "square.3.layers.3d")
-                        .font(.field(size: 16, weight: .semibold))
-                        .foregroundColor(theme.palette.bronzeBright)
-                        .padding(8)
-                        .background(theme.palette.charcoal.opacity(0.75))
-                        .cornerRadius(8)
-                }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                recordButton
-                homingButton
-                mapMenu
-                if let route = activeRoute {
-                    Text(routeText(route))
-                        .font(.field(size: 11, weight: .semibold))
-                        .foregroundColor(theme.palette.cream)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(theme.palette.charcoal.opacity(0.75))
-                        .cornerRadius(6)
-                }
-                Spacer()
-                if !db.routes.isEmpty {
-                    Menu {
-                        Button("Delete last track", role: .destructive) {
-                            if let last = db.routes.last {
-                                db.deleteRoute(routeId: last.id)
-                            }
-                        }
-                        Button("Delete all tracks", role: .destructive) {
-                            activeRouteId = nil
-                            db.clearRoutes()
-                        }
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.field(size: 14, weight: .semibold))
-                            .foregroundColor(theme.palette.mist)
-                            .padding(7)
-                            .background(theme.palette.charcoal.opacity(0.75))
-                            .cornerRadius(8)
+                    mapChip("?", systemImage: "questionmark.circle") { showMapGuide = true }
+                    mapChip("Home", systemImage: "flag.fill", selected: homingTarget != nil) {
+                        showingHoming = true
                     }
+                    mapChip("Home here", systemImage: "location.fill", enabled: location.latestFix != nil) {
+                        homeHere()
+                    }
+                    if homingTarget != nil {
+                        mapChip("End home", systemImage: "flag.fill") { endHoming() }
+                    }
+                    mapChip("North up", systemImage: "location.north.line") { northUpToken += 1 }
+                    if !fieldMarkers.isEmpty {
+                        mapChip("Delete last", systemImage: "trash") { deleteLastFieldMarker() }
+                        mapChip("Delete all", systemImage: "trash.fill") { deleteAllFieldMarkers() }
+                    }
+                    if isCapturing {
+                        mapChip(
+                            zoneCapture == nil ? "Save fence" : "Save zone",
+                            systemImage: "checkmark",
+                            enabled: pendingPoints.count >= 3
+                        ) {
+                            if zoneCapture != nil { saveZone() } else { saveBoundary() }
+                        }
+                        mapChip("Cancel", systemImage: "xmark") { finishBoundaryCapture() }
+                    } else {
+                        mapChip("Walk fence", systemImage: "figure.walk") { startBoundarySetup(.walk) }
+                        mapChip("Draw fence", systemImage: "pencil") { startBoundarySetup(.draw) }
+                    }
+                    mapChip("Layers", systemImage: "square.3.layers.3d") { showingLayers = true }
+                    mapChip("Offline", systemImage: "arrow.down.circle") { showingOffline = true }
+                    mapChip(showSmoke ? "Smoke on" : "Smoke off", systemImage: "wind", selected: showSmoke) {
+                        showSmoke.toggle()
+                    }
+                    mapChip("Overlays", systemImage: "eye") { showingOverlays = true }
                 }
-            }
-
+                .padding(.vertical, 2)
             }
         }
         .padding(.horizontal, 14)
@@ -1242,46 +1460,120 @@ public struct MapScreen: View {
         return db.routes.first { $0.id == id }
     }
 
-    private var recordButton: some View {
-        Button {
-            if activeRouteId == nil {
-                let id = db.startRoute()
-                activeRouteId = id
-                lastAppendedAtEpochMs = 0
-                sound.play(.gpsLock)
-            } else if let id = activeRouteId {
-                db.endRoute(routeId: id)
-                activeRouteId = nil
-                sound.play(.success)
-            }
-        } label: {
+    private var fieldMarkers: [FieldMarker] {
+        db.markers.filter { $0.category != .homing }
+    }
+
+    private func mapChip(
+        _ title: String,
+        systemImage: String? = nil,
+        selected: Bool = false,
+        enabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: activeRouteId == nil ? "record.circle" : "stop.circle.fill")
-                Text(activeRouteId == nil ? "Record" : "Stop")
+                if let systemImage {
+                    Image(systemName: systemImage)
+                }
+                Text(title)
             }
             .font(.field(size: 12, weight: .bold))
-            .foregroundColor(activeRouteId == nil ? theme.palette.cream : theme.palette.danger)
+            .foregroundColor(enabled ? theme.palette.cream : theme.palette.mist)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(theme.palette.charcoal.opacity(0.75))
+            .background(selected ? theme.palette.forestGreen.opacity(0.95) : theme.palette.charcoal.opacity(0.85))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(selected ? theme.palette.bronzeBright : theme.palette.bronze.opacity(0.75), lineWidth: 1)
+            )
             .cornerRadius(8)
+        }
+        .disabled(!enabled)
+        .accessibilityLabel(title)
+    }
+
+    private func homeHere() {
+        guard let fix = location.latestFix else {
+            mapMessage = "Wait for a GPS fix before setting home here."
+            return
+        }
+        homingTarget = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
+        homingLabel = "Home"
+        db.addMarker(FieldMarker(category: .homing, name: "Home", latitude: fix.latitude, longitude: fix.longitude))
+    }
+
+    private func deleteLastFieldMarker() {
+        guard let last = fieldMarkers.max(by: { $0.createdAtEpochMs < $1.createdAtEpochMs }) else { return }
+        db.deleteMarker(id: last.id)
+        if selectedMarker?.id == last.id { selectedMarker = nil }
+    }
+
+    private func deleteAllFieldMarkers() {
+        for marker in fieldMarkers {
+            db.deleteMarker(id: marker.id)
+        }
+        selectedMarker = nil
+    }
+
+    private func toggleRecording() {
+        if activeRouteId == nil {
+            activeRouteId = db.startRoute()
+            lastAppendedAtEpochMs = 0
+            sound.play(.gpsLock)
+        } else if let id = activeRouteId {
+            db.endRoute(routeId: id)
+            activeRouteId = nil
+            sound.play(.success)
         }
     }
 
-    private var homingButton: some View {
-        Button {
-            showingHoming = true
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: homingTarget == nil ? "arrow.down.circle" : "xmark.circle")
-                Text(homingTarget == nil ? "Homing" : "End homing")
+    private var mapOverlaysSheet: some View {
+        NavigationView {
+            ScreenBackground {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Overlays")
+                            .font(.field(size: 28, weight: .bold))
+                            .foregroundColor(theme.palette.cream)
+                        Text("Show or hide scent smoke, GPS track, and map scale.")
+                            .font(.field(size: 14))
+                            .foregroundColor(theme.palette.mist)
+
+                        Toggle("Scent smoke", isOn: $showSmoke)
+                            .foregroundColor(theme.palette.cream)
+                        Toggle("GPS track", isOn: $showTracks)
+                            .foregroundColor(theme.palette.cream)
+                        Toggle("Map scale (m & ft)", isOn: $showScale)
+                            .foregroundColor(theme.palette.cream)
+
+                        Button(activeRouteId == nil ? "Record" : "Stop") { toggleRecording() }
+                            .font(.field(size: 15, weight: .semibold))
+                            .foregroundColor(activeRouteId == nil ? theme.palette.bronzeBright : theme.palette.danger)
+                        if let route = activeRoute {
+                            Text(routeText(route))
+                                .font(.field(size: 13, weight: .semibold))
+                                .foregroundColor(theme.palette.cream)
+                        }
+                        if !db.routes.isEmpty {
+                            Button("Delete last track", role: .destructive) {
+                                if let last = db.routes.last {
+                                    if last.id == activeRouteId { activeRouteId = nil }
+                                    db.deleteRoute(routeId: last.id)
+                                }
+                            }
+                            Button("Delete all tracks", role: .destructive) {
+                                activeRouteId = nil
+                                db.clearRoutes()
+                            }
+                        }
+                    }
+                    .padding(16)
+                }
             }
-            .font(.field(size: 12, weight: .bold))
-            .foregroundColor(homingTarget == nil ? theme.palette.cream : theme.palette.success)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(theme.palette.charcoal.opacity(0.75))
-            .cornerRadius(8)
+            .navigationTitle("Overlays")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { showingOverlays = false } } }
         }
     }
 
@@ -1418,44 +1710,18 @@ public struct MapScreen: View {
         .accessibilityLabel("Selected zone \(zone.kind.displayName) \(zone.label)")
     }
 
-    private var mapMenu: some View {
-        Menu {
-            Button {
-                guard let fix = location.latestFix else { mapMessage = "Wait for a GPS fix before setting home here."; return }
-                homingTarget = CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)
-                homingLabel = "Home"
-                db.addMarker(FieldMarker(category: .homing, name: "Home", latitude: fix.latitude, longitude: fix.longitude))
-            } label: { Label("Home here", systemImage: "flag.fill") }
-            Button { northUpToken += 1 } label: { Label("North up", systemImage: "location.north.fill") }
-            Button { startBoundarySetup(.walk) } label: { Label("Walk fence", systemImage: "figure.walk") }
-            Button { startBoundarySetup(.draw) } label: { Label("Draw fence", systemImage: "pencil.tip.crop.circle") }
-            NavigationLink(destination: PermissionsScreen(captureOnCurrentMap: true)) { Label("Boundaries & permissions", systemImage: "doc.text") }
-            Button { showingLayers = true } label: { Label("Layers & offline maps", systemImage: "square.3.layers.3d") }
-            Button { showingGridInput = true } label: { Label("Go to OS Grid", systemImage: "number") }
-            Toggle("Tap or hold to mark", isOn: Binding(
-                get: { db.preferences.markAnywhereEnabled },
-                set: { db.preferences.markAnywhereEnabled = $0 }
-            ))
-        } label: {
-            Label("Menu", systemImage: "line.3.horizontal")
-                .font(.field(size: 14, weight: .semibold))
-                .padding(8)
-                .foregroundColor(theme.palette.cream)
-                .background(theme.palette.charcoal.opacity(0.85))
-                .cornerRadius(8)
-        }
-    }
-
     private var mapControls: some View {
         VStack(spacing: 6) {
-            Text(MapZoom.label(spanMeters))
-                .font(.field(size: 11, weight: .bold, design: .monospaced))
-                .foregroundColor(theme.palette.cream)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(theme.palette.charcoal.opacity(0.9))
-                .cornerRadius(8)
-                .accessibilityLabel("View height \(MapZoom.label(spanMeters))")
+            if showScale {
+                Text(MapZoom.label(spanMeters))
+                    .font(.field(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(theme.palette.cream)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(theme.palette.charcoal.opacity(0.9))
+                    .cornerRadius(8)
+                    .accessibilityLabel("View height \(MapZoom.label(spanMeters))")
+            }
             mapControl("Zoom in", symbol: "plus") { zoom(inward: true) }
             mapControl("Zoom out", symbol: "minus") { zoom(inward: false) }
             mapControl("Centre on my GPS location", symbol: "figure.stand") { recenter() }
@@ -1976,6 +2242,9 @@ public struct MapScreen: View {
 // MARK: - Layers sheet
 
 private struct MapLayersSheet: View {
+    var offlineOnly: Bool = false
+    var onGoToGrid: (() -> Void)? = nil
+
     @ObservedObject private var db = DatabaseService.shared
     @ObservedObject private var theme = ThemeManager.shared
     @ObservedObject private var location = LocationManager.shared
@@ -1986,6 +2255,7 @@ private struct MapLayersSheet: View {
             ScreenBackground {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        if !offlineOnly {
                         GlassPanel {
                             SectionLabel("Map layers")
                             Text("Pick a basemap")
@@ -2014,6 +2284,13 @@ private struct MapLayersSheet: View {
                                 set: { db.preferences.showCullPinsOnMap = $0 }
                             ))
                             .foregroundColor(theme.palette.cream)
+                            if onGoToGrid != nil {
+                                Button("Go to OS Grid") { onGoToGrid?() }
+                                    .font(.field(size: 15, weight: .semibold))
+                                    .foregroundColor(theme.palette.bronzeBright)
+                                    .padding(.top, 6)
+                            }
+                        }
                         }
 
                         offlinePanel
@@ -2021,7 +2298,7 @@ private struct MapLayersSheet: View {
                     .padding(16)
                 }
             }
-            .navigationTitle("Layers")
+            .navigationTitle(offlineOnly ? "Offline" : "Layers")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() } } }
         }
