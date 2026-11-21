@@ -3,6 +3,7 @@ package uk.hunttrack.feature.emergency
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +25,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -41,12 +45,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uk.hunttrack.core.designsystem.components.GlassPanel
 import uk.hunttrack.core.designsystem.components.MetricRow
 import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
 import uk.hunttrack.core.designsystem.components.SectionLabel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import uk.hunttrack.core.designsystem.theme.HuntColors
 
@@ -55,7 +62,35 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     var textNotice by remember { mutableStateOf<String?>(null) }
+    var beaconArmed by remember { mutableStateOf(false) }
+    var leftForMessages by remember { mutableStateOf(false) }
+    var showBeacon by remember { mutableStateOf(false) }
+    DisposableEffect(beaconArmed, lifecycle) {
+        if (!beaconArmed) return@DisposableEffect onDispose {}
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> leftForMessages = true
+                Lifecycle.Event.ON_RESUME -> if (leftForMessages) {
+                    showBeacon = true
+                    beaconArmed = false
+                }
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(beaconArmed) {
+        if (!beaconArmed) return@LaunchedEffect
+        delay(1_200)
+        if (beaconArmed && !leftForMessages && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            showBeacon = true
+            beaconArmed = false
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
     EmergencyScreen(
         state = state,
         textNotice = textNotice,
@@ -68,6 +103,10 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
                     return@launch
                 }
                 val opened = openEmergencySms(context, phone, draft.body)
+                if (opened) {
+                    leftForMessages = false
+                    beaconArmed = true
+                }
                 textNotice = when {
                     !opened -> context.getString(R.string.emergency_text_no_app)
                     !draft.hasFix -> context.getString(R.string.emergency_text_no_gps)
@@ -81,6 +120,10 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
         onShowPublic = viewModel::showPublic,
         onSave = viewModel::save,
     )
+        if (showBeacon) {
+            EmergencyBeaconOverlay(onStop = { showBeacon = false })
+        }
+    }
 }
 
 @Composable

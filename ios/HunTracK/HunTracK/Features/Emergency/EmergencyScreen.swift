@@ -16,6 +16,10 @@ public struct EmergencyScreen: View {
     @State private var draft = EmergencyProfile()
     @State private var statusMessage: String?
     @State private var textNotice: String?
+    @State private var showBeacon = false
+    @State private var beaconArmed = false
+    @State private var leftForMessages = false
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var activeSheet: EmergencySheet?
     @State private var pinPurpose: PinPurpose = .unlock
@@ -73,6 +77,21 @@ public struct EmergencyScreen: View {
             case .contact:
                 contactSheet
             }
+        }
+        .onChange(of: scenePhase) { phase in
+            guard beaconArmed else { return }
+            if phase != .active {
+                leftForMessages = true
+            } else if leftForMessages {
+                showBeacon = true
+                beaconArmed = false
+            }
+        }
+        .fullScreenCover(isPresented: $showBeacon) {
+            EmergencyBeaconCover {
+                showBeacon = false
+            }
+            .interactiveDismissDisabled(true)
         }
     }
 
@@ -203,6 +222,14 @@ public struct EmergencyScreen: View {
         }
         UIApplication.shared.open(url, options: [:]) { opened in
             if opened {
+                leftForMessages = false
+                beaconArmed = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    if beaconArmed && !leftForMessages && UIApplication.shared.applicationState == .active {
+                        showBeacon = true
+                        beaconArmed = false
+                    }
+                }
                 textNotice = fix == nil
                     ? "No GPS fix yet. The text says your location is unavailable. You still press Send yourself."
                     : "Message ready in your Messages app. Press Send when you want it to go."
@@ -702,6 +729,84 @@ public struct EmergencyScreen: View {
             coordinates = "unavailable"
         }
         return "Help! I need medical aid. My location is\nGrid reference: \(grid)\nCoordinates: \(coordinates)"
+    }
+}
+
+/// Full-screen red/white flash. One cycle a second. Hold the stop control for 3 seconds.
+private struct EmergencyBeaconCover: View {
+    var onStop: () -> Void
+    @State private var red = true
+    @State private var holding = false
+    @State private var progress: CGFloat = 0
+    @State private var holdStarted: Date?
+    @State private var savedBrightness: CGFloat = 0.5
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            (red ? Color(red: 1, green: 0, blue: 0) : Color.white)
+                .ignoresSafeArea()
+            holdControl
+                .padding(.horizontal, 24)
+                .padding(.bottom, 36)
+        }
+        .statusBarHidden(true)
+        .onAppear {
+            savedBrightness = UIScreen.main.brightness
+            UIScreen.main.brightness = 1
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            UIScreen.main.brightness = savedBrightness
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
+            red.toggle()
+        }
+    }
+
+    private var holdControl: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.white)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .trim(from: 0, to: progress)
+                .stroke(Color.black, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(5)
+            Text("Hold to stop")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.black)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 84)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard holdStarted == nil else { return }
+                    holdStarted = Date()
+                    holding = true
+                    progress = 0
+                    withAnimation(.linear(duration: 3)) { progress = 1 }
+                }
+                .onEnded { _ in
+                    let elapsed = holdStarted.map { Date().timeIntervalSince($0) } ?? 0
+                    holdStarted = nil
+                    guard elapsed < 2.9 else { return }
+                    holding = false
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { progress = 0 }
+                }
+        )
+        .onChange(of: holding) { isHolding in
+            guard isHolding else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if holding { onStop() }
+            }
+        }
+        .accessibilityLabel("Hold to stop")
+        .accessibilityHint("Press and hold for three seconds")
     }
 }
 
