@@ -7,4 +7,5 @@
     <string name="emergency_text_no_app">No messaging app is available on this phone.</string>
     <string name="emergency_text_ready">Message ready in your Messages app. Press Send when you want it to go.</string>
     <string name="emergency_beacon_hold">Hold to stop</string>
+    <string name="distress_mode_notification">Distress mode on - tap to return</string>
 </resources>

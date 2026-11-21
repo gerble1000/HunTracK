@@ -1,6 +1,7 @@
 import SwiftUI
 import LocalAuthentication
 import UIKit
+import MessageUI
 
 /// Public In Case of Emergency (ICE) profile.
 ///
@@ -16,9 +17,11 @@ public struct EmergencyScreen: View {
     @State private var draft = EmergencyProfile()
     @State private var statusMessage: String?
     @State private var textNotice: String?
-    @State private var showBeacon = false
     @State private var beaconArmed = false
     @State private var leftForMessages = false
+    @State private var cover: EmergencyCover?
+    @State private var composerPhone = ""
+    @State private var composerBody = ""
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var activeSheet: EmergencySheet?
@@ -79,19 +82,26 @@ public struct EmergencyScreen: View {
             }
         }
         .onChange(of: scenePhase) { phase in
-            guard beaconArmed else { return }
+            guard beaconArmed, cover != .composer else { return }
             if phase != .active {
                 leftForMessages = true
             } else if leftForMessages {
-                showBeacon = true
-                beaconArmed = false
+                cover = .beacon
             }
         }
-        .fullScreenCover(isPresented: $showBeacon) {
-            EmergencyBeaconCover {
-                showBeacon = false
+        .fullScreenCover(item: $cover) { item in
+            switch item {
+            case .composer:
+                MessageComposeSheet(phone: composerPhone, body: composerBody) {
+                    cover = .beacon
+                }
+            case .beacon:
+                EmergencyBeaconCover {
+                    cover = nil
+                    beaconArmed = false
+                }
+                .interactiveDismissDisabled(true)
             }
-            .interactiveDismissDisabled(true)
         }
     }
 
@@ -215,6 +225,18 @@ public struct EmergencyScreen: View {
         }
         let fix = location.latestFix
         let body = emergencySmsBody(latitude: fix?.latitude, longitude: fix?.longitude)
+        // Armed as soon as Emergency text is tapped, before Messages opens.
+        leftForMessages = false
+        beaconArmed = true
+        textNotice = fix == nil
+            ? "No GPS fix yet. The text says your location is unavailable. You still press Send yourself."
+            : "Message ready in your Messages app. Press Send when you want it to go."
+        if MFMessageComposeViewController.canSendText() {
+            composerPhone = phone
+            composerBody = body
+            cover = .composer
+            return
+        }
         guard let encoded = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "sms:\(phone)&body=\(encoded)") else {
             textNotice = "No messaging app is available on this phone."
@@ -222,17 +244,11 @@ public struct EmergencyScreen: View {
         }
         UIApplication.shared.open(url, options: [:]) { opened in
             if opened {
-                leftForMessages = false
-                beaconArmed = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     if beaconArmed && !leftForMessages && UIApplication.shared.applicationState == .active {
-                        showBeacon = true
-                        beaconArmed = false
+                        cover = .beacon
                     }
                 }
-                textNotice = fix == nil
-                    ? "No GPS fix yet. The text says your location is unavailable. You still press Send yourself."
-                    : "Message ready in your Messages app. Press Send when you want it to go."
             } else {
                 textNotice = "No messaging app is available on this phone."
             }
@@ -732,7 +748,46 @@ public struct EmergencyScreen: View {
     }
 }
 
-/// Full-screen red/white flash. One cycle a second. Hold the stop control for 3 seconds.
+private enum EmergencyCover: String, Identifiable {
+    case composer
+    case beacon
+    var id: String { rawValue }
+}
+
+/// In-app Messages sheet. After Send or Cancel, HunTracK is showing again and the beacon starts.
+private struct MessageComposeSheet: UIViewControllerRepresentable {
+    let phone: String
+    let body: String
+    let onFinish: () -> Void
+
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        let controller = MFMessageComposeViewController()
+        controller.recipients = [phone]
+        controller.body = body
+        controller.messageComposeDelegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFinish: onFinish)
+    }
+
+    final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let onFinish: () -> Void
+        init(onFinish: @escaping () -> Void) { self.onFinish = onFinish }
+
+        func messageComposeViewController(
+            _ controller: MFMessageComposeViewController,
+            didFinishWith result: MessageComposeResult
+        ) {
+            onFinish()
+        }
+    }
+}
+
+/// Full-screen red/white flash. Each colour is held for about 2 seconds. Hold the stop control for 3 seconds.
 private struct EmergencyBeaconCover: View {
     var onStop: () -> Void
     @State private var red = true
@@ -759,7 +814,7 @@ private struct EmergencyBeaconCover: View {
             UIScreen.main.brightness = savedBrightness
             UIApplication.shared.isIdleTimerDisabled = false
         }
-        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()) { _ in
             red.toggle()
         }
     }

@@ -1,5 +1,10 @@
 package uk.hunttrack.feature.emergency
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
@@ -66,17 +71,19 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
     var textNotice by remember { mutableStateOf<String?>(null) }
     var beaconArmed by remember { mutableStateOf(false) }
     var leftForMessages by remember { mutableStateOf(false) }
-    var showBeacon by remember { mutableStateOf(false) }
+    var pendingSms by remember { mutableStateOf<EmergencyTextDraft?>(null) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        val draft = pendingSms
+        pendingSms = null
+        if (draft != null) launchEmergencyText(context, draft) { textNotice = it }
+    }
     DisposableEffect(beaconArmed, lifecycle) {
         if (!beaconArmed) return@DisposableEffect onDispose {}
         val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> leftForMessages = true
-                Lifecycle.Event.ON_RESUME -> if (leftForMessages) {
-                    showBeacon = true
-                    beaconArmed = false
-                }
-                else -> Unit
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                leftForMessages = true
             }
         }
         lifecycle.addObserver(observer)
@@ -86,8 +93,7 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
         if (!beaconArmed) return@LaunchedEffect
         delay(1_200)
         if (beaconArmed && !leftForMessages && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            showBeacon = true
-            beaconArmed = false
+            DistressMode.showBeacon()
         }
     }
     Box(Modifier.fillMaxSize()) {
@@ -102,15 +108,17 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
                     textNotice = context.getString(R.string.emergency_text_no_contact)
                     return@launch
                 }
-                val opened = openEmergencySms(context, phone, draft.body)
-                if (opened) {
-                    leftForMessages = false
-                    beaconArmed = true
-                }
-                textNotice = when {
-                    !opened -> context.getString(R.string.emergency_text_no_app)
-                    !draft.hasFix -> context.getString(R.string.emergency_text_no_gps)
-                    else -> context.getString(R.string.emergency_text_ready)
+                // Armed the moment the text flow starts, before Messages opens.
+                leftForMessages = false
+                beaconArmed = true
+                val needsNotificationPermission = Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED
+                if (needsNotificationPermission) {
+                    pendingSms = draft
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    launchEmergencyText(context, draft) { textNotice = it }
                 }
             }
         },
@@ -120,10 +128,23 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
         onShowPublic = viewModel::showPublic,
         onSave = viewModel::save,
     )
-        if (showBeacon) {
-            EmergencyBeaconOverlay(onStop = { showBeacon = false })
-        }
     }
+}
+
+private fun launchEmergencyText(
+    context: android.content.Context,
+    draft: EmergencyTextDraft,
+    onNotice: (String) -> Unit,
+) {
+    DistressNotifications.arm(context)
+    val opened = openEmergencySms(context, draft.phone.orEmpty(), draft.body)
+    onNotice(
+        when {
+            !opened -> context.getString(R.string.emergency_text_no_app)
+            !draft.hasFix -> context.getString(R.string.emergency_text_no_gps)
+            else -> context.getString(R.string.emergency_text_ready)
+        },
+    )
 }
 
 @Composable

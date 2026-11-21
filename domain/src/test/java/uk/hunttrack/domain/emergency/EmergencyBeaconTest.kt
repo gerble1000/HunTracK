@@ -7,9 +7,9 @@ import org.junit.Test
 class EmergencyBeaconTest {
 
     @Test
-    fun flashRateIsAboutOneHertzAndUnderThreePerSecond() {
-        assertEquals(500L, EmergencyBeacon.PHASE_MS)
-        assertEquals(2.0, EmergencyBeacon.flashesPerSecond(), 0.001)
+    fun eachColourIsHeldForTwoSeconds() {
+        assertEquals(2_000L, EmergencyBeacon.PHASE_MS)
+        assertEquals(0.5, EmergencyBeacon.flashesPerSecond(), 0.001)
         assertTrue(EmergencyBeacon.withinEpilepsyLimit())
         assertTrue(EmergencyBeacon.flashesPerSecond() <= EmergencyBeacon.MAX_FLASHES_PER_SECOND)
     }
