@@ -705,7 +705,7 @@ public enum AppVersion {
     }
 
     public static var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "47"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "48"
     }
 
     public static var display: String {
