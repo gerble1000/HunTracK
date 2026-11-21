@@ -178,6 +178,7 @@ import uk.hunttrack.domain.model.displayName
 import uk.hunttrack.domain.model.hatchPattern
 import uk.hunttrack.domain.model.mapColorHex
 import uk.hunttrack.domain.model.mapFillOpacity
+import uk.hunttrack.domain.scent.ApproachTrail
 import uk.hunttrack.domain.scent.ScentPlumeGeometry
 import uk.hunttrack.core.designsystem.markers.MarkerIconResolver
 import uk.hunttrack.domain.model.OfflineMapRegion
@@ -473,6 +474,8 @@ fun MapScreen(
         showTrack,
         showMarkerPath,
         state.scentApproach?.targetName,
+        state.scentApproach?.startLat,
+        state.scentApproach?.startLng,
         state.boundaries.size,
         state.draftBoundaryPoints.size,
         state.boundaryMode,
@@ -506,6 +509,7 @@ fun MapScreen(
             map.style?.let { style ->
                 ensureSources(style, context)
                 updateUserLocation(style, gps)
+                updateScentApproach(style, state.scentApproach, gps)
             }
             if (!centeredOnce) {
                 centeredOnce = true
@@ -1249,7 +1253,7 @@ fun MapScreen(
                         color = HuntColors.Cream,
                     )
                     Text(
-                        "Orange line · start downwind → finish at marker",
+                        "Footprints · start downwind → finish at marker. Walked prints fade grey.",
                         style = MaterialTheme.typography.bodySmall,
                         color = HuntColors.Mist,
                     )
@@ -2146,6 +2150,9 @@ private const val FenceLineColor = "#1A3A6E"
 private const val DraftFenceLineWidth = 1.75f
 /** Saved offline pack border: thin blue line with yellow dashes. */
 private const val OfflineRegionBlue = "#2E86DE"
+/** Footprint fill. The GPS track stays green (#5FD0A8). */
+private const val ApproachFootprintColor = "#FF6A00"
+private const val ApproachFootprintWalkedColor = "#A3A3A3"
 private const val OfflineRegionYellow = "#FFD54F"
 private const val FocusBoundaryLineColor = "#E2B05C"
 private const val FenceLineWidth = 2.5f
@@ -2641,33 +2648,30 @@ private fun ensureSources(style: Style, context: Context) {
             ),
         )
     }
-    if (style.getSource("scent-approach-source") == null) {
-        style.addSource(GeoJsonSource("scent-approach-source", FeatureCollection.fromFeatures(emptyArray())))
+    if (style.getImage("approach-footprint") == null) {
+        style.addImage("approach-footprint", footprintBitmap(ApproachFootprintColor))
+    }
+    if (style.getImage("approach-footprint-grey") == null) {
+        style.addImage("approach-footprint-grey", footprintBitmap(ApproachFootprintWalkedColor))
+    }
+    if (style.getSource("scent-approach-footprints") == null) {
+        style.addSource(GeoJsonSource("scent-approach-footprints", FeatureCollection.fromFeatures(emptyArray())))
+    }
+    if (style.getLayer("scent-approach-footprints") == null && style.getSource("scent-approach-footprints") != null) {
         style.addLayer(
-            LineLayer("scent-approach-line", "scent-approach-source").withProperties(
-                PropertyFactory.lineColor("#E2B05C"),
-                PropertyFactory.lineWidth(5f),
-                PropertyFactory.lineOpacity(0.95f),
-                PropertyFactory.lineDasharray(arrayOf(1.5f, 1.2f)),
-            ),
-        )
-        style.addLayer(
-            CircleLayer("scent-approach-ends", "scent-approach-source").withProperties(
-                PropertyFactory.circleRadius(7f),
-                PropertyFactory.circleColor("#F3C97A"),
-                PropertyFactory.circleStrokeColor("#0B1A12"),
-                PropertyFactory.circleStrokeWidth(2f),
-            ),
-        )
-        style.addLayer(
-            SymbolLayer("scent-approach-label", "scent-approach-source").withProperties(
-                PropertyFactory.textField("{label}"),
-                PropertyFactory.textSize(12f),
-                PropertyFactory.textColor("#F5E6C8"),
-                PropertyFactory.textHaloColor("#0B1A12"),
-                PropertyFactory.textHaloWidth(1.5f),
-                PropertyFactory.textOffset(arrayOf(0f, 1.6f)),
-                PropertyFactory.textAllowOverlap(true),
+            SymbolLayer("scent-approach-footprints", "scent-approach-footprints").withProperties(
+                PropertyFactory.iconImage(
+                    Expression.switchCase(
+                        Expression.eq(Expression.get("walked"), Expression.literal(true)),
+                        Expression.literal("approach-footprint-grey"),
+                        Expression.literal("approach-footprint"),
+                    ),
+                ),
+                PropertyFactory.iconSize(0.42f),
+                PropertyFactory.iconRotate(Expression.get("bearing")),
+                PropertyFactory.iconRotationAlignment("map"),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(true),
             ),
         )
     }
@@ -2846,6 +2850,8 @@ private fun syncMapOverlays(
     updateGoToPin(style, state.goToTarget)
     updateOfflineRegionsOverlay(style, state.offlineRegions)
     if (markersOnly) {
+        // The marker refresh is the effect that runs when an approach is chosen.
+        updateScentApproach(style, state.scentApproach, state.gps)
         updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
         updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
         return
@@ -2854,7 +2860,7 @@ private fun syncMapOverlays(
     updateUserLocation(style, state.gps)
     // Wind smoke is driven by the LaunchedEffect animation loop — avoid resetting phase here.
     updateHomingOverlay(style, state.gps, state.homingTarget)
-    updateScentApproach(style, state.scentApproach)
+    updateScentApproach(style, state.scentApproach, state.gps)
     updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
     updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
 }
@@ -3035,38 +3041,81 @@ private fun updateUserLocation(style: Style, gps: GpsFix?) {
     (style.getSource("user-source") as? GeoJsonSource)?.setGeoJson(collection)
 }
 
-/** Orange dashed line: start downwind of target → walk into the wind to the marker. */
-private fun updateScentApproach(style: Style, plan: ScentApproachPlan?) {
-    val source = style.getSource("scent-approach-source") as? GeoJsonSource ?: return
-    val lineLayer = style.getLayer("scent-approach-line")
-    val endsLayer = style.getLayer("scent-approach-ends")
-    val labelLayer = style.getLayer("scent-approach-label")
+/** Footprints from the downwind start toward the marker, toes pointing along the walk. */
+private fun updateScentApproach(style: Style, plan: ScentApproachPlan?, gps: GpsFix?) {
+    val source = style.getSource("scent-approach-footprints") as? GeoJsonSource
+    val layer = style.getLayer("scent-approach-footprints")
     if (plan == null) {
-        source.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
-        lineLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
-        endsLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
-        labelLayer?.setProperties(PropertyFactory.visibility(Property.NONE))
+        source?.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
+        layer?.setProperties(PropertyFactory.visibility(Property.NONE))
         return
     }
-    lineLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
-    endsLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
-    labelLayer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
+    layer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
+    val bearing = bearingDegrees(plan.startLat, plan.startLng, plan.targetLat, plan.targetLng)
+    val features = approachFootprints(plan).map { (lat, lng) ->
+        val walked = ApproachTrail.walkedPast(
+            printLat = lat,
+            printLng = lng,
+            startLat = plan.startLat,
+            startLng = plan.startLng,
+            endLat = plan.targetLat,
+            endLng = plan.targetLng,
+            userLat = gps?.latitude,
+            userLng = gps?.longitude,
+        )
+        Feature.fromGeometry(Point.fromLngLat(lng, lat)).also {
+            it.addNumberProperty("bearing", bearing)
+            it.addBooleanProperty("walked", walked)
+        }
+    }.toTypedArray()
+    source?.setGeoJson(FeatureCollection.fromFeatures(features))
+    // Keep the prints above the pink plume.
+    val footprintLayer = style.getLayer("scent-approach-footprints") ?: return
+    runCatching {
+        style.removeLayer(footprintLayer)
+        style.addLayer(footprintLayer)
+    }
+}
 
-    val start = Point.fromLngLat(plan.startLng, plan.startLat)
-    val end = Point.fromLngLat(plan.targetLng, plan.targetLat)
-    val midLat = (plan.startLat + plan.targetLat) / 2.0
-    val midLng = (plan.startLng + plan.targetLng) / 2.0
-    val line = Feature.fromGeometry(LineString.fromLngLats(listOf(start, end)))
-    val startDot = Feature.fromGeometry(start).also {
-        it.addStringProperty("label", "Start · into wind")
+private fun approachFootprints(plan: ScentApproachPlan): List<Pair<Double, Double>> {
+    val distance = distanceMeters(plan.startLat, plan.startLng, plan.targetLat, plan.targetLng)
+    if (distance < 12.0) return emptyList()
+    val spacing = 20.0
+    val steps = (distance / spacing).toInt().coerceIn(4, 40)
+    return (0 until steps).map { index ->
+        val t = index.toDouble() / steps.toDouble()
+        val lat = plan.startLat + (plan.targetLat - plan.startLat) * t
+        val lng = plan.startLng + (plan.targetLng - plan.startLng) * t
+        lat to lng
     }
-    val endDot = Feature.fromGeometry(end).also {
-        it.addStringProperty("label", plan.targetName)
+}
+
+/** Toes point up (north) so MapLibre can rotate each print along the walk. */
+private fun footprintBitmap(fillColor: String): Bitmap {
+    val width = 64
+    val height = 96
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor(fillColor)
+        style = Paint.Style.FILL
     }
-    val midLabel = Feature.fromGeometry(Point.fromLngLat(midLng, midLat)).also {
-        it.addStringProperty("label", "Wind on your front →")
+    val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#1A1208")
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
     }
-    source.setGeoJson(FeatureCollection.fromFeatures(listOf(line, startDot, endDot, midLabel)))
+    fun print(cx: Float, cy: Float, r: Float) {
+        canvas.drawCircle(cx, cy, r, fill)
+        canvas.drawCircle(cx, cy, r, edge)
+    }
+    canvas.drawOval(RectF(18f, 34f, 46f, 88f), fill)
+    canvas.drawOval(RectF(18f, 34f, 46f, 88f), edge)
+    print(16f, 22f, 7f)
+    print(28f, 12f, 8f)
+    print(40f, 18f, 7f)
+    print(48f, 30f, 6f)
+    return bitmap
 }
 
 /**

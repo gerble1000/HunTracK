@@ -84,6 +84,10 @@ public struct SettingsScreen: View {
 
                 Section(header: sectionHeader("Tides")) {
                     TideSettingsSection()
+                    NavigationLink(destination: TidesScreen()) {
+                        Text("Tide times & field notes")
+                            .foregroundColor(theme.palette.bronzeBright)
+                    }
                 }
 
                 Section(header: sectionHeader("Storage")) {

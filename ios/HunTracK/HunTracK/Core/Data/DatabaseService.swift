@@ -48,6 +48,9 @@ public class DatabaseService: ObservableObject {
     @Published public var audioPacks: [AudioPack] = [] {
         didSet { save(audioPacks, Self.kAudioPacks) }
     }
+    /// Marker the into-wind footprint trail walks toward. Shared by Wind and Map.
+    @Published public var scentApproachMarkerId: Int64? = nil
+
     @Published public var preferences: UserPreferences = UserPreferences() {
         didSet {
             save(preferences, Self.kPrefs)
@@ -194,6 +197,7 @@ public class DatabaseService: ObservableObject {
 
     public func deleteMarker(id: Int64) {
         markers.removeAll { $0.id == id }
+        if scentApproachMarkerId == id { scentApproachMarkerId = nil }
     }
 
     public func clearAllMarkers() {

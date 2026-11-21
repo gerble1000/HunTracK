@@ -28,7 +28,8 @@ public class WeatherService: ObservableObject {
         "wind_speed_10m",
         "wind_direction_10m",
         "precipitation_probability",
-        "weather_code"
+        "weather_code",
+        "is_day"
     ].joined(separator: ",")
 
     private static let dailyFields = [
@@ -145,8 +146,11 @@ public class WeatherService: ObservableObject {
         let windDirections = hourly["wind_direction_10m"] as? [Any]
         let rainProbabilities = hourly["precipitation_probability"] as? [Any]
         let weatherCodes = hourly["weather_code"] as? [Any]
+        let isDayFlags = hourly["is_day"] as? [Any]
 
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .current
+        let hourStart = calendar.dateInterval(of: .hour, for: Date())?.start ?? Date()
 
         var result: [HourlyForecast] = []
         for index in 0..<times.count {
@@ -166,14 +170,16 @@ public class WeatherService: ObservableObject {
                 windSpeedKmh: number(windSpeeds, index) ?? 0.0,
                 windDirectionDeg: number(windDirections, index) ?? 0.0,
                 rainProbabilityPercent: integer(rainProbabilities, index) ?? 0,
-                weatherCode: integer(weatherCodes, index) ?? 0
+                weatherCode: integer(weatherCodes, index) ?? 0,
+                isDay: integer(isDayFlags, index).map { $0 != 0 }
             ))
         }
 
-        // The API returns whole days from midnight, so trim to the upcoming hours.
-        let upcoming = result.filter { $0.epochMs >= now - 3_600_000 }
-        let selected = upcoming.isEmpty ? result : upcoming
-        return Array(selected.prefix(24))
+        // The API day starts at local midnight. Keep the clock hour after the
+        // current London hour so the row begins at +1, not 00:00.
+        let nextHour = calendar.date(byAdding: .hour, value: 1, to: hourStart) ?? hourStart
+        let nextHourMs = Int64(nextHour.timeIntervalSince1970 * 1000)
+        return Array(result.filter { $0.epochMs >= nextHourMs }.prefix(24))
     }
 
     private static func parseDaily(_ daily: [String: Any]?) -> [DailyForecast] {

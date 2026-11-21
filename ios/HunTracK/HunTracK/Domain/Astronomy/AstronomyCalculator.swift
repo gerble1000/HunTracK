@@ -13,6 +13,13 @@ public struct AstronomyInfo: Codable, Equatable {
     public let civilTwilightEndEpochMs: Int64
 }
 
+public struct NightSky: Equatable {
+    public let moonUp: Bool
+    public let phase: Double
+    public let illumination: Double
+    public var showMoon: Bool { moonUp && illumination >= 0.04 }
+}
+
 public enum AstronomyCalculator {
     public static func calculate(latitude: Double, longitude: Double, epochMs: Int64) -> AstronomyInfo {
         let d = toDays(epochMs)
@@ -144,6 +151,17 @@ public enum AstronomyCalculator {
             prevAlt = alt
         }
         return MoonTimes(rise: rise, set: set)
+    }
+
+    /// Moon at one instant. Altitude is whether it is above the horizon; phase 0 is new and 0.5 is full.
+    public static func nightSky(latitude: Double, longitude: Double, epochMs: Int64) -> NightSky {
+        let d = toDays(epochMs)
+        let moon = moonData(d: d, lat: latitude, lng: longitude)
+        return NightSky(
+            moonUp: moonAltitude(d: d, lat: latitude, lng: longitude) >= 0,
+            phase: moon.phase,
+            illumination: moon.illumination
+        )
     }
 
     private static func moonAltitude(d: Double, lat: Double, lng: Double) -> Double {

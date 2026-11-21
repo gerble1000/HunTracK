@@ -48,6 +48,7 @@
 		A30000052D00000100000001 /* YourDataScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000052D00000100000001 /* YourDataScreen.swift */; };
 		A30000062D00000100000001 /* TextFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062D00000100000001 /* TextFormats.swift */; };
 		A40000012D00000100000001 /* AudioPackDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40000012D00000100000001 /* AudioPackDownload.swift */; };
+		A50000012D00000100000001 /* MoonPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000012D00000100000001 /* MoonPhase.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -94,6 +95,7 @@
 		B30000052D00000100000001 /* YourDataScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/YourDataScreen.swift; sourceTree = "<group>"; };
 		B30000062D00000100000001 /* TextFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Data/TextFormats.swift; sourceTree = "<group>"; };
 		B40000012D00000100000001 /* AudioPackDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Calls/AudioPackDownload.swift; sourceTree = "<group>"; };
+		B50000012D00000100000001 /* MoonPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain/Astronomy/MoonPhase.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +138,7 @@
 				B10000122D00000100000001 /* CompassManager.swift */,
 				B10000132D00000100000001 /* LocationManager.swift */,
 				B10000142D00000100000001 /* AstronomyCalculator.swift */,
+				B50000012D00000100000001 /* MoonPhase.swift */,
 				B10000152D00000100000001 /* UkFieldCatalog.swift */,
 				B10000162D00000100000001 /* OsGridRef.swift */,
 				B10000172D00000100000001 /* Models.swift */,
@@ -262,6 +265,7 @@
 				A10000112D00000100000001 /* CompassManager.swift in Sources */,
 				A10000122D00000100000001 /* LocationManager.swift in Sources */,
 				A10000132D00000100000001 /* AstronomyCalculator.swift in Sources */,
+				A50000012D00000100000001 /* MoonPhase.swift in Sources */,
 				A10000142D00000100000001 /* UkFieldCatalog.swift in Sources */,
 				A10000152D00000100000001 /* OsGridRef.swift in Sources */,
 				A10000162D00000100000001 /* Models.swift in Sources */,
