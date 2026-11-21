@@ -790,7 +790,8 @@ public struct TideSettingsSection: View {
 
 // MARK: - Standalone screen
 
-/// Standalone Tides screen, reachable from the More menu.
+/// Standalone tide times screen. Android keeps tides on Home and in Settings,
+/// not in More, so this screen is opened from Settings rather than the More list.
 public struct TidesScreen: View {
     @ObservedObject private var theme = ThemeManager.shared
 
