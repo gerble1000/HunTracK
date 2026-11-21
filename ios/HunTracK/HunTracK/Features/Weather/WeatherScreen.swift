@@ -98,7 +98,7 @@ public struct WeatherScreen: View {
     private var hourlySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel("Next 24 hours")
-            let hours = weatherService.weather?.hourly ?? []
+            let hours = Self.upcomingHours(weatherService.weather?.hourly ?? [])
             if hours.isEmpty {
                 GlassPanel {
                     Text("Hourly forecast unavailable.")
@@ -112,7 +112,9 @@ public struct WeatherScreen: View {
                             HourCard(
                                 hour: hour,
                                 useCelsius: db.preferences.useCelsius,
-                                windUnit: db.preferences.windUnit
+                                windUnit: db.preferences.windUnit,
+                                latitude: weatherService.weather?.latitude ?? 0,
+                                longitude: weatherService.weather?.longitude ?? 0
                             )
                         }
                     }
@@ -227,6 +229,16 @@ public struct WeatherScreen: View {
         default: return "Mixed conditions"
         }
     }
+
+    /// Drops hours before the current London hour, then keeps the next 24.
+    private static func upcomingHours(_ hours: [HourlyForecast]) -> [HourlyForecast] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .current
+        let start = calendar.dateInterval(of: .hour, for: Date())?.start ?? Date()
+        let startMs = Int64(start.timeIntervalSince1970 * 1000)
+        let upcoming = hours.filter { $0.epochMs >= startMs }
+        return Array((upcoming.isEmpty ? hours : upcoming).prefix(24))
+    }
 }
 
 // MARK: - Cards
@@ -235,15 +247,25 @@ public struct HourCard: View {
     let hour: HourlyForecast
     let useCelsius: Bool
     let windUnit: WindUnit
+    let latitude: Double
+    let longitude: Double
     @ObservedObject private var theme = ThemeManager.shared
 
     public var body: some View {
         GlassPanel(compact: true) {
             VStack(spacing: 6) {
-                Text(Self.time(hour.epochMs))
+                Text(Self.offsetLabel(hour.epochMs))
                     .font(.field(size: 12, weight: .semibold))
                     .foregroundColor(theme.palette.cream)
-                Image(systemName: Self.symbol(hour.weatherCode))
+                Image(systemName: Self.symbol(
+                    hour.weatherCode,
+                    isDay: Self.isDaytime(
+                        flag: hour.isDay,
+                        latitude: latitude,
+                        longitude: longitude,
+                        epochMs: hour.epochMs
+                    )
+                ))
                     .font(.field(size: 20))
                     .foregroundColor(theme.palette.gold)
                 Text(Self.temp(hour.temperatureC, useCelsius: useCelsius))
@@ -263,8 +285,18 @@ public struct HourCard: View {
         }
     }
 
-    private static func time(_ epochMs: Int64) -> String {
-        hourFormatter.string(from: Date(timeIntervalSince1970: Double(epochMs) / 1000))
+    /// Current London hour is "Now". Later hours are "+1", "+2", … on their own line,
+    /// so the number is not mixed up with the temperature underneath.
+    static func offsetLabel(_ epochMs: Int64, now: Date = Date()) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .current
+        let slot = Date(timeIntervalSince1970: Double(epochMs) / 1000)
+        let slotHour = calendar.dateInterval(of: .hour, for: slot)?.start ?? slot
+        let nowHour = calendar.dateInterval(of: .hour, for: now)?.start ?? now
+        let ahead = calendar.dateComponents([.hour], from: nowHour, to: slotHour).hour ?? 0
+        if ahead == 0 { return "Now" }
+        if ahead > 0 { return "+\(ahead)" }
+        return "\(ahead)"
     }
 
     private static func temp(_ celsius: Double, useCelsius: Bool) -> String {
@@ -283,10 +315,17 @@ public struct HourCard: View {
         return directions[Int((normalized / 22.5).rounded()) % directions.count]
     }
 
-    private static func symbol(_ code: Int) -> String {
+    /// Open-Meteo `is_day` when the hour has one; otherwise the shared sunrise/sunset calculator.
+    static func isDaytime(flag: Bool?, latitude: Double, longitude: Double, epochMs: Int64) -> Bool {
+        if let flag { return flag }
+        let sun = AstronomyCalculator.calculate(latitude: latitude, longitude: longitude, epochMs: epochMs)
+        return epochMs >= sun.sunriseEpochMs && epochMs <= sun.sunsetEpochMs
+    }
+
+    private static func symbol(_ code: Int, isDay: Bool = true) -> String {
         switch code {
-        case 0: return "sun.max.fill"
-        case 1, 2: return "cloud.sun.fill"
+        case 0: return isDay ? "sun.max.fill" : "moon.stars.fill"
+        case 1, 2: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
         case 3: return "cloud.fill"
         case 45, 48: return "cloud.fog.fill"
         case 51...57: return "cloud.drizzle.fill"
@@ -295,17 +334,10 @@ public struct HourCard: View {
         case 80...82: return "cloud.heavyrain.fill"
         case 85, 86: return "cloud.snow.fill"
         case 95...99: return "cloud.bolt.rain.fill"
-        default: return "cloud.sun.fill"
+        default: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
         }
     }
 
-    private static let hourFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_GB")
-        formatter.timeZone = TimeZone(identifier: "Europe/London")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 }
 
 public struct DayCard: View {

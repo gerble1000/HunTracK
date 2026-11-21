@@ -32,6 +32,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -51,6 +54,8 @@ import uk.hunttrack.core.designsystem.theme.HuntColors
 import uk.hunttrack.domain.model.DailyForecast
 import uk.hunttrack.domain.model.HourlyForecast
 import uk.hunttrack.domain.model.WindUnit
+import uk.hunttrack.domain.weather.Daylight
+import uk.hunttrack.domain.weather.HourlyForecastLabels
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -163,9 +168,19 @@ fun WeatherScreen(
 
                 item {
                     SectionLabel("Next 24 hours")
+                    val hours = HourlyForecastLabels.upcoming(
+                        state.weather?.hourly.orEmpty(),
+                        System.currentTimeMillis(),
+                    )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(state.weather?.hourly.orEmpty()) { hour ->
-                            HourCard(hour, state.prefs.useCelsius, state.prefs.windUnit)
+                        items(hours, key = { it.epochMs }) { hour ->
+                            HourCard(
+                                hour,
+                                state.prefs.useCelsius,
+                                state.prefs.windUnit,
+                                latitude = state.weather?.latitude ?: 0.0,
+                                longitude = state.weather?.longitude ?: 0.0,
+                            )
                         }
                     }
                 }
@@ -180,10 +195,24 @@ fun WeatherScreen(
 }
 
 @Composable
-private fun HourCard(hour: HourlyForecast, useCelsius: Boolean, windUnit: WindUnit) {
+private fun HourCard(
+    hour: HourlyForecast,
+    useCelsius: Boolean,
+    windUnit: WindUnit,
+    latitude: Double,
+    longitude: Double,
+) {
+    val isDay = Daylight.isDay(hour.isDay, latitude, longitude, hour.epochMs)
     GlassPanel(Modifier.padding(vertical = 4.dp)) {
-        Text(SimpleDateFormat("HH:mm", Locale.UK).format(Date(hour.epochMs)), style = MaterialTheme.typography.labelMedium)
-        WeatherIcon(hour.weatherCode, Modifier.size(28.dp).padding(vertical = 4.dp))
+        Text(
+            HourlyForecastLabels.offsetLabel(hour.epochMs, System.currentTimeMillis()),
+            style = MaterialTheme.typography.labelMedium,
+        )
+        WeatherIcon(
+            hour.weatherCode,
+            Modifier.size(28.dp).padding(vertical = 4.dp),
+            isDay = isDay,
+        )
         val temp = if (useCelsius) "${hour.temperatureC.toInt()}°" else "${(hour.temperatureC * 9 / 5 + 32).toInt()}°"
         Text(temp, style = MaterialTheme.typography.titleMedium)
         Text("${hour.rainProbabilityPercent}%", style = MaterialTheme.typography.bodySmall)
@@ -214,7 +243,7 @@ private fun DayCard(day: DailyForecast, useCelsius: Boolean, windUnit: WindUnit)
 }
 
 @Composable
-fun WeatherIcon(code: Int, modifier: Modifier = Modifier) {
+fun WeatherIcon(code: Int, modifier: Modifier = Modifier, isDay: Boolean = true) {
     val transition = rememberInfiniteTransition(label = "wx")
     val t by transition.animateFloat(
         0f, 1f,
@@ -237,6 +266,35 @@ fun WeatherIcon(code: Int, modifier: Modifier = Modifier) {
             }
             code in 45..48 -> {
                 drawCircle(HuntColors.Mist.copy(alpha = 0.4f + 0.3f * t), radius = size.minDimension * 0.4f)
+            }
+            !isDay && code in 71..77 || !isDay && code in 85..86 -> {
+                repeat(4) { i ->
+                    val x = center.x - 8f + (i % 2) * 12f
+                    val y = center.y - 6f + (i / 2) * 12f
+                    drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
+                }
+            }
+            !isDay && code == 3 -> {
+                drawCircle(HuntColors.Mist, radius = size.minDimension * 0.28f, center = Offset(center.x, center.y))
+            }
+            !isDay -> {
+                val radius = size.minDimension * 0.22f
+                val moon = Path().apply {
+                    addOval(Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius))
+                }
+                val cut = Path().apply {
+                    val shift = radius * 0.55f
+                    addOval(Rect(center.x - radius + shift, center.y - radius, center.x + radius + shift, center.y + radius))
+                }
+                val crescent = Path().apply { op(moon, cut, PathOperation.Difference) }
+                drawPath(crescent, HuntColors.Cream)
+                if (code in 1..2) {
+                    drawCircle(
+                        HuntColors.Mist,
+                        radius = size.minDimension * 0.16f,
+                        center = Offset(center.x + radius * 0.7f, center.y + radius * 0.35f),
+                    )
+                }
             }
             else -> {
                 drawCircle(HuntColors.Gold, radius = size.minDimension * 0.22f)
