@@ -30,6 +30,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -262,7 +264,7 @@ fun MapRoute(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MapScreen(
     state: MapUiState,
@@ -1596,7 +1598,7 @@ fun MapScreen(
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Overlays", style = MaterialTheme.typography.headlineMedium, color = HuntColors.Cream)
                 Text(
-                    "Show or hide scent smoke, GPS track, marker path, and map scale.",
+                    "Show or hide scent smoke, GPS track, string markers, and map scale.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = HuntColors.Mist,
                 )
@@ -1611,16 +1613,20 @@ fun MapScreen(
                     onCheckedChange = { showTrack = it },
                 )
                 OverlayToggleRow(
-                    label = "Marker path",
+                    label = "String markers",
                     checked = showMarkerPath,
                     onCheckedChange = { showMarkerPath = it },
+                    hint = "Joins your markers with a line in the order you dropped them (needs 2+ markers).",
                 )
                 OverlayToggleRow(
                     label = "Map scale (m & ft)",
                     checked = showScale,
                     onCheckedChange = { showScale = it },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     MapToolFilterChip(
                         selected = showSmoke,
                         onClick = { showSmoke = !showSmoke },
@@ -1634,7 +1640,7 @@ fun MapScreen(
                     MapToolFilterChip(
                         selected = showMarkerPath,
                         onClick = { showMarkerPath = !showMarkerPath },
-                        label = { Text("Path") },
+                        label = { Text("String markers") },
                     )
                     MapToolFilterChip(
                         selected = showScale,
@@ -2124,13 +2130,23 @@ private fun OverlayToggleRow(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    hint: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = HuntColors.Cream)
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(label, style = MaterialTheme.typography.titleMedium, color = HuntColors.Cream)
+            if (!hint.isNullOrBlank()) {
+                Text(
+                    hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = HuntColors.Mist,
+                )
+            }
+        }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
