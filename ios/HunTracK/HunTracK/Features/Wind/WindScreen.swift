@@ -208,9 +208,11 @@ public struct WindScreen: View {
                                                 Text(marker.name)
                                                     .font(.field(size: 16, weight: .semibold))
                                                     .foregroundColor(theme.palette.cream)
-                                                Text(marker.category.label)
-                                                    .font(.field(size: 13))
-                                                    .foregroundColor(theme.palette.mist)
+                                                if !marker.name.hasPrefix("Waypoint") {
+                                                    Text(marker.category.label)
+                                                        .font(.field(size: 13))
+                                                        .foregroundColor(theme.palette.mist)
+                                                }
                                             }
                                             Spacer()
                                             
@@ -243,6 +245,27 @@ public struct WindScreen: View {
                                                     .foregroundColor(theme.palette.mist)
                                             }
                                         }
+                                        .onTapGesture {
+                                            if isSelected {
+                                                selectedMarkerId = nil
+                                                db.scentApproachMarkerId = nil
+                                            } else {
+                                                selectedMarkerId = marker.id
+                                                db.scentApproachMarkerId = marker.id
+                                            }
+                                        }
+                                        
+                                        TappableCoordinates(
+                                            text: String(format: "%.5f, %.5f", marker.latitude, marker.longitude),
+                                            latitude: marker.latitude,
+                                            longitude: marker.longitude,
+                                            gridRef: OsGridRef.latLngToOsGrid(
+                                                latitude: marker.latitude,
+                                                longitude: marker.longitude
+                                            ),
+                                            font: .field(size: 12),
+                                            color: theme.palette.mist
+                                        )
                                         
                                         if let dist = eval.distanceM, let bearingDeg = eval.bearingDeg {
                                             HStack(spacing: 12) {
@@ -283,15 +306,6 @@ public struct WindScreen: View {
                                         }
                                     }
                                 }
-                            .onTapGesture {
-                                if isSelected {
-                                    selectedMarkerId = nil
-                                    db.scentApproachMarkerId = nil
-                                } else {
-                                    selectedMarkerId = marker.id
-                                    db.scentApproachMarkerId = marker.id
-                                }
-                            }
                         }
                     }
                 }

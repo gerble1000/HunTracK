@@ -200,15 +200,35 @@ public struct HomeScreen: View {
                 ? OsGridRef.latLngToOsGrid(latitude: fix.latitude, longitude: fix.longitude)
                 : nil
 
-            Text(HomeScreen.formatCoordinates(fix.latitude, fix.longitude))
-                .font(.field(size: 18, weight: .semibold))
-                .foregroundColor(theme.palette.cream)
+            TappableCoordinates(
+                text: HomeScreen.formatCoordinates(fix.latitude, fix.longitude),
+                latitude: fix.latitude,
+                longitude: fix.longitude,
+                gridRef: osGrid,
+                font: .field(size: 18, weight: .semibold),
+                color: theme.palette.cream
+            )
+
+            TappableCoordinates(
+                text: String(format: "%.5f, %.5f", fix.latitude, fix.longitude),
+                latitude: fix.latitude,
+                longitude: fix.longitude,
+                gridRef: osGrid,
+                font: .field(size: 14),
+                color: theme.palette.mist
+            )
+            .padding(.top, 2)
 
             if let osGrid = osGrid {
-                Text(osGrid)
-                    .font(.field(size: 18, weight: .bold))
-                    .foregroundColor(theme.palette.bronzeBright)
-                    .padding(.top, 2)
+                TappableCoordinates(
+                    text: osGrid,
+                    latitude: fix.latitude,
+                    longitude: fix.longitude,
+                    gridRef: osGrid,
+                    font: .field(size: 18, weight: .bold),
+                    color: theme.palette.bronzeBright
+                )
+                .padding(.top, 2)
             }
 
             if location.latestFix == nil {

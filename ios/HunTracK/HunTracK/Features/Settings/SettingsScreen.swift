@@ -60,7 +60,9 @@ public struct SettingsScreen: View {
                 }
 
                 Section(header: sectionHeader("Markers")) {
-                    Toggle("Mark anywhere on map", isOn: markAnywhereBinding)
+                    Text("Tap the map to drop a waypoint. Long-press the map to open Mark location and choose any marker type.")
+                        .font(.field(size: 14))
+                        .foregroundColor(theme.palette.mist)
                 }
 
                 Section(header: sectionHeader("Sound")) {
@@ -229,16 +231,6 @@ public struct SettingsScreen: View {
             get: { db.preferences.showCullPinsOnMap },
             set: {
                 db.preferences.showCullPinsOnMap = $0
-                SoundManager.shared.play(.click)
-            }
-        )
-    }
-
-    private var markAnywhereBinding: Binding<Bool> {
-        Binding(
-            get: { db.preferences.markAnywhereEnabled },
-            set: {
-                db.preferences.markAnywhereEnabled = $0
                 SoundManager.shared.play(.click)
             }
         )

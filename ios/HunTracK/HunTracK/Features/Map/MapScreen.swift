@@ -27,13 +27,11 @@ private func mapUIColor(hex: String) -> UIColor {
 
 // MARK: - Annotation kinds
 
-private func footprintImage(bearingDegrees: Double, walked: Bool) -> UIImage {
+private func footprintImage(bearingDegrees: Double) -> UIImage {
     let size = CGSize(width: 28, height: 36)
     let renderer = UIGraphicsImageRenderer(size: size)
     let upright = renderer.image { _ in
-        let color = walked
-            ? UIColor(red: 0.639, green: 0.639, blue: 0.639, alpha: 1)
-            : UIColor(red: 1, green: 0.416, blue: 0, alpha: 1)
+        let color = UIColor(red: 1, green: 0.416, blue: 0, alpha: 1)
         color.setFill()
         UIBezierPath(ovalIn: CGRect(x: 8, y: 14, width: 12, height: 20)).fill()
         for toe in [CGRect(x: 4, y: 6, width: 6, height: 7),
@@ -57,40 +55,8 @@ private struct ApproachFootprint: Equatable {
     var latitude: Double
     var longitude: Double
     var bearing: Double
-    var walked: Bool
-}
-
-/// Same corridor and pass margin as Android `ApproachTrail`.
-private func approachPrintWalked(
-    printLat: Double,
-    printLng: Double,
-    startLat: Double,
-    startLng: Double,
-    endLat: Double,
-    endLng: Double,
-    userLat: Double?,
-    userLng: Double?
-) -> Bool {
-    guard let userLat, let userLng else { return false }
-    let corridorM = 45.0
-    let passMarginM = 10.0
-    func north(_ lat: Double, _ origin: Double) -> Double { (lat - origin) * 110_540.0 }
-    func east(_ lng: Double, _ originLng: Double, _ originLat: Double) -> Double {
-        (lng - originLng) * 111_320.0 * cos(originLat * .pi / 180)
-    }
-    let routeEast = east(endLng, startLng, startLat)
-    let routeNorth = north(endLat, startLat)
-    let routeLen = hypot(routeEast, routeNorth)
-    guard routeLen >= 12 else { return false }
-    let userEast = east(userLng, startLng, startLat)
-    let userNorth = north(userLat, startLat)
-    let along = (userEast * routeEast + userNorth * routeNorth) / routeLen
-    let cross = abs(userEast * routeNorth - userNorth * routeEast) / routeLen
-    guard cross <= corridorM, along >= passMarginM else { return false }
-    let printEast = east(printLng, startLng, startLat)
-    let printNorth = north(printLat, startLat)
-    let printAlong = (printEast * routeEast + printNorth * routeNorth) / routeLen
-    return along > printAlong + passMarginM
+    /// -1 sits left of the walk, +1 sits right.
+    var pairSide: Int
 }
 
 private enum MapPinKind: String {
@@ -110,8 +76,8 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
     let tint: UIColor
     /// Clockwise degrees from north. Used by approach footprints.
     let bearingDegrees: Double
-    /// True once the hunter has walked past this print.
-    let walked: Bool
+    /// -1 left of the trail, +1 right, 0 centred.
+    let pairSide: Int
 
     init(
         coordinate: CLLocationCoordinate2D,
@@ -121,7 +87,7 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
         recordId: Int64,
         tint: UIColor,
         bearingDegrees: Double = 0,
-        walked: Bool = false
+        pairSide: Int = 0
     ) {
         self.coordinate = coordinate
         self.title = title
@@ -130,7 +96,7 @@ private final class HuntAnnotation: NSObject, MKAnnotation {
         self.recordId = recordId
         self.tint = tint
         self.bearingDegrees = bearingDegrees
-        self.walked = walked
+        self.pairSide = pairSide
     }
 }
 
@@ -432,6 +398,7 @@ private struct MapViewHost: UIViewRepresentable {
     var onUserPanned: () -> Void
     var onSelectMarker: (Int64) -> Void
     var onMapTapped: (CLLocationCoordinate2D) -> Void
+    var onMapLongPressed: (CLLocationCoordinate2D) -> Void
     var onDrawPoint: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -546,7 +513,7 @@ private struct MapViewHost: UIViewRepresentable {
             },
             showTracks: showTracks,
             approachKey: approachFootprints.map {
-                "\($0.latitude),\($0.longitude),\($0.bearing),\($0.walked)"
+                "\($0.latitude),\($0.longitude),\($0.bearing),\($0.pairSide)"
             }.joined(separator: "|")
         )
 
@@ -638,7 +605,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             let annotation = HuntAnnotation(
                 coordinate: CLLocationCoordinate2D(latitude: marker.latitude, longitude: marker.longitude),
                 title: marker.name,
-                subtitle: marker.category.label,
+                subtitle: marker.name.hasPrefix("Waypoint") ? nil : marker.category.label,
                 kind: .fieldMarker,
                 recordId: marker.id,
                 tint: host.bronze
@@ -654,11 +621,9 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
                 subtitle: nil,
                 kind: .approachFootprint,
                 recordId: Int64(index),
-                tint: step.walked
-                    ? UIColor(red: 0.639, green: 0.639, blue: 0.639, alpha: 1)
-                    : UIColor(red: 1, green: 0.416, blue: 0, alpha: 1),
+                tint: UIColor(red: 1, green: 0.416, blue: 0, alpha: 1),
                 bearingDegrees: step.bearing,
-                walked: step.walked
+                pairSide: step.pairSide
             )
             mapView.addAnnotation(annotation)
             appliedAnnotations.append(annotation)
@@ -776,7 +741,7 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
     @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began, !parent.isDrawing,
               let mapView = gesture.view as? MKMapView else { return }
-        parent.onMapTapped(mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView))
+        parent.onMapLongPressed(mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView))
     }
 
     @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -914,8 +879,14 @@ private final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognize
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
                 ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
             view.annotation = annotation
-            view.image = footprintImage(bearingDegrees: hunt.bearingDegrees, walked: hunt.walked)
-            view.centerOffset = .zero
+            view.image = footprintImage(bearingDegrees: hunt.bearingDegrees)
+            let radians = hunt.bearingDegrees * .pi / 180
+            let lateral = hunt.pairSide == 0 ? 0.0 : 14.0
+            let sign = hunt.pairSide < 0 ? -1.0 : 1.0
+            view.centerOffset = CGPoint(
+                x: CGFloat(sign * cos(radians) * lateral),
+                y: CGFloat(sign * sin(radians) * lateral)
+            )
             view.canShowCallout = false
             return view
         }
@@ -1155,6 +1126,9 @@ public struct MapScreen: View {
                     onMapTapped: { coordinate in
                         handleMapTap(coordinate)
                     },
+                    onMapLongPressed: { coordinate in
+                        openMarkLocation(at: coordinate)
+                    },
                     onDrawPoint: { coordinate in
                         appendDraftPoint(coordinate, minimumMeters: 5, playClick: false)
                     }
@@ -1332,27 +1306,19 @@ public struct MapScreen: View {
         let bearing = bearingDegrees(fromLat: start.lat, fromLon: start.lon, toLat: marker.latitude, toLon: marker.longitude)
         let distance = DatabaseService.haversineMeters(start.lat, start.lon, marker.latitude, marker.longitude)
         guard distance >= 12 else { return [] }
-        let steps = min(40, max(4, Int(distance / 20)))
-        let user = location.latestFix
-        return (0..<steps).map { index in
+        let steps = min(48, max(8, Int(distance / 8)))
+        return (0..<steps).flatMap { index in
             let t = Double(index) / Double(steps)
             let lat = start.lat + (marker.latitude - start.lat) * t
             let lon = start.lon + (marker.longitude - start.lon) * t
-            return ApproachFootprint(
-                latitude: lat,
-                longitude: lon,
-                bearing: bearing,
-                walked: approachPrintWalked(
-                    printLat: lat,
-                    printLng: lon,
-                    startLat: start.lat,
-                    startLng: start.lon,
-                    endLat: marker.latitude,
-                    endLng: marker.longitude,
-                    userLat: user?.latitude,
-                    userLng: user?.longitude
+            return [-1, 1].map { side in
+                ApproachFootprint(
+                    latitude: lat,
+                    longitude: lon,
+                    bearing: bearing,
+                    pairSide: side
                 )
-            )
+            }
         }
     }
 
@@ -1375,7 +1341,7 @@ public struct MapScreen: View {
             Text("Route to \(approach.name): walk \(cardinal(approach.walkHeading)) so the wind hits the front of you.")
                 .font(.field(size: 13))
                 .foregroundColor(theme.palette.cream)
-            Text("Footprints · start downwind → finish at marker. Walked prints fade grey.")
+            Text("Footprints · start downwind → finish at marker.")
                 .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
             Button("Clear approach") { db.scentApproachMarkerId = nil }
@@ -1399,14 +1365,18 @@ public struct MapScreen: View {
                 Spacer()
 
                 if db.preferences.showOsGridRef {
-                    Text(mapCentreGridRef ?? "Outside GB")
-                        .font(.field(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundColor(theme.palette.bronzeBright)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(theme.palette.charcoal.opacity(0.75))
-                        .cornerRadius(6)
-                        .onTapGesture { showingGridInput = true }
+                    TappableCoordinates(
+                        text: mapCentreGridRef ?? "Outside GB",
+                        latitude: centre.latitude,
+                        longitude: centre.longitude,
+                        gridRef: mapCentreGridRef,
+                        font: .field(size: 12, weight: .semibold, design: .monospaced),
+                        color: theme.palette.bronzeBright
+                    )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(theme.palette.charcoal.opacity(0.75))
+                    .cornerRadius(6)
                 }
             }
 
@@ -1442,9 +1412,6 @@ public struct MapScreen: View {
                     }
                     mapChip("Layers", systemImage: "square.3.layers.3d") { showingLayers = true }
                     mapChip("Offline", systemImage: "arrow.down.circle") { showingOffline = true }
-                    mapChip(showSmoke ? "Smoke on" : "Smoke off", systemImage: "wind", selected: showSmoke) {
-                        showSmoke.toggle()
-                    }
                     mapChip("Overlays", systemImage: "eye") { showingOverlays = true }
                 }
                 .padding(.vertical, 2)
@@ -1985,11 +1952,29 @@ public struct MapScreen: View {
             return
         }
         selectedZone = nil
-        if capture == nil, db.preferences.markAnywhereEnabled {
-            followUser = false
-            markerCoordinate = coordinate
-            showingAddSheet = true
-        }
+        guard capture == nil else { return }
+        dropWaypoint(at: coordinate)
+    }
+
+    private func openMarkLocation(at coordinate: CLLocationCoordinate2D) {
+        guard capture == nil else { return }
+        followUser = false
+        markerCoordinate = coordinate
+        showingAddSheet = true
+    }
+
+    private func dropWaypoint(at coordinate: CLLocationCoordinate2D) {
+        let nextIndex = db.markers.filter {
+            $0.category != .homing && ($0.category == .deer || $0.name.hasPrefix("Waypoint"))
+        }.count + 1
+        let name = nextIndex == 1 ? "Waypoint" : "Waypoint \(nextIndex)"
+        db.addMarker(FieldMarker(
+            category: .deer,
+            name: name,
+            notes: "Map waypoint",
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        ))
     }
 
     private func zone(at coordinate: CLLocationCoordinate2D) -> BoundaryZone? {
@@ -2375,14 +2360,32 @@ private struct MarkerDetailSheet: View {
 
                         GlassPanel {
                             SectionLabel("Marker")
-                            MetricRow("Category", marker.category.label)
-                            MetricRow("Latitude", String(format: "%.5f", marker.latitude))
-                            MetricRow("Longitude", String(format: "%.5f", marker.longitude))
+                            if !marker.name.hasPrefix("Waypoint") {
+                                MetricRow("Category", marker.category.label)
+                            }
+                            TappableCoordinates(
+                                text: String(format: "%.5f, %.5f", marker.latitude, marker.longitude),
+                                latitude: marker.latitude,
+                                longitude: marker.longitude,
+                                gridRef: OsGridRef.latLngToOsGrid(
+                                    latitude: marker.latitude,
+                                    longitude: marker.longitude
+                                ),
+                                font: .field(size: 15, weight: .semibold),
+                                color: theme.palette.cream
+                            )
                             if let grid = OsGridRef.latLngToOsGrid(
                                 latitude: marker.latitude,
                                 longitude: marker.longitude
                             ) {
-                                MetricRow("OS Grid", grid)
+                                TappableCoordinates(
+                                    text: grid,
+                                    latitude: marker.latitude,
+                                    longitude: marker.longitude,
+                                    gridRef: grid,
+                                    font: .field(size: 16, weight: .bold),
+                                    color: theme.palette.bronzeBright
+                                )
                             }
                             if let elevation = marker.elevationMeters {
                                 MetricRow("Elevation", String(format: "%.0f m", elevation))

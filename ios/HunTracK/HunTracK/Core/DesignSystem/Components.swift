@@ -701,14 +701,107 @@ public struct ScreenBackground<Content: View>: View {
 /// The fallbacks below apply only when the bundle has no version keys.
 public enum AppVersion {
     public static var short: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.33"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.34"
     }
 
     public static var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "48"
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "49"
     }
 
     public static var display: String {
         "\(short) (\(build))"
     }
+}
+
+/// Grid reference or lat/lon text. A tap offers Copy, Share, and Open in Maps.
+public struct TappableCoordinates: View {
+    let text: String
+    let latitude: Double
+    let longitude: Double
+    var gridRef: String? = nil
+    var font: Font = .body
+    var color: Color = .primary
+
+    @State private var showActions = false
+    @State private var wantsShare = false
+    @State private var showShare = false
+
+    public init(
+        text: String,
+        latitude: Double,
+        longitude: Double,
+        gridRef: String? = nil,
+        font: Font = .body,
+        color: Color = .primary
+    ) {
+        self.text = text
+        self.latitude = latitude
+        self.longitude = longitude
+        self.gridRef = gridRef
+        self.font = font
+        self.color = color
+    }
+
+    private var summary: String {
+        let coordinates = String(format: "%.5f, %.5f", locale: Locale(identifier: "en_GB"), latitude, longitude)
+        if let gridRef, !gridRef.isEmpty {
+            return "Grid reference: \(gridRef)\nCoordinates: \(coordinates)"
+        }
+        return "Coordinates: \(coordinates)"
+    }
+
+    public var body: some View {
+        Button {
+            showActions = true
+        } label: {
+            Text(text)
+                .font(font)
+                .foregroundColor(color)
+                .multilineTextAlignment(.leading)
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog("Location", isPresented: $showActions, titleVisibility: .visible) {
+            Button("Copy") {
+                UIPasteboard.general.string = summary
+            }
+            Button("Share") {
+                wantsShare = true
+            }
+            Button("Open in Maps") {
+                openInMaps()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(summary)
+        }
+        .onChange(of: showActions) { isOpen in
+            if !isOpen, wantsShare {
+                wantsShare = false
+                showShare = true
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            LocationShareSheet(text: summary)
+        }
+    }
+
+    private func openInMaps() {
+        var parts = URLComponents(string: "http://maps.apple.com/")
+        parts?.queryItems = [
+            URLQueryItem(name: "ll", value: "\(latitude),\(longitude)"),
+            URLQueryItem(name: "q", value: "\(latitude),\(longitude)"),
+        ]
+        guard let url = parts?.url else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+struct LocationShareSheet: UIViewControllerRepresentable {
+    let text: String
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [text], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
