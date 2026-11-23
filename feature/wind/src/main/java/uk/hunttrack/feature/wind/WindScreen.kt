@@ -276,7 +276,9 @@ fun WindScreen(
                     },
                 ) {
                     Text(marker.name, style = MaterialTheme.typography.titleLarge, color = HuntColors.Cream)
-                    Text(marker.category.label, color = HuntColors.Mist, style = MaterialTheme.typography.bodyMedium)
+                    if (!marker.name.startsWith("Waypoint")) {
+                        Text(marker.category.label, color = HuntColors.Mist, style = MaterialTheme.typography.bodyMedium)
+                    }
                     when (eval.risk) {
                         ScentRisk.RISK -> Text(
                             "RISK",

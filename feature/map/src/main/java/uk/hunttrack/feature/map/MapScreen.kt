@@ -1792,8 +1792,11 @@ fun MapScreen(
             sheetState = rememberModalBottomSheetState(),
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val plainWaypoint = marker.name.startsWith("Waypoint")
                 Text(marker.name, style = MaterialTheme.typography.headlineMedium, color = HuntColors.Cream)
-                Text(marker.category.label, style = MaterialTheme.typography.titleMedium, color = HuntColors.Bronze)
+                if (!plainWaypoint) {
+                    Text(marker.category.label, style = MaterialTheme.typography.titleMedium, color = HuntColors.Bronze)
+                }
                 Text(marker.notes.ifBlank { "No notes" }, style = MaterialTheme.typography.bodyMedium)
                 val markerGrid = OsGridRef.latLngToOsGrid(marker.latitude, marker.longitude)
                 TappableCoordinates(
@@ -1824,7 +1827,7 @@ fun MapScreen(
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Place next ${marker.category.label} here")
+                    Text(if (plainWaypoint) "Place next waypoint here" else "Place next ${marker.category.label} here")
                 }
                 Text(
                     "Drops another marker at your current GPS — same type, no form.",

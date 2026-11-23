@@ -122,6 +122,16 @@ class MarkersViewModel @Inject constructor(
     /** Drop another marker at current GPS, inheriting category from an existing one (no form). */
     fun placeNextFrom(template: FieldMarker) {
         viewModelScope.launch {
+            if (template.name.startsWith("Waypoint")) {
+                val fix = locationRepository.bestFixOrNull()
+                    ?: locationRepository.latestFix.value
+                if (fix == null) {
+                    _placeError.value = "Waiting for GPS — enable location and try again."
+                    return@launch
+                }
+                saveWaypoint(fix.latitude, fix.longitude, fix.altitudeMeters)
+                return@launch
+            }
             val all = markerRepository.observeMarkers().first()
             val nextIndex = all.count { it.category == template.category } + 1
             addMarker(
