@@ -41,6 +41,31 @@ object ApproachTrail {
         return along > printAlong + PASS_MARGIN_M
     }
 
+    /**
+     * How far the hunter has walked from the downwind start toward the marker, 0 to 1.
+     * Off the route, or with no GPS, the whole trail is still ahead (0).
+     */
+    fun progressFraction(
+        startLat: Double,
+        startLng: Double,
+        endLat: Double,
+        endLng: Double,
+        userLat: Double?,
+        userLng: Double?,
+    ): Double {
+        if (userLat == null || userLng == null) return 0.0
+        val routeEast = eastMeters(endLng, startLng, startLat)
+        val routeNorth = northMeters(endLat, startLat)
+        val routeLen = hypot(routeEast, routeNorth)
+        if (routeLen < 12.0) return 0.0
+        val userEast = eastMeters(userLng, startLng, startLat)
+        val userNorth = northMeters(userLat, startLat)
+        val along = (userEast * routeEast + userNorth * routeNorth) / routeLen
+        val cross = abs(userEast * routeNorth - userNorth * routeEast) / routeLen
+        if (cross > CORRIDOR_M) return 0.0
+        return (along / routeLen).coerceIn(0.0, 1.0)
+    }
+
     private fun northMeters(lat: Double, originLat: Double): Double = (lat - originLat) * 110_540.0
 
     private fun eastMeters(lng: Double, originLng: Double, originLat: Double): Double =

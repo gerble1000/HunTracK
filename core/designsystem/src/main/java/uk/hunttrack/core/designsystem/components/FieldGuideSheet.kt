@@ -143,7 +143,7 @@ object FieldGuides {
         ),
         FieldGuideSection(
             title = "Approach into the wind",
-            body = "After you choose a marker, open Map. HunTracK lays orange footprint pairs from downwind of the spot toward it — walk that trail so wind hits the front of you and your scent blows behind.",
+            body = "After you choose a marker, open Map. HunTracK draws an orange dotted line from downwind of the spot toward it. The part you have already walked fades grey. Walk that line so the wind hits the front of you and your scent blows behind.",
         ),
         FieldGuideSection(
             title = "Need markers first",
@@ -159,13 +159,13 @@ object FieldGuides {
         ),
         FieldGuideSection(
             title = "Tool bar — swipe for more",
-            body = "The chip row at the top (Home, North up, Walk fence, Layers…) scrolls sideways. " +
+            body = "The chip row at the top (Range, North up, Walk fence, Layers…) scrolls sideways. " +
                 "Swipe left/right across the chips to reach more tools (Delete, Offline, Overlays, fences). " +
                 "When you open the map it briefly peeks to show there is more along the row.",
         ),
         FieldGuideSection(
-            title = "Home (retrieve / downed prey)",
-            body = "Place a red pin where prey went down (tap Home then the map, or Home here). Walk toward it — distance, turn hints, and an alert when you are within 5 m. At 1 m the panel shows At target.",
+            title = "Range (retrieve / downed prey)",
+            body = "Place a pin where prey went down (tap Range, then the map, or Range here). Every tap on Range frames that pin, including after you leave the map and come back. Walk toward it — distance, turn hints, and an alert when you are within 5 m. At 1 m the panel shows At target.",
         ),
         FieldGuideSection(
             title = "Mark & trail",

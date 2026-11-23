@@ -1,5 +1,6 @@
 package uk.hunttrack.domain.scent
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,6 +72,22 @@ class ApproachTrailTest {
                 userLng = -1.803,
             ),
         )
+    }
+
+    @Test
+    fun progressIsZeroOffTheRouteAndGrowsTowardTheMarker() {
+        assertEquals(
+            0.0,
+            ApproachTrail.progressFraction(startLat, startLng, endLat, endLng, null, null),
+            0.001,
+        )
+        assertEquals(
+            0.0,
+            ApproachTrail.progressFraction(startLat, startLng, endLat, endLng, 52.001, -1.803),
+            0.001,
+        )
+        val halfway = ApproachTrail.progressFraction(startLat, startLng, endLat, endLng, 52.001, startLng)
+        assertTrue(halfway > 0.4 && halfway < 0.6)
     }
 
     @Test

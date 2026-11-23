@@ -169,25 +169,37 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
     val scrollToTopController = rememberScrollToTopController()
     val scrollMoreHintState = rememberScrollMoreHintState()
 
-    fun navigateHome() {
-        soundManager.play(HuntSound.CLICK)
-        // Prefer popping back to Home if it's already on the stack (Map, Cull log, etc.).
-        if (!navController.popBackStack(Dest.Home.route, inclusive = false)) {
-            // Home wasn't on the stack (tab saveState) — navigate and restore it.
+    /**
+     * Home is the NavHost start destination, so every other tab is pushed on top of it.
+     * popUpTo(Home) { saveState = true } stores that tab (often Map) as Home's saved
+     * back stack. Navigating to Home with restoreState = true then puts that tab back,
+     * so the Home tab opens Map. Pop to Home and do not restore that saved stack.
+     */
+    fun showHomeTab() {
+        val startId = navController.graph.findStartDestination().id
+        navController.clearBackStack(Dest.Home.route)
+        val popped = navController.popBackStack(startId, inclusive = false, saveState = true)
+        if (!popped) {
             navController.navigate(Dest.Home.route) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = false
-                }
+                popUpTo(startId) { saveState = false }
                 launchSingleTop = true
-                restoreState = true
+                restoreState = false
             }
         }
-        // Forget More sub-pages so the next More tap shows the list, not compass/etc.
         navController.clearBackStack(Dest.More.route)
+    }
+
+    fun navigateHome() {
+        soundManager.play(HuntSound.CLICK)
+        showHomeTab()
     }
 
     fun navigateToTab(dest: Dest) {
         soundManager.play(HuntSound.CLICK)
+        if (dest == Dest.Home) {
+            showHomeTab()
+            return
+        }
         if (dest == Dest.More) {
             // Clear any saved More sub-page (compass, species, etc.) so the tab
             // always returns to the More list after leaving via the HunTracK title.
@@ -195,6 +207,7 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
             navController.navigate(Dest.More.route) {
                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                 launchSingleTop = true
+                restoreState = true
             }
             return
         }

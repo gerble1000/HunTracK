@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="map_range">Range</string>
+    <string name="map_range_on">Range on</string>
+    <string name="map_range_here">Range here</string>
+    <string name="map_end_range">End range</string>
+    <string name="map_range_place_hint">Tap the map to drop the range pin, or use Range here</string>
+    <string name="map_range_move_hint">Tap the map to move the pin</string>
+    <string name="map_range_waiting">Place a pin or end range</string>
+</resources>
