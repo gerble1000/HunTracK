@@ -80,7 +80,6 @@ import uk.hunttrack.feature.culls.CullRoute
 import uk.hunttrack.feature.emergency.EmergencyRoute
 import uk.hunttrack.feature.home.HomeRoute
 import uk.hunttrack.feature.map.MapRoute
-import uk.hunttrack.feature.map.MapViewModel
 import uk.hunttrack.feature.markers.MarkersViewModel
 import uk.hunttrack.feature.markers.QuickAddMarkerSheet
 import uk.hunttrack.feature.permissions.PermissionsRoute
@@ -147,8 +146,6 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
     var pendingPlaceLat by remember { mutableStateOf<Double?>(null) }
     var pendingPlaceLng by remember { mutableStateOf<Double?>(null) }
     val markersVm: MarkersViewModel = hiltViewModel()
-    // Activity scope, not the Map destination. Popping Map used to clear the trail.
-    val mapVm: MapViewModel = hiltViewModel()
     val placeError by markersVm.placeError.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -370,7 +367,6 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
             }
             composable(Dest.Map.route) {
                 MapRoute(
-                    viewModel = mapVm,
                     onPlaceMarkerHere = { openQuickAddAt(null, null) },
                     onPlaceMarkerAt = { lat, lng -> markersVm.dropWaypointAt(lat, lng) },
                     onMarkAnywhereAt = { lat, lng -> openQuickAddAt(lat, lng) },

@@ -48,7 +48,6 @@ import uk.hunttrack.domain.model.MapLayerStyle
 import uk.hunttrack.domain.model.MarkerCategory
 import uk.hunttrack.domain.model.OfflineMapRegion
 import uk.hunttrack.domain.model.TrackPoint
-import uk.hunttrack.domain.track.WalkTrail
 import uk.hunttrack.domain.model.UserPreferences
 import uk.hunttrack.domain.scent.ScentPlumeGeometry
 import kotlin.math.asin
@@ -369,7 +368,6 @@ class MapViewModel @Inject constructor(
                 }
                 checkHomingArrival(fix, activeHomingState.value)
                 appendBoundaryWalkPoint(fix)
-                appendWalkTrailPoint(fix)
             }
         }
         viewModelScope.launch {
@@ -560,25 +558,6 @@ class MapViewModel @Inject constructor(
 
     fun toggleTracking() {
         if (trackingState.value) stopTracking() else startTracking()
-    }
-
-    /**
-     * Accept a walked point into the activity-scoped trail. A recorded route
-     * has its own collector, so this breadcrumb stays out of its way.
-     */
-    private fun appendWalkTrailPoint(fix: GpsFix) {
-        if (trackingState.value) return
-        val updated = WalkTrail.append(
-            points = trackPointsState.value,
-            latitude = fix.latitude,
-            longitude = fix.longitude,
-            elevationMeters = fix.altitudeMeters,
-            speedMps = fix.speedMps,
-            nowEpochMs = System.currentTimeMillis(),
-        )
-        if (updated !== trackPointsState.value) {
-            trackPointsState.value = updated
-        }
     }
 
     private fun startTracking() {
