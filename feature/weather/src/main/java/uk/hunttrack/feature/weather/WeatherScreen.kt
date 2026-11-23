@@ -188,13 +188,7 @@ fun WeatherScreen(
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(hours, key = { it.epochMs }) { hour ->
-                            HourCard(
-                                hour,
-                                state.prefs.useCelsius,
-                                state.prefs.windUnit,
-                                latitude = state.weather?.latitude ?: 0.0,
-                                longitude = state.weather?.longitude ?: 0.0,
-                            )
+                            HourCard(hour, state.prefs.useCelsius, state.prefs.windUnit)
                         }
                     }
                 }
@@ -213,10 +207,7 @@ private fun HourCard(
     hour: HourlyForecast,
     useCelsius: Boolean,
     windUnit: WindUnit,
-    latitude: Double,
-    longitude: Double,
 ) {
-    val isDay = Daylight.isDay(hour.isDay, latitude, longitude, hour.epochMs)
     GlassPanel(Modifier.padding(vertical = 4.dp).widthIn(min = 112.dp)) {
         Text(
             HourlyForecastLabels.offsetLabel(hour.epochMs, System.currentTimeMillis()),
@@ -225,8 +216,7 @@ private fun HourCard(
         WeatherIcon(
             hour.weatherCode,
             Modifier.size(28.dp).padding(vertical = 4.dp),
-            isDay = isDay,
-            epochMs = hour.epochMs,
+            showDayNight = false,
         )
         val temp = if (useCelsius) "${hour.temperatureC.toInt()}°" else "${(hour.temperatureC * 9 / 5 + 32).toInt()}°"
         Text(temp, style = MaterialTheme.typography.titleMedium)
@@ -265,6 +255,7 @@ fun WeatherIcon(
     modifier: Modifier = Modifier,
     isDay: Boolean = true,
     epochMs: Long = 0L,
+    showDayNight: Boolean = true,
 ) {
     val transition = rememberInfiniteTransition(label = "wx")
     val t by transition.animateFloat(
@@ -278,6 +269,7 @@ fun WeatherIcon(
                 drawCircle(HuntColors.SlateLight, radius = size.minDimension * 0.28f, center = center)
                 drawLine(HuntColors.Gold, Offset(center.x, center.y), Offset(center.x + 8f, center.y + 20f), 3f)
             }
+            !showDayNight && (code in 71..77 || code in 85..86) -> drawSnow()
             code in 61..82 || code in 51..55 -> {
                 drawCircle(HuntColors.Mist, radius = size.minDimension * 0.28f, center = Offset(center.x, center.y - 6f))
                 repeat(3) { i ->
@@ -289,13 +281,15 @@ fun WeatherIcon(
             code in 45..48 -> {
                 drawCircle(HuntColors.Mist.copy(alpha = 0.4f + 0.3f * t), radius = size.minDimension * 0.4f)
             }
-            !isDay && code in 71..77 || !isDay && code in 85..86 -> {
-                repeat(4) { i ->
-                    val x = center.x - 8f + (i % 2) * 12f
-                    val y = center.y - 6f + (i / 2) * 12f
-                    drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
-                }
+            !showDayNight && code == 0 -> Unit
+            !showDayNight && code in 1..3 -> {
+                drawCircle(
+                    HuntColors.Mist.copy(alpha = if (code == 3) 0.88f else 0.78f),
+                    radius = size.minDimension * if (code == 3) 0.28f else 0.18f,
+                    center = Offset(center.x + size.minDimension * 0.12f, center.y + size.minDimension * 0.08f),
+                )
             }
+            !isDay && code in 71..77 || !isDay && code in 85..86 -> drawSnow()
             !isDay && (code == 0 || code in 1..3) -> {
                 drawStars()
                 val phase = MoonPhase.fraction(epochMs)
@@ -324,6 +318,14 @@ fun WeatherIcon(
                 }
             }
         }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnow() {
+    repeat(4) { i ->
+        val x = center.x - 8f + (i % 2) * 12f
+        val y = center.y - 6f + (i / 2) * 12f
+        drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
     }
 }
 
