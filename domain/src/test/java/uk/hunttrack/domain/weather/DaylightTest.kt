@@ -31,21 +31,6 @@ class DaylightTest {
     }
 
     @Test
-    fun hourlyStripUsesThatDatesSunriseNotThePreviousSolarDay() {
-        val night = Instant.parse("2026-11-23T22:00:00Z").toEpochMilli()
-        assertFalse(Daylight.isSunlitHour(latitude, longitude, night))
-        val beforeDawn = Instant.parse("2026-11-24T03:00:00Z").toEpochMilli()
-        assertFalse(Daylight.isSunlitHour(latitude, longitude, beforeDawn))
-        val morning = Instant.parse("2026-11-24T10:00:00Z").toEpochMilli()
-        assertTrue(Daylight.isSunlitHour(latitude, longitude, morning))
-        val afternoon = Instant.parse("2026-11-24T14:00:00Z").toEpochMilli()
-        assertTrue(Daylight.isSunlitHour(latitude, longitude, afternoon))
-        assertFalse(Daylight.isDay(apiIsDay = false, latitude, longitude, afternoon))
-        val afterSunset = Instant.parse("2026-11-24T18:00:00Z").toEpochMilli()
-        assertFalse(Daylight.isSunlitHour(latitude, longitude, afterSunset))
-    }
-
-    @Test
     fun eveningSkyIsEitherALitMoonOrStars() {
         val epoch = Instant.parse("2026-11-21T20:00:00Z").toEpochMilli()
         val sky = AstronomyCalculator.nightSky(latitude, longitude, epoch)

@@ -216,7 +216,7 @@ private fun HourCard(
     latitude: Double,
     longitude: Double,
 ) {
-    val isDay = Daylight.isSunlitHour(latitude, longitude, hour.epochMs)
+    val isDay = Daylight.isDay(hour.isDay, latitude, longitude, hour.epochMs)
     GlassPanel(Modifier.padding(vertical = 4.dp).widthIn(min = 112.dp)) {
         Text(
             HourlyForecastLabels.offsetLabel(hour.epochMs, System.currentTimeMillis()),
