@@ -13,11 +13,8 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Forest
-import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -71,7 +68,6 @@ import uk.hunttrack.core.designsystem.sound.HuntSound
 import uk.hunttrack.core.designsystem.sound.SoundManager
 import uk.hunttrack.core.designsystem.theme.HuntColors
 import uk.hunttrack.core.location.LocationRepository
-import uk.hunttrack.domain.model.AppThemeMode
 import uk.hunttrack.domain.model.UserPreferences
 import uk.hunttrack.feature.calendar.CalendarRoute
 import uk.hunttrack.feature.calls.CallsRoute
@@ -251,30 +247,6 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
                     )
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            val next = when (prefs.themeMode) {
-                                AppThemeMode.WOODLAND -> AppThemeMode.NIGHT
-                                AppThemeMode.NIGHT -> AppThemeMode.HUNT
-                                AppThemeMode.HUNT -> AppThemeMode.WOODLAND
-                            }
-                            scope.launch { preferencesRepository.setThemeMode(next) }
-                        },
-                    ) {
-                        Icon(
-                            imageVector = when (prefs.themeMode) {
-                                AppThemeMode.WOODLAND -> Icons.Default.Forest
-                                AppThemeMode.NIGHT -> Icons.Default.DarkMode
-                                AppThemeMode.HUNT -> Icons.Default.Whatshot
-                            },
-                            contentDescription = when (prefs.themeMode) {
-                                AppThemeMode.WOODLAND -> "Theme: Woodland — tap for Night"
-                                AppThemeMode.NIGHT -> "Theme: Night — tap for Hunt"
-                                AppThemeMode.HUNT -> "Theme: Hunt — tap for Woodland"
-                            },
-                            tint = HuntColors.BronzeBright,
-                        )
-                    }
                     IconButton(
                         onClick = {
                             val next = !soundsOn
