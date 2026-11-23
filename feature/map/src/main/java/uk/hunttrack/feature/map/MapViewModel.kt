@@ -368,6 +368,7 @@ class MapViewModel @Inject constructor(
                 }
                 checkHomingArrival(fix, activeHomingState.value)
                 appendBoundaryWalkPoint(fix)
+                appendWalkTrailPoint(fix)
             }
         }
         viewModelScope.launch {
@@ -558,6 +559,26 @@ class MapViewModel @Inject constructor(
 
     fun toggleTracking() {
         if (trackingState.value) stopTracking() else startTracking()
+    }
+
+    /** Keep the on-screen walk orange. GPS time can be a bogus elapsed stamp, so age is wall clock. */
+    private fun appendWalkTrailPoint(fix: GpsFix) {
+        if (trackingState.value) return
+        val points = trackPointsState.value
+        val last = points.lastOrNull()
+        if (last != null) {
+            val moved = haversine(last.latitude, last.longitude, fix.latitude, fix.longitude)
+            if (moved < 8.0) return
+        }
+        val point = TrackPoint(
+            routeId = 0,
+            latitude = fix.latitude,
+            longitude = fix.longitude,
+            elevationMeters = fix.altitudeMeters,
+            speedMps = fix.speedMps,
+            recordedAtEpochMs = System.currentTimeMillis(),
+        )
+        trackPointsState.value = (points + point).takeLast(400)
     }
 
     private fun startTracking() {

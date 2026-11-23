@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -182,7 +183,6 @@ import uk.hunttrack.domain.model.displayName
 import uk.hunttrack.domain.model.hatchPattern
 import uk.hunttrack.domain.model.mapColorHex
 import uk.hunttrack.domain.model.mapFillOpacity
-import uk.hunttrack.domain.scent.ApproachTrail
 import uk.hunttrack.domain.scent.ScentPlumeGeometry
 import uk.hunttrack.core.designsystem.markers.MarkerIconResolver
 import uk.hunttrack.domain.model.OfflineMapRegion
@@ -1412,6 +1412,8 @@ fun MapScreen(
                             stringResource(
                                 if (homingPlaceMode) R.string.map_range_on else R.string.map_range,
                             ),
+                            maxLines = 1,
+                            softWrap = false,
                         )
                     },
                     leadingIcon = { Icon(Icons.Default.Flag, null) },
@@ -2196,7 +2198,8 @@ private const val FenceLineColor = "#1A3A6E"
 private const val DraftFenceLineWidth = 1.75f
 /** Saved offline pack border: thin blue line with yellow dashes. */
 private const val OfflineRegionBlue = "#2E86DE"
-/** Footprint fill. The GPS track stays green (#5FD0A8). */
+/** Walked GPS trail and the into-wind line. Literal orange, never a grey fade. */
+private const val WalkedTrailOrange = "#FF6A00"
 private const val OfflineRegionYellow = "#FFD54F"
 private const val FocusBoundaryLineColor = "#E2B05C"
 private const val FenceLineWidth = 2.5f
@@ -2686,9 +2689,12 @@ private fun ensureSources(style: Style, context: Context) {
         style.addSource(GeoJsonSource("track-source", FeatureCollection.fromFeatures(emptyArray())))
         style.addLayer(
             LineLayer("track-layer", "track-source").withProperties(
-                PropertyFactory.lineColor("#5FD0A8"),
-                PropertyFactory.lineWidth(4.5f),
-                PropertyFactory.lineOpacity(0.95f),
+                PropertyFactory.lineColor(WalkedTrailOrange),
+                PropertyFactory.lineWidth(5.5f),
+                PropertyFactory.lineOpacity(1f),
+                PropertyFactory.lineCap("round"),
+                PropertyFactory.lineJoin("round"),
+                PropertyFactory.lineDasharray(arrayOf(0.2f, 1.5f)),
             ),
         )
     }
@@ -3026,7 +3032,15 @@ private fun updateGpsTrack(style: Style, state: MapUiState, show: Boolean = true
         style.getLayer("track-layer")?.setProperties(PropertyFactory.visibility(Property.NONE))
         return
     }
-    style.getLayer("track-layer")?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
+    style.getLayer("track-layer")?.setProperties(
+        PropertyFactory.visibility(Property.VISIBLE),
+        PropertyFactory.lineColor(WalkedTrailOrange),
+        PropertyFactory.lineWidth(5.5f),
+        PropertyFactory.lineCap("round"),
+        PropertyFactory.lineJoin("round"),
+        PropertyFactory.lineDasharray(arrayOf(0.2f, 1.5f)),
+        PropertyFactory.lineOpacity(1f),
+    )
     val points = state.trackPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
     val collection = if (points.size >= 2) {
         FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(points)))
@@ -3073,18 +3087,19 @@ private fun ensureApproachTrailLayer(style: Style) {
     if (style.getLayer("scent-approach-trail") == null && style.getSource("scent-approach-trail") != null) {
         style.addLayer(
             LineLayer("scent-approach-trail", "scent-approach-trail").withProperties(
-                PropertyFactory.lineColor(Expression.toColor(Expression.get("color"))),
+                PropertyFactory.lineColor(WalkedTrailOrange),
                 PropertyFactory.lineWidth(5.5f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round"),
-                PropertyFactory.lineDasharray(arrayOf(0.15f, 1.5f)),
+                PropertyFactory.lineDasharray(arrayOf(0.2f, 1.5f)),
                 PropertyFactory.lineOpacity(1f),
             ),
         )
     }
 }
 
-/** Dotted trail. The part already walked fades grey; the part still ahead stays orange. */
+/** Dotted approach line. One literal orange stroke, including the part already walked. */
+@Suppress("UNUSED_PARAMETER")
 private fun updateScentApproach(style: Style, plan: ScentApproachPlan?, gps: GpsFix?) {
     ensureApproachTrailLayer(style)
     val source = style.getSource("scent-approach-trail") as? GeoJsonSource
@@ -3096,56 +3111,20 @@ private fun updateScentApproach(style: Style, plan: ScentApproachPlan?, gps: Gps
     }
     layer?.setProperties(
         PropertyFactory.visibility(Property.VISIBLE),
-        PropertyFactory.lineColor(Expression.toColor(Expression.get("color"))),
+        PropertyFactory.lineColor(WalkedTrailOrange),
         PropertyFactory.lineWidth(5.5f),
         PropertyFactory.lineCap("round"),
         PropertyFactory.lineJoin("round"),
-        PropertyFactory.lineDasharray(arrayOf(0.15f, 1.5f)),
+        PropertyFactory.lineDasharray(arrayOf(0.2f, 1.5f)),
+        PropertyFactory.lineOpacity(1f),
     )
-    val progress = ApproachTrail.progressFraction(
-        startLat = plan.startLat,
-        startLng = plan.startLng,
-        endLat = plan.targetLat,
-        endLng = plan.targetLng,
-        userLat = gps?.latitude,
-        userLng = gps?.longitude,
+    val line = LineString.fromLngLats(
+        listOf(
+            Point.fromLngLat(plan.startLng, plan.startLat),
+            Point.fromLngLat(plan.targetLng, plan.targetLat),
+        ),
     )
-    source?.setGeoJson(FeatureCollection.fromFeatures(approachTrailSegments(plan, progress)))
-    val trailLayer = style.getLayer("scent-approach-trail") ?: return
-    runCatching {
-        style.removeLayer(trailLayer)
-        style.addLayer(trailLayer)
-    }
-}
-
-private fun approachTrailSegments(plan: ScentApproachPlan, progress: Double): Array<Feature> {
-    val steps = 18
-    return (0 until steps).map { index ->
-        val t0 = index.toDouble() / steps.toDouble()
-        val t1 = (index + 1).toDouble() / steps.toDouble()
-        val mid = (t0 + t1) / 2.0
-        // Blend across a short stretch at the hunter so the older trail fades into the orange ahead.
-        val orange = ((mid - (progress - 0.08)) / 0.08).coerceIn(0.0, 1.0)
-        val start = pointAlong(plan, t0)
-        val end = pointAlong(plan, t1)
-        Feature.fromGeometry(
-            LineString.fromLngLats(listOf(start, end)),
-        ).also { it.addStringProperty("color", trailHex(orange)) }
-    }.toTypedArray()
-}
-
-private fun pointAlong(plan: ScentApproachPlan, t: Double): Point {
-    val lat = plan.startLat + (plan.targetLat - plan.startLat) * t
-    val lng = plan.startLng + (plan.targetLng - plan.startLng) * t
-    return Point.fromLngLat(lng, lat)
-}
-
-private fun trailHex(orangeAmount: Double): String {
-    val grey = 0xA3
-    val red = (grey + (0xFF - grey) * orangeAmount).toInt()
-    val green = (grey + (0x6A - grey) * orangeAmount).toInt()
-    val blue = (grey * (1.0 - orangeAmount)).toInt()
-    return String.format("#%02X%02X%02X", red, green, blue)
+    source?.setGeoJson(FeatureCollection.fromFeature(Feature.fromGeometry(line)))
 }
 
 /**
@@ -3563,7 +3542,7 @@ private fun MapToolAssistChip(
     AssistChip(
         onClick = onClick,
         label = label,
-        modifier = modifier.slideRightOnPress(interactionSource),
+        modifier = modifier.wrapContentWidth(unbounded = true).slideRightOnPress(interactionSource),
         enabled = enabled,
         leadingIcon = leadingIcon,
         interactionSource = interactionSource,
@@ -3593,7 +3572,7 @@ private fun MapToolFilterChip(
         selected = selected,
         onClick = onClick,
         label = label,
-        modifier = modifier.slideRightOnPress(interactionSource),
+        modifier = modifier.wrapContentWidth(unbounded = true).slideRightOnPress(interactionSource),
         enabled = enabled,
         leadingIcon = leadingIcon,
         interactionSource = interactionSource,

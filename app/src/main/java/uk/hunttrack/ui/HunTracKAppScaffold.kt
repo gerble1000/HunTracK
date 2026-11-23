@@ -170,52 +170,46 @@ fun HunTracKAppScaffold(modifier: Modifier = Modifier) {
     val scrollMoreHintState = rememberScrollMoreHintState()
 
     /**
-     * Home is the NavHost start destination, so every other tab is pushed on top of it.
-     * popUpTo(Home) { saveState = true } stores that tab (often Map) as Home's saved
-     * back stack. Navigating to Home with restoreState = true then puts that tab back,
-     * so the Home tab opens Map. Pop to Home and do not restore that saved stack.
+     * Home is the NavHost start destination, so every other tab sits on top of it.
+     * popUpTo(Home) { saveState = true } stores that tab, usually Map, as Home's
+     * saved back stack. The next navigate() with restoreState then puts Map back,
+     * so Home or More can leave you on Map. Drop that saved stack and open the tab
+     * without restoring it.
      */
-    fun showHomeTab() {
+    fun openTab(dest: Dest) {
         val startId = navController.graph.findStartDestination().id
-        navController.clearBackStack(Dest.Home.route)
-        val popped = navController.popBackStack(startId, inclusive = false, saveState = true)
-        if (!popped) {
-            navController.navigate(Dest.Home.route) {
-                popUpTo(startId) { saveState = false }
-                launchSingleTop = true
-                restoreState = false
-            }
+        if (dest == Dest.More) {
+            navController.clearBackStack(Dest.More.route)
         }
-        navController.clearBackStack(Dest.More.route)
+        navController.clearBackStack(Dest.Home.route)
+        navController.popBackStack(startId, inclusive = false, saveState = false)
+        if (dest == Dest.Home) {
+            if (navController.currentDestination?.route != Dest.Home.route) {
+                navController.navigate(Dest.Home.route) {
+                    popUpTo(startId) { saveState = false }
+                    launchSingleTop = true
+                    restoreState = false
+                }
+            }
+            navController.clearBackStack(Dest.More.route)
+            return
+        }
+        if (navController.currentDestination?.route == dest.route) return
+        navController.navigate(dest.route) {
+            launchSingleTop = true
+            restoreState = false
+        }
     }
 
     fun navigateHome() {
         soundManager.play(HuntSound.CLICK)
-        showHomeTab()
+        openTab(Dest.Home)
     }
 
     fun navigateToTab(dest: Dest) {
         soundManager.play(HuntSound.CLICK)
-        if (dest == Dest.Home) {
-            showHomeTab()
-            return
-        }
-        if (dest == Dest.More) {
-            // Clear any saved More sub-page (compass, species, etc.) so the tab
-            // always returns to the More list after leaving via the HunTracK title.
-            navController.clearBackStack(Dest.More.route)
-            navController.navigate(Dest.More.route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
-            }
-            return
-        }
-        navController.navigate(dest.route) {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
+        if (navController.currentDestination?.route == dest.route) return
+        openTab(dest)
     }
 
     fun openQuickAddAt(lat: Double?, lng: Double?) {

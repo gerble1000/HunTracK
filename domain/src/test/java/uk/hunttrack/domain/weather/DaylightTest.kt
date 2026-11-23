@@ -31,15 +31,18 @@ class DaylightTest {
     }
 
     @Test
-    fun hourlyStripUsesCivilDawnNotANightFlag() {
-        val night = Instant.parse("2026-11-22T22:00:00Z").toEpochMilli()
-        assertFalse(Daylight.isCivilDay(latitude, longitude, night))
-        val nineHoursLater = night + 9L * 60L * 60L * 1000L
-        assertTrue(Daylight.isCivilDay(latitude, longitude, nineHoursLater))
-        val afternoon = (AstronomyCalculator.calculate(latitude, longitude, night).sunriseEpochMs +
-            AstronomyCalculator.calculate(latitude, longitude, night).sunsetEpochMs) / 2
-        assertTrue(Daylight.isCivilDay(latitude, longitude, afternoon))
+    fun hourlyStripUsesThatDatesSunriseNotThePreviousSolarDay() {
+        val night = Instant.parse("2026-11-23T22:00:00Z").toEpochMilli()
+        assertFalse(Daylight.isSunlitHour(latitude, longitude, night))
+        val beforeDawn = Instant.parse("2026-11-24T03:00:00Z").toEpochMilli()
+        assertFalse(Daylight.isSunlitHour(latitude, longitude, beforeDawn))
+        val morning = Instant.parse("2026-11-24T10:00:00Z").toEpochMilli()
+        assertTrue(Daylight.isSunlitHour(latitude, longitude, morning))
+        val afternoon = Instant.parse("2026-11-24T14:00:00Z").toEpochMilli()
+        assertTrue(Daylight.isSunlitHour(latitude, longitude, afternoon))
         assertFalse(Daylight.isDay(apiIsDay = false, latitude, longitude, afternoon))
+        val afterSunset = Instant.parse("2026-11-24T18:00:00Z").toEpochMilli()
+        assertFalse(Daylight.isSunlitHour(latitude, longitude, afterSunset))
     }
 
     @Test

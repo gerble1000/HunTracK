@@ -1,5 +1,7 @@
 package uk.hunttrack.domain.weather
 
+import java.time.Instant
+import java.time.ZoneId
 import uk.hunttrack.domain.astronomy.AstronomyCalculator
 
 /**
@@ -10,6 +12,9 @@ import uk.hunttrack.domain.astronomy.AstronomyCalculator
  * the home screen uses for legal light.
  */
 object Daylight {
+    /** Same zone the hourly strip uses to label "+1", "+2", … */
+    val forecastZone: ZoneId = ZoneId.of("Europe/London")
+
     fun isDay(
         apiIsDay: Boolean?,
         latitude: Double,
@@ -22,25 +27,20 @@ object Daylight {
     }
 
     /**
-     * Daylight for one hourly chip. The chip counts as day when that clock hour
-     * overlaps civil dawn through civil dusk at [latitude]/[longitude].
-     * The forecast is_day flag is ignored: a flag that stayed night was drawing
-     * a moon on every hour, including the hour dawn falls in.
+     * Daylight for one hourly chip, from that calendar date's sunrise to sunset
+     * at [latitude]/[longitude].
+     *
+     * Sampling the hour itself can land the sun calculator on the previous solar
+     * day, so a morning hour does not overlap yesterday's sunset and stays a moon.
+     * Noon on the hour's London date forces that date's rise and set.
+     * The forecast is_day flag is not used here: a stuck night flag was painting
+     * the moon on daytime hours.
      */
-    fun isCivilDay(latitude: Double, longitude: Double, epochMs: Long): Boolean {
+    fun isSunlitHour(latitude: Double, longitude: Double, epochMs: Long): Boolean {
+        val date = Instant.ofEpochMilli(epochMs).atZone(forecastZone).toLocalDate()
+        val noon = date.atTime(12, 0).atZone(forecastZone).toInstant().toEpochMilli()
+        val sun = AstronomyCalculator.calculate(latitude, longitude, noon)
         val hourEnd = epochMs + 60L * 60L * 1000L
-        if (hourOverlapsCivilDay(latitude, longitude, epochMs, hourEnd)) return true
-        return hourOverlapsCivilDay(latitude, longitude, hourEnd - 1, hourEnd)
-    }
-
-    private fun hourOverlapsCivilDay(
-        latitude: Double,
-        longitude: Double,
-        sampleMs: Long,
-        hourEnd: Long,
-    ): Boolean {
-        val sun = AstronomyCalculator.calculate(latitude, longitude, sampleMs)
-        val hourStart = hourEnd - 60L * 60L * 1000L
-        return hourStart < sun.civilTwilightEndEpochMs && hourEnd > sun.civilTwilightBeginEpochMs
+        return epochMs < sun.sunsetEpochMs && hourEnd > sun.sunriseEpochMs
     }
 }

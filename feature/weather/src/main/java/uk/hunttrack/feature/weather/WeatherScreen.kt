@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -215,8 +216,8 @@ private fun HourCard(
     latitude: Double,
     longitude: Double,
 ) {
-    val isDay = Daylight.isCivilDay(latitude, longitude, hour.epochMs)
-    GlassPanel(Modifier.padding(vertical = 4.dp)) {
+    val isDay = Daylight.isSunlitHour(latitude, longitude, hour.epochMs)
+    GlassPanel(Modifier.padding(vertical = 4.dp).widthIn(min = 112.dp)) {
         Text(
             HourlyForecastLabels.offsetLabel(hour.epochMs, System.currentTimeMillis()),
             style = MaterialTheme.typography.labelMedium,
@@ -233,6 +234,8 @@ private fun HourCard(
         Text(
             formatWindSpeed(hour.windSpeedKmh, windUnit),
             style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            softWrap = false,
         )
         Text(bearingToCardinal(hour.windDirectionDeg), style = MaterialTheme.typography.bodySmall)
     }
