@@ -311,12 +311,7 @@ public struct HourCard: View {
     }
 
     private var isNightClearOrCloudy: Bool {
-        let day = Self.isDaytime(
-            flag: hour.isDay,
-            latitude: latitude,
-            longitude: longitude,
-            epochMs: hour.epochMs
-        )
+        let day = Self.isCivilDay(latitude: latitude, longitude: longitude, epochMs: hour.epochMs)
         return !day && (hour.weatherCode == 0 || (1...3).contains(hour.weatherCode))
     }
 
@@ -376,6 +371,27 @@ public struct HourCard: View {
         let normalized = ((degrees.truncatingRemainder(dividingBy: 360)) + 360)
             .truncatingRemainder(dividingBy: 360)
         return directions[Int((normalized / 22.5).rounded()) % directions.count]
+    }
+
+    /// Daylight for one hourly chip. The chip is day when that clock hour overlaps
+    /// civil dawn through civil dusk. The forecast is_day flag is ignored.
+    static func isCivilDay(latitude: Double, longitude: Double, epochMs: Int64) -> Bool {
+        let hourEnd = epochMs + 3_600_000
+        if hourOverlapsCivilDay(latitude: latitude, longitude: longitude, sample: epochMs, hourEnd: hourEnd) {
+            return true
+        }
+        return hourOverlapsCivilDay(latitude: latitude, longitude: longitude, sample: hourEnd - 1, hourEnd: hourEnd)
+    }
+
+    private static func hourOverlapsCivilDay(
+        latitude: Double,
+        longitude: Double,
+        sample: Int64,
+        hourEnd: Int64
+    ) -> Bool {
+        let sun = AstronomyCalculator.calculate(latitude: latitude, longitude: longitude, epochMs: sample)
+        let hourStart = hourEnd - 3_600_000
+        return hourStart < sun.civilTwilightEndEpochMs && hourEnd > sun.civilTwilightBeginEpochMs
     }
 
     /// Open-Meteo `is_day` when the hour has one; otherwise the shared sunrise/sunset calculator.

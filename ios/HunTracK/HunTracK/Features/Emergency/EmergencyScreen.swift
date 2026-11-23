@@ -187,6 +187,17 @@ public struct EmergencyScreen: View {
             Text("Opens your Messages app with your saved contact. You press Send. HunTracK does not send the text.")
                 .font(.field(size: 12))
                 .foregroundColor(theme.palette.mist)
+            GlassPanel(compact: true) {
+                Text("Message preview")
+                    .font(.field(size: 12, weight: .semibold))
+                    .foregroundColor(theme.palette.mist)
+                Text(emergencySmsBody(
+                    latitude: location.latestFix?.latitude,
+                    longitude: location.latestFix?.longitude
+                ))
+                .font(.field(size: 13))
+                .foregroundColor(theme.palette.cream)
+            }
             if let textNotice {
                 Text(textNotice)
                     .font(.field(size: 13))
@@ -744,7 +755,18 @@ public struct EmergencyScreen: View {
             grid = "unavailable"
             coordinates = "unavailable"
         }
-        return "Help! I need medical aid. My location is\nGrid reference: \(grid)\nCoordinates: \(coordinates)"
+        let mapLink: String
+        if let latitude, let longitude {
+            mapLink = String(
+                format: "\nhttps://maps.apple.com/?q=%.5f,%.5f",
+                locale: Locale(identifier: "en_US_POSIX"),
+                latitude,
+                longitude
+            )
+        } else {
+            mapLink = ""
+        }
+        return "Help! I need medical aid. My location is\nGrid reference: \(grid)\nCoordinates: \(coordinates)\(mapLink)"
     }
 }
 
