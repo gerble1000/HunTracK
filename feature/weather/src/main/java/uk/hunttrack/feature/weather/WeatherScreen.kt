@@ -32,8 +32,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
@@ -215,7 +218,7 @@ private fun HourCard(
         )
         WeatherIcon(
             hour.weatherCode,
-            Modifier.size(28.dp).padding(vertical = 4.dp),
+            Modifier.size(32.dp),
             showDayNight = false,
         )
         val temp = if (useCelsius) "${hour.temperatureC.toInt()}°" else "${(hour.temperatureC * 9 / 5 + 32).toInt()}°"
@@ -264,6 +267,10 @@ fun WeatherIcon(
         label = "t",
     )
     Canvas(modifier) {
+        if (!showDayNight) {
+            drawHourlyCondition(code, t)
+            return@Canvas
+        }
         when {
             code >= 95 -> {
                 drawCircle(HuntColors.SlateLight, radius = size.minDimension * 0.28f, center = center)
@@ -319,6 +326,104 @@ fun WeatherIcon(
             }
         }
     }
+}
+
+/** Condition only. No sun, moon or single disc that can be read as either. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHourlyCondition(code: Int, t: Float) {
+    when {
+        code == 0 -> Unit
+        code >= 95 -> {
+            drawCloud(topBias = 0.14f)
+            drawBolt()
+        }
+        code in 71..77 || code in 85..86 -> {
+            drawCloud(topBias = 0.16f)
+            drawSnowfall(t)
+        }
+        code in 51..67 || code in 80..82 -> {
+            drawCloud(topBias = 0.16f)
+            drawRainStreaks(t)
+        }
+        code in 45..48 -> drawFogBands(t)
+        else -> drawCloud()
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCloud(
+    topBias: Float = 0f,
+    color: Color = HuntColors.Cream,
+) {
+    val s = size.minDimension
+    val cx = center.x
+    val cy = center.y - s * topBias
+    val puff = s * 0.20f
+    drawCircle(color, puff * 0.92f, Offset(cx - puff * 1.15f, cy + puff * 0.22f))
+    drawCircle(color, puff * 1.22f, Offset(cx - puff * 0.08f, cy - puff * 0.42f))
+    drawCircle(color, puff * 0.98f, Offset(cx + puff * 1.05f, cy + puff * 0.08f))
+    drawOval(
+        color,
+        topLeft = Offset(cx - puff * 1.85f, cy - puff * 0.02f),
+        size = Size(puff * 3.7f, puff * 1.15f),
+    )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRainStreaks(t: Float) {
+    val s = size.minDimension
+    repeat(3) { i ->
+        val x = center.x - s * 0.24f + i * s * 0.24f
+        val y = center.y + s * 0.12f + ((t + i * 0.22f) % 1f) * s * 0.20f
+        drawLine(HuntColors.BronzeBright, Offset(x, y), Offset(x, y + s * 0.18f), strokeWidth = s * 0.055f)
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnowfall(t: Float) {
+    val s = size.minDimension
+    repeat(3) { i ->
+        val x = center.x - s * 0.22f + i * s * 0.22f
+        val y = center.y + s * 0.16f + ((t * 0.35f + i * 0.2f) % 1f) * s * 0.12f
+        drawFlake(Offset(x, y), s * 0.07f)
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFlake(at: Offset, radius: Float) {
+    val arm = radius
+    val stroke = radius * 0.38f
+    drawLine(HuntColors.Cream, Offset(at.x - arm, at.y), Offset(at.x + arm, at.y), stroke)
+    drawLine(HuntColors.Cream, Offset(at.x, at.y - arm), Offset(at.x, at.y + arm), stroke)
+    val d = arm * 0.72f
+    drawLine(HuntColors.Cream, Offset(at.x - d, at.y - d), Offset(at.x + d, at.y + d), stroke)
+    drawLine(HuntColors.Cream, Offset(at.x - d, at.y + d), Offset(at.x + d, at.y - d), stroke)
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFogBands(t: Float) {
+    val s = size.minDimension
+    val color = HuntColors.Cream.copy(alpha = 0.55f + 0.25f * t)
+    repeat(3) { i ->
+        val y = center.y - s * 0.30f + i * s * 0.26f
+        val inset = if (i == 1) s * 0.04f else s * 0.12f
+        drawRoundRect(
+            color,
+            topLeft = Offset(center.x - s * 0.44f + inset, y),
+            size = Size(s * 0.88f - inset * 2f, s * 0.13f),
+            cornerRadius = CornerRadius(s * 0.07f, s * 0.07f),
+        )
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBolt() {
+    val s = size.minDimension
+    val x = center.x + s * 0.02f
+    val y = center.y + s * 0.02f
+    val bolt = Path().apply {
+        moveTo(x + s * 0.06f, y)
+        lineTo(x - s * 0.10f, y + s * 0.18f)
+        lineTo(x + s * 0.02f, y + s * 0.18f)
+        lineTo(x - s * 0.08f, y + s * 0.40f)
+        lineTo(x + s * 0.16f, y + s * 0.14f)
+        lineTo(x + s * 0.04f, y + s * 0.14f)
+        close()
+    }
+    drawPath(bolt, HuntColors.Gold)
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnow() {
