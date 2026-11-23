@@ -20,4 +20,27 @@ object Daylight {
         val sun = AstronomyCalculator.calculate(latitude, longitude, epochMs)
         return epochMs in sun.sunriseEpochMs..sun.sunsetEpochMs
     }
+
+    /**
+     * Daylight for one hourly chip. The chip counts as day when that clock hour
+     * overlaps civil dawn through civil dusk at [latitude]/[longitude].
+     * The forecast is_day flag is ignored: a flag that stayed night was drawing
+     * a moon on every hour, including the hour dawn falls in.
+     */
+    fun isCivilDay(latitude: Double, longitude: Double, epochMs: Long): Boolean {
+        val hourEnd = epochMs + 60L * 60L * 1000L
+        if (hourOverlapsCivilDay(latitude, longitude, epochMs, hourEnd)) return true
+        return hourOverlapsCivilDay(latitude, longitude, hourEnd - 1, hourEnd)
+    }
+
+    private fun hourOverlapsCivilDay(
+        latitude: Double,
+        longitude: Double,
+        sampleMs: Long,
+        hourEnd: Long,
+    ): Boolean {
+        val sun = AstronomyCalculator.calculate(latitude, longitude, sampleMs)
+        val hourStart = hourEnd - 60L * 60L * 1000L
+        return hourStart < sun.civilTwilightEndEpochMs && hourEnd > sun.civilTwilightBeginEpochMs
+    }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="location_actions_title">Location</string>
+    <string name="location_action_copy">Copy</string>
+    <string name="location_action_share">Share</string>
+    <string name="location_action_open_maps">Open in Maps</string>
+    <string name="location_share_chooser">Share location</string>
+    <string name="location_copied">Copied</string>
+    <string name="location_grid_line">Grid reference: %1$s</string>
+    <string name="location_coordinates_line">Coordinates: %1$s</string>
+</resources>

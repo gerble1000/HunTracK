@@ -106,7 +106,7 @@ class MarkersViewModel @Inject constructor(
         markerRepository.save(
             FieldMarker(
                 category = MarkerCategory.DEER,
-                name = "Waypoint $nextIndex",
+                name = if (nextIndex == 1) "Waypoint" else "Waypoint $nextIndex",
                 notes = "Map waypoint",
                 latitude = latitude,
                 longitude = longitude,

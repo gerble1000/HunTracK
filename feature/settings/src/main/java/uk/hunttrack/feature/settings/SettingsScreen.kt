@@ -251,9 +251,8 @@ fun SettingsScreen(
             item {
                 GlassPanel(Modifier.fillMaxWidth()) {
                     SectionLabel("Markers")
-                    RowSwitch("Mark anywhere on map", prefs.markAnywhereEnabled, onMarkAnywhere)
                     Text(
-                        "Tap or long-press the map at any spot. On: opens the Mark location form so any marker type (deer, boundary, parking, permissions pins…) can be added there. Off: drops a quick deer waypoint instead.",
+                        "Tap the map to drop a waypoint. Long-press the map to open Mark location and choose any marker type.",
                         style = MaterialTheme.typography.bodySmall,
                         color = HuntColors.Mist,
                         modifier = Modifier.padding(top = 4.dp),

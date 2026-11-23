@@ -143,11 +143,11 @@ object FieldGuides {
         ),
         FieldGuideSection(
             title = "Approach into the wind",
-            body = "After you choose a marker, open Map. HunTracK lays footprints from downwind of the spot toward it — walk that trail so wind hits the front of you and your scent blows behind. Prints you have already walked past fade grey and stay visible, so you can see the way back.",
+            body = "After you choose a marker, open Map. HunTracK lays orange footprint pairs from downwind of the spot toward it — walk that trail so wind hits the front of you and your scent blows behind.",
         ),
         FieldGuideSection(
             title = "Need markers first",
-            body = "Drop deer waypoints with a long-press on the Map tab (or Mark GPS / the + pin). Then return here and tap a marker to check scent risk and show the approach route.",
+            body = "Tap the map to drop a waypoint, or long-press to open Mark location. Then return here and tap a marker to check scent risk and show the approach route.",
         ),
     )
 
@@ -169,7 +169,7 @@ object FieldGuides {
         ),
         FieldGuideSection(
             title = "Mark & trail",
-            body = "Tap an empty spot on the map to open the Mark location form and add any marker type at that exact spot. With “Mark anywhere on map” off in Settings, taps instead drop a quick deer waypoint. Long-press does the same as a tap. Tap an existing pin to select it. Mark GPS uses your phone position. Clear trail removes placed markers. Back closes the last panel you opened.",
+            body = "Tap an empty spot to drop a waypoint labelled Waypoint. Long-press to open Mark location and add any marker type at that spot. Tap an existing pin to select it. Mark GPS uses your phone position. Clear trail removes placed markers. Back closes the last panel you opened.",
         ),
         FieldGuideSection(
             title = "Layers & offline",
