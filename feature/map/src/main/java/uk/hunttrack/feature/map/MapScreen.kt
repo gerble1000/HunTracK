@@ -2694,7 +2694,6 @@ private fun ensureSources(style: Style, context: Context) {
                 PropertyFactory.lineOpacity(1f),
                 PropertyFactory.lineCap("round"),
                 PropertyFactory.lineJoin("round"),
-                PropertyFactory.lineDasharray(arrayOf(0.2f, 1.5f)),
             ),
         )
     }
@@ -2873,14 +2872,15 @@ private fun syncMapOverlays(
     updateMarkerPath(style, state.markers, showMarkerPath)
     updateGoToPin(style, state.goToTarget)
     updateOfflineRegionsOverlay(style, state.offlineRegions)
+    // A new GPS point arrives through this markers-only refresh. Draw the
+    // track here, or the line stays frozen at whatever the map loaded with.
+    updateGpsTrack(style, state, showTrack)
     if (markersOnly) {
-        // The marker refresh is the effect that runs when an approach is chosen.
         updateScentApproach(style, state.scentApproach, state.gps)
         updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
         updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
         return
     }
-    updateGpsTrack(style, state, showTrack)
     updateUserLocation(style, state.gps)
     // Wind smoke is driven by the LaunchedEffect animation loop — avoid resetting phase here.
     updateHomingOverlay(style, state.gps, state.homingTarget)
@@ -3038,7 +3038,6 @@ private fun updateGpsTrack(style: Style, state: MapUiState, show: Boolean = true
         PropertyFactory.lineWidth(5.5f),
         PropertyFactory.lineCap("round"),
         PropertyFactory.lineJoin("round"),
-        PropertyFactory.lineDasharray(arrayOf(0.2f, 1.5f)),
         PropertyFactory.lineOpacity(1f),
     )
     val points = state.trackPoints.map { Point.fromLngLat(it.longitude, it.latitude) }

@@ -48,6 +48,7 @@ import uk.hunttrack.domain.model.MapLayerStyle
 import uk.hunttrack.domain.model.MarkerCategory
 import uk.hunttrack.domain.model.OfflineMapRegion
 import uk.hunttrack.domain.model.TrackPoint
+import uk.hunttrack.domain.track.WalkTrail
 import uk.hunttrack.domain.model.UserPreferences
 import uk.hunttrack.domain.scent.ScentPlumeGeometry
 import kotlin.math.asin
@@ -561,24 +562,23 @@ class MapViewModel @Inject constructor(
         if (trackingState.value) stopTracking() else startTracking()
     }
 
-    /** Keep the on-screen walk orange. GPS time can be a bogus elapsed stamp, so age is wall clock. */
+    /**
+     * Accept a walked point into the activity-scoped trail. A recorded route
+     * has its own collector, so this breadcrumb stays out of its way.
+     */
     private fun appendWalkTrailPoint(fix: GpsFix) {
         if (trackingState.value) return
-        val points = trackPointsState.value
-        val last = points.lastOrNull()
-        if (last != null) {
-            val moved = haversine(last.latitude, last.longitude, fix.latitude, fix.longitude)
-            if (moved < 8.0) return
-        }
-        val point = TrackPoint(
-            routeId = 0,
+        val updated = WalkTrail.append(
+            points = trackPointsState.value,
             latitude = fix.latitude,
             longitude = fix.longitude,
             elevationMeters = fix.altitudeMeters,
             speedMps = fix.speedMps,
-            recordedAtEpochMs = System.currentTimeMillis(),
+            nowEpochMs = System.currentTimeMillis(),
         )
-        trackPointsState.value = (points + point).takeLast(400)
+        if (updated !== trackPointsState.value) {
+            trackPointsState.value = updated
+        }
     }
 
     private fun startTracking() {
