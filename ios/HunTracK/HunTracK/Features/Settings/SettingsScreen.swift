@@ -296,7 +296,7 @@ public struct MapTrainingGuideSheet: View {
                                 Text("Home Point")
                                     .font(.field(size: 16, weight: .bold))
                                     .foregroundColor(theme.palette.gold)
-                                Text("Long-press or tap Home button to mark your vehicle or camp. The map will display distance and heading back to safety.")
+                                Text("Tap Range, then the map, or Range here, to mark your vehicle or camp. Every tap on Range frames that pin. The map shows distance and heading back to it.")
                                     .font(.field(size: 14))
                                     .foregroundColor(theme.palette.mist)
                             }
