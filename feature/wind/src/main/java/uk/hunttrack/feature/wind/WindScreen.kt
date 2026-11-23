@@ -40,6 +40,7 @@ import uk.hunttrack.core.designsystem.components.FieldGuideSheet
 import uk.hunttrack.core.designsystem.components.FieldGuideTitleRow
 import uk.hunttrack.core.designsystem.components.FieldGuides
 import uk.hunttrack.core.designsystem.components.GlassPanel
+import uk.hunttrack.core.designsystem.components.TappableCoordinates
 import uk.hunttrack.core.designsystem.components.HuntButton
 import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
@@ -275,7 +276,9 @@ fun WindScreen(
                     },
                 ) {
                     Text(marker.name, style = MaterialTheme.typography.titleLarge, color = HuntColors.Cream)
-                    Text(marker.category.label, color = HuntColors.Mist, style = MaterialTheme.typography.bodyMedium)
+                    if (!marker.name.startsWith("Waypoint")) {
+                        Text(marker.category.label, color = HuntColors.Mist, style = MaterialTheme.typography.bodyMedium)
+                    }
                     when (eval.risk) {
                         ScentRisk.RISK -> Text(
                             "RISK",
@@ -328,8 +331,10 @@ fun WindScreen(
                             )
                         }
                     }
-                    Text(
-                        "${"%.5f".format(marker.latitude)}, ${"%.5f".format(marker.longitude)}",
+                    TappableCoordinates(
+                        text = "${"%.5f".format(marker.latitude)}, ${"%.5f".format(marker.longitude)}",
+                        latitude = marker.latitude,
+                        longitude = marker.longitude,
                         color = HuntColors.Mist,
                         style = MaterialTheme.typography.bodySmall,
                     )

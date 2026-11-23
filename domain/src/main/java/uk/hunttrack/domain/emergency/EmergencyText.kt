@@ -34,6 +34,21 @@ object EmergencyText {
         } else {
             "unavailable"
         }
-        return "Help! I need medical aid. My location is\nGrid reference: $grid\nCoordinates: $coordinates"
+        val mapLink = if (latitude != null && longitude != null) {
+            String.format(Locale.US, "https://maps.google.com/?q=%.5f,%.5f", latitude, longitude)
+        } else {
+            null
+        }
+        return buildString {
+            append("Help! I need medical aid. My location is\n")
+            append("Grid reference: ")
+            append(grid)
+            append("\nCoordinates: ")
+            append(coordinates)
+            if (mapLink != null) {
+                append('\n')
+                append(mapLink)
+            }
+        }
     }
 }

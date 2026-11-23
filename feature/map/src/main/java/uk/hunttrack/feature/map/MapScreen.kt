@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -105,6 +106,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
@@ -164,6 +166,7 @@ import uk.hunttrack.core.designsystem.components.ClickableGlassCard
 import uk.hunttrack.core.designsystem.components.FieldGuideSheet
 import uk.hunttrack.core.designsystem.components.FieldGuides
 import uk.hunttrack.core.designsystem.components.GlassPanel
+import uk.hunttrack.core.designsystem.components.TappableCoordinates
 import uk.hunttrack.core.designsystem.components.HintingOptionRow
 import uk.hunttrack.core.designsystem.components.slideRightOnPress
 import uk.hunttrack.core.designsystem.theme.HuntColors
@@ -305,6 +308,31 @@ fun MapScreen(
     val (mapRetryKey, bumpMapRetry) = rememberMapRetryState()
     var mapInitFailed by remember { mutableStateOf(false) }
     val mapView = rememberMapViewWithLifecycle(mapRetryKey)
+    fun focusRange(latitude: Double, longitude: Double, gps: GpsFix?) {
+        mapView?.getMapAsync { map ->
+            val pin = LatLng(latitude, longitude)
+            val update = if (
+                gps != null &&
+                distanceMeters(latitude, longitude, gps.latitude, gps.longitude) > 20.0
+            ) {
+                val bounds = LatLngBounds.Builder()
+                    .include(pin)
+                    .include(LatLng(gps.latitude, gps.longitude))
+                    .build()
+                CameraUpdateFactory.newLatLngBounds(bounds, 120)
+            } else {
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(pin)
+                        .zoom(16.0)
+                        .bearing(map.cameraPosition.bearing)
+                        .tilt(0.0)
+                        .build(),
+                )
+            }
+            map.animateCamera(update)
+        }
+    }
     if (mapView == null) {
         MapUnavailablePanel(
             onRetry = {
@@ -415,7 +443,6 @@ fun MapScreen(
     val onSelectRef = rememberUpdatedState(onSelectMarker)
     val onPlaceAtRef = rememberUpdatedState(onPlaceMarkerAt)
     val onMarkAnywhereAtRef = rememberUpdatedState(onMarkAnywhereAt)
-    val markAnywhereEnabledRef = rememberUpdatedState(state.prefs.markAnywhereEnabled)
     val homingPlaceModeRef = rememberUpdatedState(homingPlaceMode)
     val boundaryModeRef = rememberUpdatedState(state.boundaryMode)
     val boundaryDrawPhaseRef = rememberUpdatedState(state.boundaryDrawPhase)
@@ -1041,25 +1068,18 @@ fun MapScreen(
                             return@addOnMapClickListener true
                         }
                         onSelectZoneRef.value(null)
-                        if (markAnywhereEnabledRef.value) {
-                            // One-touch mark anywhere: open the Mark location form pinned to this spot
-                            onMarkAnywhereAtRef.value(latLng.latitude, latLng.longitude)
-                        } else {
-                            // Mark-anywhere off: quick waypoint, saved like the others
-                            onPlaceAtRef.value(latLng.latitude, latLng.longitude)
-                        }
+                        // A tap drops a plain waypoint. Mark anywhere is a long press.
+                        onPlaceAtRef.value(latLng.latitude, latLng.longitude)
                         true
                     }
                     map.addOnMapLongClickListener { latLng ->
                         if (homingPlaceModeRef.value) {
                             return@addOnMapLongClickListener false
                         }
-                        if (markAnywhereEnabledRef.value) {
-                            // Mark anywhere: open the full marker sheet pinned to this spot
-                            onMarkAnywhereAtRef.value(latLng.latitude, latLng.longitude)
-                        } else {
-                            onPlaceAtRef.value(latLng.latitude, latLng.longitude)
+                        if (boundaryModeRef.value != BoundaryRecordMode.OFF) {
+                            return@addOnMapLongClickListener false
                         }
+                        onMarkAnywhereAtRef.value(latLng.latitude, latLng.longitude)
                         true
                     }
                     map.addOnCameraMoveListener {
@@ -1116,17 +1136,31 @@ fun MapScreen(
             if (state.prefs.showOsGridRef) {
                 val gps = state.gps
                 val grid = gps?.let { OsGridRef.latLngToOsGrid(it.latitude, it.longitude) }
-                if (grid != null) {
+                if (grid != null && gps != null) {
                     GlassPanel(Modifier.fillMaxWidth(), compact = true) {
                         Text("OS Grid", style = MaterialTheme.typography.labelMedium, color = HuntColors.Mist)
-                        Text(grid, style = MaterialTheme.typography.titleMedium, color = HuntColors.BronzeBright)
+                        TappableCoordinates(
+                            text = grid,
+                            latitude = gps.latitude,
+                            longitude = gps.longitude,
+                            gridRef = grid,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = HuntColors.BronzeBright,
+                        )
                     }
                 }
             }
             state.goToTarget?.let { target ->
                 GlassPanel(Modifier.fillMaxWidth(), compact = true) {
                     Text("Go to", style = MaterialTheme.typography.labelMedium, color = HuntColors.Mist)
-                    Text(target.osGridRef, style = MaterialTheme.typography.titleMedium, color = HuntColors.Cream)
+                    TappableCoordinates(
+                        text = target.osGridRef,
+                        latitude = target.latitude,
+                        longitude = target.longitude,
+                        gridRef = target.osGridRef,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = HuntColors.Cream,
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
                             onPlaceMarkerAt(target.latitude, target.longitude)
@@ -1242,32 +1276,31 @@ fun MapScreen(
                     }
                 }
             state.scentApproach?.let { plan ->
-                GlassPanel(Modifier.fillMaxWidth()) {
-                    Text(
-                        "Into-wind approach",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = HuntColors.BronzeBright,
-                    )
-                    Text(
-                        "Route to ${plan.targetName}: walk ${bearingToCardinal(plan.walkHeadingDeg)} " +
-                            "so the wind hits the front of you.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = HuntColors.Cream,
-                    )
-                    Text(
-                        "Footprints · start downwind → finish at marker. Walked prints fade grey.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = HuntColors.Mist,
-                    )
-                    MapToolAssistChip(
-                        onClick = onClearScentApproach,
-                        label = { Text("Clear approach") },
-                    )
+                GlassPanel(Modifier.fillMaxWidth(), compact = true) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            "Route to ${plan.targetName}: walk ${bearingToCardinal(plan.walkHeadingDeg)} " +
+                                "so the wind hits the front of you.",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = HuntColors.Cream,
+                            maxLines = 3,
+                        )
+                        TextButton(
+                            onClick = onClearScentApproach,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text("Clear", color = HuntColors.BronzeBright)
+                        }
+                    }
                 }
             }
             if (showHomingPanel) {
                 GlassPanel(Modifier.fillMaxWidth(), compact = true) {
-                    Text("Homing retrieve", style = MaterialTheme.typography.labelMedium, color = HuntColors.Cream)
+                    Text(stringResource(R.string.map_range), style = MaterialTheme.typography.labelMedium, color = HuntColors.Cream)
                     when {
                         state.homingAtTarget -> {
                             Text(
@@ -1284,12 +1317,12 @@ fun MapScreen(
                                 onClick = { endHoming() },
                                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
                             ) {
-                                Text("End homing", style = MaterialTheme.typography.labelSmall)
+                                Text(stringResource(R.string.map_end_range), style = MaterialTheme.typography.labelSmall)
                             }
                         }
                         homingPlaceMode && state.homingTarget == null -> {
                             Text(
-                                "Tap map for prey pin · or Home here",
+                                stringResource(R.string.map_range_place_hint),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = HuntColors.Gold,
                             )
@@ -1316,7 +1349,7 @@ fun MapScreen(
                             )
                             if (homingPlaceMode) {
                                 Text(
-                                    "Tap map to move pin",
+                                    stringResource(R.string.map_range_move_hint),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = HuntColors.Gold,
                                 )
@@ -1325,12 +1358,12 @@ fun MapScreen(
                                 onClick = { endHoming() },
                                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
                             ) {
-                                Text("End homing", style = MaterialTheme.typography.labelSmall)
+                                Text(stringResource(R.string.map_end_range), style = MaterialTheme.typography.labelSmall)
                             }
                         }
                         else -> {
                             Text(
-                                "Place pin or end retrieve",
+                                stringResource(R.string.map_range_waiting),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = HuntColors.Gold,
                             )
@@ -1338,7 +1371,7 @@ fun MapScreen(
                                 onClick = { endHoming() },
                                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
                             ) {
-                                Text("End homing", style = MaterialTheme.typography.labelSmall)
+                                Text(stringResource(R.string.map_end_range), style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -1368,29 +1401,20 @@ fun MapScreen(
                 MapToolFilterChip(
                     selected = homingPlaceMode || showHomingPanel,
                     onClick = {
-                        when {
-                            homingPlaceMode -> {
-                                homingPlaceMode = false
-                                if (state.homingTarget == null) removeSection(MapOverlaySection.HOMING)
-                            }
-                            showHomingPanel -> {
-                                // Already open — enter place mode to move the pin
-                                homingPlaceMode = true
-                            }
-                            else -> {
-                                // Re-open navigate panel (pin stays if already set)
-                                pushSection(MapOverlaySection.HOMING)
-                                if (state.homingTarget == null) homingPlaceMode = true
-                            }
-                        }
+                        // Always open range. A saved pin is framed every tap, including
+                        // after leaving the map and coming back. Tapping never dismisses it.
+                        val target = state.homingTarget
+                        pushSection(MapOverlaySection.HOMING)
+                        homingPlaceMode = target == null
+                        if (target != null) focusRange(target.latitude, target.longitude, state.gps)
                     },
                     label = {
                         Text(
-                            when {
-                                homingPlaceMode -> "Home ON"
-                                showHomingPanel -> "Home"
-                                else -> "Home"
-                            },
+                            stringResource(
+                                if (homingPlaceMode) R.string.map_range_on else R.string.map_range,
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
                         )
                     },
                     leadingIcon = { Icon(Icons.Default.Flag, null) },
@@ -1399,15 +1423,17 @@ fun MapScreen(
                     onClick = {
                         onPlaceHomingHere()
                         pushSection(MapOverlaySection.HOMING)
+                        homingPlaceMode = false
+                        state.gps?.let { focusRange(it.latitude, it.longitude, it) }
                     },
                     enabled = state.gps != null,
-                    label = { Text("Home here") },
+                    label = { Text(stringResource(R.string.map_range_here)) },
                     leadingIcon = { Icon(Icons.Default.NearMe, null) },
                 )
                 if (state.homingTarget != null) {
                     MapToolAssistChip(
                         onClick = { endHoming() },
-                        label = { Text("End home") },
+                        label = { Text(stringResource(R.string.map_end_range)) },
                         leadingIcon = { Icon(Icons.Default.Flag, null) },
                     )
                 }
@@ -1513,11 +1539,6 @@ fun MapScreen(
                     },
                     label = { Text("Offline") },
                     leadingIcon = { Icon(Icons.Default.CloudDownload, null) },
-                )
-                MapToolFilterChip(
-                    selected = showSmoke,
-                    onClick = { showSmoke = !showSmoke },
-                    label = { Text(if (showSmoke) "Smoke on" else "Smoke off") },
                 )
                 MapToolAssistChip(
                     onClick = { showOverlaysSheet = true },
@@ -1791,18 +1812,30 @@ fun MapScreen(
             sheetState = rememberModalBottomSheetState(),
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val plainWaypoint = marker.name.startsWith("Waypoint")
                 Text(marker.name, style = MaterialTheme.typography.headlineMedium, color = HuntColors.Cream)
-                Text(marker.category.label, style = MaterialTheme.typography.titleMedium, color = HuntColors.Bronze)
+                if (!plainWaypoint) {
+                    Text(marker.category.label, style = MaterialTheme.typography.titleMedium, color = HuntColors.Bronze)
+                }
                 Text(marker.notes.ifBlank { "No notes" }, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "${"%.5f".format(marker.latitude)}, ${"%.5f".format(marker.longitude)}",
+                val markerGrid = OsGridRef.latLngToOsGrid(marker.latitude, marker.longitude)
+                TappableCoordinates(
+                    text = "${"%.5f".format(marker.latitude)}, ${"%.5f".format(marker.longitude)}",
+                    latitude = marker.latitude,
+                    longitude = marker.longitude,
+                    gridRef = markerGrid,
                     style = MaterialTheme.typography.bodySmall,
                     color = HuntColors.Mist,
                 )
-                if (state.prefs.showOsGridRef) {
-                    OsGridRef.latLngToOsGrid(marker.latitude, marker.longitude)?.let { grid ->
-                        Text(grid, style = MaterialTheme.typography.titleMedium, color = HuntColors.BronzeBright)
-                    }
+                if (state.prefs.showOsGridRef && markerGrid != null) {
+                    TappableCoordinates(
+                        text = markerGrid,
+                        latitude = marker.latitude,
+                        longitude = marker.longitude,
+                        gridRef = markerGrid,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = HuntColors.BronzeBright,
+                    )
                 }
                 Button(
                     onClick = {
@@ -1814,7 +1847,7 @@ fun MapScreen(
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Place next ${marker.category.label} here")
+                    Text(if (plainWaypoint) "Place next waypoint here" else "Place next ${marker.category.label} here")
                 }
                 Text(
                     "Drops another marker at your current GPS — same type, no form.",
@@ -2166,9 +2199,6 @@ private const val FenceLineColor = "#1A3A6E"
 private const val DraftFenceLineWidth = 1.75f
 /** Saved offline pack border: thin blue line with yellow dashes. */
 private const val OfflineRegionBlue = "#2E86DE"
-/** Footprint fill. The GPS track stays green (#5FD0A8). */
-private const val ApproachFootprintColor = "#FF6A00"
-private const val ApproachFootprintWalkedColor = "#A3A3A3"
 private const val OfflineRegionYellow = "#FFD54F"
 private const val FocusBoundaryLineColor = "#E2B05C"
 private const val FenceLineWidth = 2.5f
@@ -2664,33 +2694,7 @@ private fun ensureSources(style: Style, context: Context) {
             ),
         )
     }
-    if (style.getImage("approach-footprint") == null) {
-        style.addImage("approach-footprint", footprintBitmap(ApproachFootprintColor))
-    }
-    if (style.getImage("approach-footprint-grey") == null) {
-        style.addImage("approach-footprint-grey", footprintBitmap(ApproachFootprintWalkedColor))
-    }
-    if (style.getSource("scent-approach-footprints") == null) {
-        style.addSource(GeoJsonSource("scent-approach-footprints", FeatureCollection.fromFeatures(emptyArray())))
-    }
-    if (style.getLayer("scent-approach-footprints") == null && style.getSource("scent-approach-footprints") != null) {
-        style.addLayer(
-            SymbolLayer("scent-approach-footprints", "scent-approach-footprints").withProperties(
-                PropertyFactory.iconImage(
-                    Expression.switchCase(
-                        Expression.eq(Expression.get("walked"), Expression.literal(true)),
-                        Expression.literal("approach-footprint-grey"),
-                        Expression.literal("approach-footprint"),
-                    ),
-                ),
-                PropertyFactory.iconSize(0.42f),
-                PropertyFactory.iconRotate(Expression.get("bearing")),
-                PropertyFactory.iconRotationAlignment("map"),
-                PropertyFactory.iconAllowOverlap(true),
-                PropertyFactory.iconIgnorePlacement(true),
-            ),
-        )
-    }
+    ensureApproachTrailLayer(style)
     // Hunter (user) layers created FIRST so field markers always paint on top of the
     // silhouette — otherwise a marker dropped at your current GPS spot is hidden under it.
     if (style.getSource("user-source") == null) {
@@ -2866,14 +2870,13 @@ private fun syncMapOverlays(
     updateGoToPin(style, state.goToTarget)
     updateOfflineRegionsOverlay(style, state.offlineRegions)
     if (markersOnly) {
-        // The marker refresh is the effect that runs when an approach is chosen.
         updateScentApproach(style, state.scentApproach, state.gps)
         updateBoundariesOverlay(style, state.boundaries, state.draftBoundaryPoints, state.permissionMapFocus, visibility)
         updatePermissionLabelOverlay(style, state.boundaries, state.permissionMapFocus)
         return
     }
-    updateGpsTrack(style, state, showTrack)
     updateUserLocation(style, state.gps)
+    updateGpsTrack(style, state, showTrack)
     // Wind smoke is driven by the LaunchedEffect animation loop — avoid resetting phase here.
     updateHomingOverlay(style, state.gps, state.homingTarget)
     updateScentApproach(style, state.scentApproach, state.gps)
@@ -3057,81 +3060,93 @@ private fun updateUserLocation(style: Style, gps: GpsFix?) {
     (style.getSource("user-source") as? GeoJsonSource)?.setGeoJson(collection)
 }
 
-/** Footprints from the downwind start toward the marker, toes pointing along the walk. */
+private fun ensureApproachTrailLayer(style: Style) {
+    listOf(
+        "scent-approach-footprints-left",
+        "scent-approach-footprints-right",
+        "scent-approach-footprints",
+    ).forEach { id ->
+        style.getLayer(id)?.let { runCatching { style.removeLayer(it) } }
+    }
+    if (style.getSource("scent-approach-trail") == null) {
+        style.addSource(GeoJsonSource("scent-approach-trail", FeatureCollection.fromFeatures(emptyArray())))
+    }
+    if (style.getLayer("scent-approach-trail") == null && style.getSource("scent-approach-trail") != null) {
+        style.addLayer(
+            LineLayer("scent-approach-trail", "scent-approach-trail").withProperties(
+                PropertyFactory.lineColor(Expression.toColor(Expression.get("color"))),
+                PropertyFactory.lineWidth(5.5f),
+                PropertyFactory.lineCap("round"),
+                PropertyFactory.lineJoin("round"),
+                PropertyFactory.lineDasharray(arrayOf(0.15f, 1.5f)),
+                PropertyFactory.lineOpacity(1f),
+            ),
+        )
+    }
+}
+
+/** Dotted trail. The part already walked fades grey; the part still ahead stays orange. */
 private fun updateScentApproach(style: Style, plan: ScentApproachPlan?, gps: GpsFix?) {
-    val source = style.getSource("scent-approach-footprints") as? GeoJsonSource
-    val layer = style.getLayer("scent-approach-footprints")
+    ensureApproachTrailLayer(style)
+    val source = style.getSource("scent-approach-trail") as? GeoJsonSource
+    val layer = style.getLayer("scent-approach-trail")
     if (plan == null) {
         source?.setGeoJson(FeatureCollection.fromFeatures(emptyArray()))
         layer?.setProperties(PropertyFactory.visibility(Property.NONE))
         return
     }
-    layer?.setProperties(PropertyFactory.visibility(Property.VISIBLE))
-    val bearing = bearingDegrees(plan.startLat, plan.startLng, plan.targetLat, plan.targetLng)
-    val features = approachFootprints(plan).map { (lat, lng) ->
-        val walked = ApproachTrail.walkedPast(
-            printLat = lat,
-            printLng = lng,
-            startLat = plan.startLat,
-            startLng = plan.startLng,
-            endLat = plan.targetLat,
-            endLng = plan.targetLng,
-            userLat = gps?.latitude,
-            userLng = gps?.longitude,
-        )
-        Feature.fromGeometry(Point.fromLngLat(lng, lat)).also {
-            it.addNumberProperty("bearing", bearing)
-            it.addBooleanProperty("walked", walked)
-        }
-    }.toTypedArray()
-    source?.setGeoJson(FeatureCollection.fromFeatures(features))
-    // Keep the prints above the pink plume.
-    val footprintLayer = style.getLayer("scent-approach-footprints") ?: return
+    layer?.setProperties(
+        PropertyFactory.visibility(Property.VISIBLE),
+        PropertyFactory.lineColor(Expression.toColor(Expression.get("color"))),
+        PropertyFactory.lineWidth(5.5f),
+        PropertyFactory.lineCap("round"),
+        PropertyFactory.lineJoin("round"),
+        PropertyFactory.lineDasharray(arrayOf(0.15f, 1.5f)),
+    )
+    val progress = ApproachTrail.progressFraction(
+        startLat = plan.startLat,
+        startLng = plan.startLng,
+        endLat = plan.targetLat,
+        endLng = plan.targetLng,
+        userLat = gps?.latitude,
+        userLng = gps?.longitude,
+    )
+    source?.setGeoJson(FeatureCollection.fromFeatures(approachTrailSegments(plan, progress)))
+    val trailLayer = style.getLayer("scent-approach-trail") ?: return
     runCatching {
-        style.removeLayer(footprintLayer)
-        style.addLayer(footprintLayer)
+        style.removeLayer(trailLayer)
+        style.addLayer(trailLayer)
     }
 }
 
-private fun approachFootprints(plan: ScentApproachPlan): List<Pair<Double, Double>> {
-    val distance = distanceMeters(plan.startLat, plan.startLng, plan.targetLat, plan.targetLng)
-    if (distance < 12.0) return emptyList()
-    val spacing = 20.0
-    val steps = (distance / spacing).toInt().coerceIn(4, 40)
+private fun approachTrailSegments(plan: ScentApproachPlan, progress: Double): Array<Feature> {
+    val steps = 18
     return (0 until steps).map { index ->
-        val t = index.toDouble() / steps.toDouble()
-        val lat = plan.startLat + (plan.targetLat - plan.startLat) * t
-        val lng = plan.startLng + (plan.targetLng - plan.startLng) * t
-        lat to lng
-    }
+        val t0 = index.toDouble() / steps.toDouble()
+        val t1 = (index + 1).toDouble() / steps.toDouble()
+        val mid = (t0 + t1) / 2.0
+        // Blend across a short stretch at the hunter so the older trail fades into the orange ahead.
+        val orange = ((mid - (progress - 0.08)) / 0.08).coerceIn(0.0, 1.0)
+        val start = pointAlong(plan, t0)
+        val end = pointAlong(plan, t1)
+        Feature.fromGeometry(
+            LineString.fromLngLats(listOf(start, end)),
+        ).also { it.addStringProperty("color", trailHex(orange)) }
+    }.toTypedArray()
 }
 
-/** Toes point up (north) so MapLibre can rotate each print along the walk. */
-private fun footprintBitmap(fillColor: String): Bitmap {
-    val width = 64
-    val height = 96
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor(fillColor)
-        style = Paint.Style.FILL
-    }
-    val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#1A1208")
-        style = Paint.Style.STROKE
-        strokeWidth = 3f
-    }
-    fun print(cx: Float, cy: Float, r: Float) {
-        canvas.drawCircle(cx, cy, r, fill)
-        canvas.drawCircle(cx, cy, r, edge)
-    }
-    canvas.drawOval(RectF(18f, 34f, 46f, 88f), fill)
-    canvas.drawOval(RectF(18f, 34f, 46f, 88f), edge)
-    print(16f, 22f, 7f)
-    print(28f, 12f, 8f)
-    print(40f, 18f, 7f)
-    print(48f, 30f, 6f)
-    return bitmap
+private fun pointAlong(plan: ScentApproachPlan, t: Double): Point {
+    val lat = plan.startLat + (plan.targetLat - plan.startLat) * t
+    val lng = plan.startLng + (plan.targetLng - plan.startLng) * t
+    return Point.fromLngLat(lng, lat)
+}
+
+private fun trailHex(orangeAmount: Double): String {
+    val grey = 0xA3
+    val red = (grey + (0xFF - grey) * orangeAmount).toInt()
+    val green = (grey + (0x6A - grey) * orangeAmount).toInt()
+    val blue = (grey * (1.0 - orangeAmount)).toInt()
+    return String.format("#%02X%02X%02X", red, green, blue)
 }
 
 /**
@@ -3549,7 +3564,7 @@ private fun MapToolAssistChip(
     AssistChip(
         onClick = onClick,
         label = label,
-        modifier = modifier.slideRightOnPress(interactionSource),
+        modifier = modifier.wrapContentWidth(unbounded = true).slideRightOnPress(interactionSource),
         enabled = enabled,
         leadingIcon = leadingIcon,
         interactionSource = interactionSource,
@@ -3579,7 +3594,7 @@ private fun MapToolFilterChip(
         selected = selected,
         onClick = onClick,
         label = label,
-        modifier = modifier.slideRightOnPress(interactionSource),
+        modifier = modifier.wrapContentWidth(unbounded = true).slideRightOnPress(interactionSource),
         enabled = enabled,
         leadingIcon = leadingIcon,
         interactionSource = interactionSource,

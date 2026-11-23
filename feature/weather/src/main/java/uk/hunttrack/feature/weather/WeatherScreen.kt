@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,8 +32,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
@@ -187,13 +191,7 @@ fun WeatherScreen(
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(hours, key = { it.epochMs }) { hour ->
-                            HourCard(
-                                hour,
-                                state.prefs.useCelsius,
-                                state.prefs.windUnit,
-                                latitude = state.weather?.latitude ?: 0.0,
-                                longitude = state.weather?.longitude ?: 0.0,
-                            )
+                            HourCard(hour, state.prefs.useCelsius, state.prefs.windUnit)
                         }
                     }
                 }
@@ -212,20 +210,16 @@ private fun HourCard(
     hour: HourlyForecast,
     useCelsius: Boolean,
     windUnit: WindUnit,
-    latitude: Double,
-    longitude: Double,
 ) {
-    val isDay = Daylight.isDay(hour.isDay, latitude, longitude, hour.epochMs)
-    GlassPanel(Modifier.padding(vertical = 4.dp)) {
+    GlassPanel(Modifier.padding(vertical = 4.dp).widthIn(min = 112.dp)) {
         Text(
             HourlyForecastLabels.offsetLabel(hour.epochMs, System.currentTimeMillis()),
             style = MaterialTheme.typography.labelMedium,
         )
         WeatherIcon(
             hour.weatherCode,
-            Modifier.size(28.dp).padding(vertical = 4.dp),
-            isDay = isDay,
-            epochMs = hour.epochMs,
+            Modifier.size(32.dp),
+            showDayNight = false,
         )
         val temp = if (useCelsius) "${hour.temperatureC.toInt()}°" else "${(hour.temperatureC * 9 / 5 + 32).toInt()}°"
         Text(temp, style = MaterialTheme.typography.titleMedium)
@@ -233,6 +227,8 @@ private fun HourCard(
         Text(
             formatWindSpeed(hour.windSpeedKmh, windUnit),
             style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            softWrap = false,
         )
         Text(bearingToCardinal(hour.windDirectionDeg), style = MaterialTheme.typography.bodySmall)
     }
@@ -262,6 +258,7 @@ fun WeatherIcon(
     modifier: Modifier = Modifier,
     isDay: Boolean = true,
     epochMs: Long = 0L,
+    showDayNight: Boolean = true,
 ) {
     val transition = rememberInfiniteTransition(label = "wx")
     val t by transition.animateFloat(
@@ -270,11 +267,16 @@ fun WeatherIcon(
         label = "t",
     )
     Canvas(modifier) {
+        if (!showDayNight) {
+            drawHourlyCondition(code, t)
+            return@Canvas
+        }
         when {
             code >= 95 -> {
                 drawCircle(HuntColors.SlateLight, radius = size.minDimension * 0.28f, center = center)
                 drawLine(HuntColors.Gold, Offset(center.x, center.y), Offset(center.x + 8f, center.y + 20f), 3f)
             }
+            !showDayNight && (code in 71..77 || code in 85..86) -> drawSnow()
             code in 61..82 || code in 51..55 -> {
                 drawCircle(HuntColors.Mist, radius = size.minDimension * 0.28f, center = Offset(center.x, center.y - 6f))
                 repeat(3) { i ->
@@ -286,13 +288,15 @@ fun WeatherIcon(
             code in 45..48 -> {
                 drawCircle(HuntColors.Mist.copy(alpha = 0.4f + 0.3f * t), radius = size.minDimension * 0.4f)
             }
-            !isDay && code in 71..77 || !isDay && code in 85..86 -> {
-                repeat(4) { i ->
-                    val x = center.x - 8f + (i % 2) * 12f
-                    val y = center.y - 6f + (i / 2) * 12f
-                    drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
-                }
+            !showDayNight && code == 0 -> Unit
+            !showDayNight && code in 1..3 -> {
+                drawCircle(
+                    HuntColors.Mist.copy(alpha = if (code == 3) 0.88f else 0.78f),
+                    radius = size.minDimension * if (code == 3) 0.28f else 0.18f,
+                    center = Offset(center.x + size.minDimension * 0.12f, center.y + size.minDimension * 0.08f),
+                )
             }
+            !isDay && code in 71..77 || !isDay && code in 85..86 -> drawSnow()
             !isDay && (code == 0 || code in 1..3) -> {
                 drawStars()
                 val phase = MoonPhase.fraction(epochMs)
@@ -321,6 +325,112 @@ fun WeatherIcon(
                 }
             }
         }
+    }
+}
+
+/** Condition only. No sun, moon or single disc that can be read as either. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHourlyCondition(code: Int, t: Float) {
+    when {
+        code == 0 -> Unit
+        code >= 95 -> {
+            drawCloud(topBias = 0.14f)
+            drawBolt()
+        }
+        code in 71..77 || code in 85..86 -> {
+            drawCloud(topBias = 0.16f)
+            drawSnowfall(t)
+        }
+        code in 51..67 || code in 80..82 -> {
+            drawCloud(topBias = 0.16f)
+            drawRainStreaks(t)
+        }
+        code in 45..48 -> drawFogBands(t)
+        else -> drawCloud()
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCloud(
+    topBias: Float = 0f,
+    color: Color = HuntColors.Cream,
+) {
+    val s = size.minDimension
+    val cx = center.x
+    val cy = center.y - s * topBias
+    val puff = s * 0.20f
+    drawCircle(color, puff * 0.92f, Offset(cx - puff * 1.15f, cy + puff * 0.22f))
+    drawCircle(color, puff * 1.22f, Offset(cx - puff * 0.08f, cy - puff * 0.42f))
+    drawCircle(color, puff * 0.98f, Offset(cx + puff * 1.05f, cy + puff * 0.08f))
+    drawOval(
+        color,
+        topLeft = Offset(cx - puff * 1.85f, cy - puff * 0.02f),
+        size = Size(puff * 3.7f, puff * 1.15f),
+    )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRainStreaks(t: Float) {
+    val s = size.minDimension
+    repeat(3) { i ->
+        val x = center.x - s * 0.24f + i * s * 0.24f
+        val y = center.y + s * 0.12f + ((t + i * 0.22f) % 1f) * s * 0.20f
+        drawLine(HuntColors.BronzeBright, Offset(x, y), Offset(x, y + s * 0.18f), strokeWidth = s * 0.055f)
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnowfall(t: Float) {
+    val s = size.minDimension
+    repeat(3) { i ->
+        val x = center.x - s * 0.22f + i * s * 0.22f
+        val y = center.y + s * 0.16f + ((t * 0.35f + i * 0.2f) % 1f) * s * 0.12f
+        drawFlake(Offset(x, y), s * 0.07f)
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFlake(at: Offset, radius: Float) {
+    val arm = radius
+    val stroke = radius * 0.38f
+    drawLine(HuntColors.Cream, Offset(at.x - arm, at.y), Offset(at.x + arm, at.y), stroke)
+    drawLine(HuntColors.Cream, Offset(at.x, at.y - arm), Offset(at.x, at.y + arm), stroke)
+    val d = arm * 0.72f
+    drawLine(HuntColors.Cream, Offset(at.x - d, at.y - d), Offset(at.x + d, at.y + d), stroke)
+    drawLine(HuntColors.Cream, Offset(at.x - d, at.y + d), Offset(at.x + d, at.y - d), stroke)
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFogBands(t: Float) {
+    val s = size.minDimension
+    val color = HuntColors.Cream.copy(alpha = 0.55f + 0.25f * t)
+    repeat(3) { i ->
+        val y = center.y - s * 0.30f + i * s * 0.26f
+        val inset = if (i == 1) s * 0.04f else s * 0.12f
+        drawRoundRect(
+            color,
+            topLeft = Offset(center.x - s * 0.44f + inset, y),
+            size = Size(s * 0.88f - inset * 2f, s * 0.13f),
+            cornerRadius = CornerRadius(s * 0.07f, s * 0.07f),
+        )
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBolt() {
+    val s = size.minDimension
+    val x = center.x + s * 0.02f
+    val y = center.y + s * 0.02f
+    val bolt = Path().apply {
+        moveTo(x + s * 0.06f, y)
+        lineTo(x - s * 0.10f, y + s * 0.18f)
+        lineTo(x + s * 0.02f, y + s * 0.18f)
+        lineTo(x - s * 0.08f, y + s * 0.40f)
+        lineTo(x + s * 0.16f, y + s * 0.14f)
+        lineTo(x + s * 0.04f, y + s * 0.14f)
+        close()
+    }
+    drawPath(bolt, HuntColors.Gold)
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSnow() {
+    repeat(4) { i ->
+        val x = center.x - 8f + (i % 2) * 12f
+        val y = center.y - 6f + (i / 2) * 12f
+        drawCircle(HuntColors.Cream, radius = 2.2f, center = Offset(x, y))
     }
 }
 

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uk.hunttrack.core.data.phase2.EmergencyRepository
@@ -42,6 +43,14 @@ class EmergencyViewModel @Inject constructor(
     private val unlocked = MutableStateFlow(false)
     private val pinInput = MutableStateFlow("")
     private val error = MutableStateFlow<String?>(null)
+
+    val textPreview: StateFlow<String> = locationRepository.latestFix
+        .map { fix -> EmergencyText.message(fix?.latitude, fix?.longitude) }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            EmergencyText.message(null, null),
+        )
 
     val uiState: StateFlow<EmergencyUiState> = combine(
         repository.observeProfile(),

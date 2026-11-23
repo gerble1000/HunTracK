@@ -65,6 +65,7 @@ import uk.hunttrack.core.designsystem.theme.HuntColors
 @Composable
 fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val textPreview by viewModel.textPreview.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -100,6 +101,7 @@ fun EmergencyRoute(viewModel: EmergencyViewModel = hiltViewModel()) {
     EmergencyScreen(
         state = state,
         textNotice = textNotice,
+        textPreview = textPreview,
         onEmergencyText = {
             scope.launch {
                 val draft = viewModel.prepareEmergencyText()
@@ -151,6 +153,7 @@ private fun launchEmergencyText(
 fun EmergencyScreen(
     state: EmergencyUiState,
     textNotice: String? = null,
+    textPreview: String = "",
     onEmergencyText: () -> Unit = {},
     onPinInput: (String) -> Unit,
     onUnlockPin: () -> Unit,
@@ -227,6 +230,20 @@ fun EmergencyScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = HuntColors.Mist,
                         )
+                        if (textPreview.isNotBlank()) {
+                            GlassPanel(Modifier.fillMaxWidth(), compact = true) {
+                                Text(
+                                    stringResource(R.string.emergency_text_preview),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = HuntColors.Mist,
+                                )
+                                Text(
+                                    textPreview,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = HuntColors.Cream,
+                                )
+                            }
+                        }
                         if (textNotice != null) {
                             Text(
                                 textNotice,

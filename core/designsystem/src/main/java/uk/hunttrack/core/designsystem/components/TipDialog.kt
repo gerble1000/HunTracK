@@ -99,7 +99,7 @@ object MapTips {
     val layers = "Switch Streets, Outdoor/Topo, or Satellite basemap."
     val offline = "Download a map pack around you for weak-signal areas."
     val track = "Records a GPS track line as you walk."
-    val mark = "Long-press the map to drop a deer-head waypoint immediately. Mark GPS / + opens the full marker form at your position. Tap a waypoint to open it."
+    val mark = "Tap the map to drop a waypoint. Long-press to open Mark location and choose any marker type. Tap a pin to open it."
     val delete = "Trash: Delete last removes the newest marker. Delete all clears every field marker (not the Home pin — use End home for that)."
     val clearTrail = "Deletes all field markers and the connecting path."
     val smoke = "Light magenta scent smoke drifts downwind from you (uses a default west wind until weather loads). Speed matches wind bands from calm to gale."

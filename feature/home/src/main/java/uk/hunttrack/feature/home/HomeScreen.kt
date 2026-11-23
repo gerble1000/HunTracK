@@ -64,6 +64,7 @@ import uk.hunttrack.core.common.weatherCodeLabel
 import uk.hunttrack.core.designsystem.animation.GpsSignalBadge
 import uk.hunttrack.core.designsystem.animation.GpsSignalRadar
 import uk.hunttrack.core.designsystem.components.GlassPanel
+import uk.hunttrack.core.designsystem.components.TappableCoordinates
 import uk.hunttrack.core.designsystem.components.MetricRow
 import uk.hunttrack.core.designsystem.components.RegisterLazyListScrollToTop
 import uk.hunttrack.core.designsystem.components.ScreenBackground
@@ -342,19 +343,32 @@ fun HomeScreen(
                                 gps.longitude,
                             )
 
-                            Text(
-                                coordsCardinal,
-                                style = MaterialTheme.typography.titleMedium,
+                            TappableCoordinates(
+                                text = coordsCardinal,
+                                latitude = gps.latitude,
+                                longitude = gps.longitude,
+                                gridRef = osGridForCopy,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = HuntColors.Cream,
-                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            TappableCoordinates(
+                                text = coordsDecimal,
+                                latitude = gps.latitude,
+                                longitude = gps.longitude,
+                                gridRef = osGridForCopy,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = HuntColors.Mist,
                             )
                             if (osGridForDisplay != null) {
                                 Spacer(Modifier.height(6.dp))
-                                Text(
-                                    osGridForDisplay,
-                                    style = MaterialTheme.typography.titleMedium,
+                                TappableCoordinates(
+                                    text = osGridForDisplay,
+                                    latitude = gps.latitude,
+                                    longitude = gps.longitude,
+                                    gridRef = osGridForCopy,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = HuntColors.BronzeBright,
-                                    fontWeight = FontWeight.SemiBold,
                                 )
                             }
 

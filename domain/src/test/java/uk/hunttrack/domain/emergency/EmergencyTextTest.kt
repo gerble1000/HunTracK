@@ -35,6 +35,7 @@ class EmergencyTextTest {
         assertTrue(message.startsWith("Help! I need medical aid. My location is\n"))
         assertTrue(message.contains("Grid reference: $grid"))
         assertTrue(message.contains("Coordinates: 52.48620, -1.89040"))
+        assertTrue(message.contains("https://maps.google.com/?q=52.48620,-1.89040"))
     }
 
     @Test
@@ -50,5 +51,6 @@ class EmergencyTextTest {
         val message = EmergencyText.message(40.7128, -74.0060)
         assertTrue(message.contains("Grid reference: unavailable"))
         assertTrue(message.contains("Coordinates: 40.71280, -74.00600"))
+        assertTrue(message.contains("https://maps.google.com/?q=40.71280,-74.00600"))
     }
 }

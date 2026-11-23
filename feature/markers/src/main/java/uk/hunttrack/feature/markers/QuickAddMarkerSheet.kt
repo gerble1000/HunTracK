@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -180,7 +181,8 @@ fun QuickAddMarkerSheet(
                             FilterChip(
                                 selected = category == c,
                                 onClick = { category = c },
-                                label = { Text(c.label) },
+                                modifier = Modifier.wrapContentWidth(unbounded = true),
+                                label = { Text(c.label, maxLines = 1, softWrap = false) },
                             )
                         }
                     }
@@ -223,6 +225,8 @@ fun QuickAddMarkerSheet(
                         previewLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = HuntColors.BronzeBright,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
                 Spacer(Modifier.height(8.dp))
